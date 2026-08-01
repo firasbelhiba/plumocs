@@ -75,12 +75,6 @@ function markSeen(ticketId) {
 // ---- the adapter ------------------------------------------------------------------
 
 /** Dev seed accounts for the demo role switcher (see prisma/seed.ts). */
-const DEV_ROLE_ACCOUNTS = {
-  agent: 'tomas@plumo.app',
-  lead: 'mira@plumo.app',
-  admin: 'priya@plumo.app',
-};
-const DEV_PASSWORD = 'password123';
 
 class Adapter {
   // caches the screens read synchronously via renderVals()
@@ -143,15 +137,6 @@ class Adapter {
   }
 
   /** Demo role switcher — re-authenticates as the seed user for that role. */
-  async switchRole(role) {
-    const email = DEV_ROLE_ACCOUNTS[role];
-    if (!email) throw new ApiError(`Unknown role ${role}`);
-    await this.logout().catch(() => {});
-    await this.login(email, DEV_PASSWORD);
-    await this.bootstrap();
-    return this.currentUser;
-  }
-
   forgotPassword(email) {
     return api.auth.forgotPassword(email);
   }

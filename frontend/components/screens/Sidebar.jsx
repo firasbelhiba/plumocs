@@ -101,33 +101,6 @@ export default function Sidebar({ V }) {
               data-anim="in"
               className="absolute bottom-[calc(100%+8px)] left-0 w-[246px] p-1.5 z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in"
             >
-              <div className="px-2.5 pt-2 pb-1.5 text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]">
-                viewing as
-              </div>
-              <div className="flex gap-1 px-1.5 pb-2">
-                {[
-                  ['agent', V.roleAgent],
-                  ['lead', V.roleLead],
-                  ['admin', V.roleAdmin],
-                ].map(([role, on]) => (
-                  <button
-                    key={role}
-                    onClick={V.setRole}
-                    data-r={role}
-                    data-on={String(on)}
-                    className="flex-1 py-[7px] rounded-full text-[12px] cursor-pointer transition-colors duration-[var(--dur-instant)] focus-ring"
-                    style={{
-                      border: '1px solid var(--cs-onbd)',
-                      background: 'var(--cs-onbg)',
-                      color: 'var(--cs-onfg)',
-                      fontWeight: 'var(--cs-onw)',
-                    }}
-                  >
-                    {role}
-                  </button>
-                ))}
-              </div>
-
               <button onClick={V.toggleAvail} className={MENU_ITEM}>
                 <i data-tone={V.me.availTone} className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
                 <span className="flex-1">{V.me.availAction}</span>

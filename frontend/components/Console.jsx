@@ -33,7 +33,7 @@ export default class Console extends React.Component {
 
   state = {
     booted: false, loggedIn: true, screen: 'queue',
-    theme: 'light', soft: 'balanced', role: 'lead', avail: 'available',
+    theme: 'light', soft: 'balanced', role: 'agent', avail: 'available',
     nav: true, filters: true, rail: true,
     view: 'all-open', sort: 'updated', page: 0,
     f: { status: [], priority: [], channel: [], tag: null, team: null, assignee: null, range: 'any' },
@@ -47,7 +47,7 @@ export default class Console extends React.Component {
     toasts: [], confirm: null, sheet: false, newT: false,
     newSubject: '', newCustomer: '', newPriority: 'normal', newBody: '',
     notifs: [], secret: null,
-    loginEmail: 'tomas@plumo.app', loginPw: '', loginError: false, pwShown: false, loginView: 'signin', drill: null,
+    loginEmail: '', loginPw: '', loginError: false, pwShown: false, loginView: 'signin', drill: null,
     now: Date.now(), refreshed: Date.now(), failMode: false,
     pwCur: '', pwNew: '', pwConfirm: '', reportsAt: 0,
     keepSignedIn: true, serviceUp: true,
@@ -580,28 +580,6 @@ export default class Console extends React.Component {
   };
   hideKey = () => this.setState({ secret: null });
   setSettingsTab = (e) => this.setState({ settingsTab: e.currentTarget.dataset.v, secret: null });
-  setRole = (e) => this.applyRole(e.currentTarget.dataset.r);
-  /** Demo role switcher — re-authenticates as the seed user for that role. */
-  applyRole(role) {
-    if (role === this.state.role) { this.setState({ menu: null }); return; }
-    this.setState({ menu: null });
-    this.api
-      .switchRole(role)
-      .then((me) => {
-        this.setState(
-          { role: me.role, avail: me.availability ?? 'available', notifs: this.api.notifications, ticket: null, screen: this.state.screen === 'ticket' ? 'queue' : this.state.screen },
-          () => { this.loadQueue({ noFail: true }); this.loadCounts(); },
-        );
-        this.toast('viewing as ' + role);
-      })
-      .catch(() => {
-        // switchRole clears the session before re-authenticating; if the second
-        // leg failed there is nothing to refresh, so send them to sign-in
-        // rather than leaving a dead session that 401s everything silently.
-        this.setState({ loggedIn: false, loginView: 'signin' });
-        this.toast("that didn't go through — please sign in again", 'bad');
-      });
-  }
   /** Value-form of setAvail — Segment hands us the next value directly. */
   pickAvail = (v) => this.applyAvail(v);
   setAvail = (e) => this.applyAvail(e.currentTarget.dataset.a);
@@ -796,7 +774,6 @@ export default class Console extends React.Component {
       federated: this.federated, requestAccess: this.requestAccess, serviceUp: S.serviceUp,
 
       me: meView, go: this.go, signOut: this.signOut, toggleUser: this.toggleUser, userOpen: S.menu === 'user',
-      setRole: this.setRole, roleAgent: S.role === 'agent', roleLead: S.role === 'lead', roleAdmin: S.role === 'admin',
       canAdmin: S.role !== 'agent', toggleAvail: this.toggleAvail, openSheet: this.openSheet,
       themeAction: S.theme === 'dark' ? 'switch to light' : 'switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
 
