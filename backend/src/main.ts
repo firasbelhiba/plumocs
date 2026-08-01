@@ -67,7 +67,13 @@ async function bootstrap() {
 
   const config = app.get(ConfigService);
   const port = config.get<number>('port') ?? 3001;
-  await app.listen(port, '0.0.0.0');
+  // Behind a reverse proxy the API should only be reachable from the proxy on
+  // the same host. Binding every interface means the app is one firewall
+  // mistake away from being addressable directly on its port — which would skip
+  // nginx entirely, and with it TLS termination and the request limits.
+  // Docker and any setup where the proxy lives elsewhere set BIND_ADDRESS.
+  const bindAddress = process.env.BIND_ADDRESS ?? '0.0.0.0';
+  await app.listen(port, bindAddress);
   app.get(Logger).log(`API up on :${port} — docs at /api/docs`, 'Bootstrap');
 }
 

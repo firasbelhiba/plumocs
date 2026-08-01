@@ -5,14 +5,12 @@ import { adapter } from '@/lib/api/adapter';
 import Login from './screens/Login';
 import Header from './screens/Header';
 import Sidebar from './screens/Sidebar';
-import IndexScreen from './screens/IndexScreen';
 import Queue from './screens/Queue';
 import Ticket from './screens/Ticket';
 import { Customers, CustomerProfile } from './screens/Customers';
 import Reports from './screens/Reports';
 import Account from './screens/Account';
 import Settings from './screens/Settings';
-import Kit from './screens/Kit';
 import { NotFound, Oops } from './screens/EdgeScreens';
 import Overlays from './screens/Overlays';
 import { sx } from './sx';
@@ -54,56 +52,6 @@ export default class Console extends React.Component {
     pwCur: '', pwNew: '', pwConfirm: '', reportsAt: 0,
     keepSignedIn: true, serviceUp: true,
   };
-
-  openPage = (e) => {
-    const d = e.currentTarget.dataset || {};
-    if (d.id) { this.openTicket(d.id); return; }
-    if (d.cust) {
-      // '@first' on the index card: whoever the directory happens to load first
-      const id = d.cust === '@first' ? this.api.customers?.[0]?.id : d.cust;
-      if (!id) { this.toast('no customers loaded yet — try the customers page', 'bad'); return; }
-      this.setState({ screen: 'customer', customer: null, menu: null });
-      this.api.getCustomer(id).then(c => this.setState({ customer: c })).catch(() => { });
-      return;
-    }
-    if (d.s === 'login') { this.setState({ loggedIn: false, menu: null }); return; }
-    const patch = { screen: d.s, menu: null, sel: [] };
-    if (d.view) patch.view = d.view;
-    if (d.tab) patch.settingsTab = d.tab;
-    this.setState(patch, () => {
-      if (d.s === 'queue') this.loadQueue({ noFail: true });
-      if (d.s === 'customers') this.loadCustomers();
-      if (d.s === 'reports') this.loadReports();
-    });
-  };
-  demoEmpty = () => this.setState({ screen: 'queue', view: 'resolved', f: { status: ['new'], priority: [], channel: [], tag: null, team: null, assignee: null, range: 'any' }, page: 0 }, () => this.loadQueue({ noFail: true }));
-  demoError = () => this.setState({ screen: 'queue', load: 'error', rows: [] });
-  toggleFail = () => this.setState(s => ({ failMode: !s.failMode }), () => this.toast(this.state.failMode ? 'saves will fail from here — try changing a status' : 'saves work again ✿'));
-
-  PAGES = [
-    { id: '', cust: '', s: 'login', view: '', tab: '', kind: 'entry', name: 'sign in', state: 'visual', tone: 'st-new', blurb: 'the door. any details get you in; leave one blank to see the error state.' },
-    { id: '', cust: '', s: 'queue', view: 'all-open', tab: '', kind: 'core', name: 'inbox', state: 'live', tone: 'st-open', blurb: 'the default page — saved views, filter rail, bulk actions, sla arcs ticking every second.' },
-    { id: '', cust: '', s: 'queue', view: 'breaching', tab: '', kind: 'core', name: 'needs attention', state: 'live', tone: 'sla-breach', blurb: 'the same list, narrowed to the people who have been waiting a while.' },
-    { id: '', cust: '', s: 'queue', view: 'my-open', tab: '', kind: 'core', name: 'mine', state: 'live', tone: 'st-open', blurb: 'whoever you are looking after right now. try switching role.' },
-    { id: 'tk1042', cust: '', s: '', view: '', tab: '', kind: 'core', name: 'conversation', state: 'live', tone: 'st-open', blurb: "ines duarte, waiting a while — thread with a team-only note, composer, sla strip, details rail." },
-    { id: '', cust: '', s: 'customers', view: '', tab: '', kind: 'people', name: 'customers', state: 'live', tone: 'st-resolved', blurb: 'ten people across four organisations, with open and total counts.' },
-    { id: '', cust: '@first', s: '', view: '', tab: '', kind: 'people', name: 'customer profile', state: 'live', tone: 'st-resolved', blurb: 'every conversation one person has had, their averages, and a way to start another.' },
-    { id: '', cust: '', s: 'reports', view: '', tab: '', kind: 'insight', name: 'reports', state: 'live', tone: 'st-new', blurb: 'five kpis, created against resolved, channels, and how each agent is doing.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'team', kind: 'admin', name: 'team & users', state: 'built', tone: 'st-pending', blurb: 'eight people, roles and teams, with invite and deactivate flows.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'sla', kind: 'admin', name: 'sla policies', state: 'built', tone: 'st-pending', blurb: 'the three sets of targets — plus the add-a-policy form.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'keys', kind: 'admin', name: 'api keys', state: 'scaffold', tone: 'st-hold', blurb: 'generate a key and see the secret exactly once. webhooks, hours, tags and channels sit alongside.' },
-    { id: '', cust: '', s: 'kit', view: '', tab: '', kind: 'reference', name: 'ui kit', state: 'reference', tone: 'st-closed', blurb: 'every pill, badge, avatar, skeleton and message block in all of its states.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'overview', kind: 'admin', name: 'settings overview', state: 'built', tone: 'st-pending', blurb: 'the landing panel — all eight admin areas with what is configured in each.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'hours', kind: 'admin', name: 'business hours', state: 'scaffold', tone: 'st-hold', blurb: 'the weekly schedule, timezone and holidays that pause the clocks.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'canned', kind: 'admin', name: 'canned responses', state: 'scaffold', tone: 'st-hold', blurb: 'manage the five saved replies agents insert from the composer.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'tags', kind: 'admin', name: 'tags', state: 'scaffold', tone: 'st-hold', blurb: 'create, rename and recolour the six tags, with usage counts.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'hooks', kind: 'admin', name: 'webhooks', state: 'scaffold', tone: 'st-hold', blurb: 'three endpoints, their events, and the one that is failing.' },
-    { id: '', cust: '', s: 'settings', view: '', tab: 'email', kind: 'admin', name: 'email & channels', state: 'scaffold', tone: 'st-hold', blurb: 'inbound and outbound addresses, and the connected channels.' },
-    { id: '', cust: '', s: 'account', view: '', tab: '', kind: 'you', name: 'my account', state: 'built', tone: 'st-open', blurb: 'availability, theme, density, password and what we notify you about.' },
-    { id: '', cust: '', s: 'reports', view: '', tab: '', kind: 'insight', name: 'reports drill-down', state: 'live', tone: 'st-new', blurb: 'click any kpi on reports for its 14-day trend, how it splits, and the conversations behind it.' },
-    { id: '', cust: '', s: 'notfound', view: '', tab: '', kind: 'edge', name: 'not found', state: '404', tone: 'st-closed', blurb: 'an old link, or a conversation merged into another. the blob naps rather than scolds.' },
-    { id: '', cust: '', s: 'oops', view: '', tab: '', kind: 'edge', name: "something's off", state: 'error', tone: 'sla-breach', blurb: 'the generic failure page, with a reference and a way to tell the team.' },
-  ];
 
   forgot = (e) => { e.preventDefault(); this.setState({ loginView: 'reset', loginError: false }); };
   sendReset = () => {
@@ -852,14 +800,11 @@ export default class Console extends React.Component {
       canAdmin: S.role !== 'agent', toggleAvail: this.toggleAvail, openSheet: this.openSheet,
       themeAction: S.theme === 'dark' ? 'switch to light' : 'switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
 
-      isIndex: S.screen === 'index', openPage: this.openPage, pageCards: this.PAGES,
-      demoEmpty: this.demoEmpty, demoError: this.demoError, toggleFail: this.toggleFail,
-      failMode: S.failMode, failLabel: S.failMode ? 'on' : 'off',
       isQueue: S.screen === 'queue' && S.view !== 'my-open', isMine: S.screen === 'queue' && S.view === 'my-open',
       isQueueLike: S.screen === 'queue', isTicket: S.screen === 'ticket',
       isCustomers: S.screen === 'customers', isCustomer: S.screen === 'customer',
       isCustomersNav: S.screen === 'customers' || S.screen === 'customer',
-      isReports: S.screen === 'reports', isSettings: S.screen === 'settings', isKit: S.screen === 'kit',
+      isReports: S.screen === 'reports', isSettings: S.screen === 'settings',
 
       q: S.q, onQ: this.onQ, onQFocus: this.onQFocus, searchRef: this.searchRef,
       searchOpen: !!(S.q && S.results),
@@ -1010,7 +955,6 @@ export default class Console extends React.Component {
             <div className={sx('flex:1;display:flex;min-height:0')}>
               <Sidebar V={V} />
               <main className={sx('flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden')}>
-                {V.isIndex && <IndexScreen V={V} />}
                 {V.isQueueLike && <Queue V={V} />}
                 {V.isTicket && <Ticket V={V} />}
                 {V.isCustomers && <Customers V={V} />}
@@ -1020,7 +964,6 @@ export default class Console extends React.Component {
                 {V.isNotFound && <NotFound V={V} />}
                 {V.isOops && <Oops V={V} />}
                 {V.isSettings && <Settings V={V} />}
-                {V.isKit && <Kit V={V} />}
               </main>
             </div>
           </div>

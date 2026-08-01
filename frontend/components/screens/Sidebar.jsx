@@ -51,7 +51,6 @@ export default function Sidebar({ V }) {
       </div>
 
       <span data-navlabel className={SECTION}>overview</span>
-      <NavItem screen="index" active={V.isIndex} onClick={V.go} label="all pages" icon={<NavIcon src="/assets/icons/icon-agent.svg" />} />
       <NavItem screen="queue" active={V.isQueue} onClick={V.go} label="inbox" count={V.cUn} icon={<NavIcon src="/assets/icons/icon-ticket.svg" />} />
       <NavItem screen="mine" active={V.isMine} onClick={V.go} label="mine" count={V.cMy} icon={<NavIcon src="/assets/icons/icon-resolve.svg" />} />
 
@@ -72,7 +71,6 @@ export default function Sidebar({ V }) {
           }
         />
       )}
-      <NavItem screen="kit" active={V.isKit} onClick={V.go} label="ui kit" icon={<NavIcon src="/assets/icons/icon-knowledge-base.svg" />} />
 
       <div className="mt-auto flex flex-col gap-0.5">
         <div className="h-px bg-[color:var(--border)] mx-0.5 my-2.5" />
@@ -162,17 +160,6 @@ export default function Sidebar({ V }) {
           )}
         </div>
 
-        <button
-          onClick={V.mock}
-          data-msg="nothing new since tuesday — enjoy the quiet ✿"
-          className={cn(MENU_ITEM, 'text-fg-3 hover:text-fg')}
-        >
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="flex-none">
-            <path d="M7 4h7l4 4v12a1.8 1.8 0 01-1.8 1.8H7A1.8 1.8 0 015.2 20V5.8A1.8 1.8 0 017 4z" />
-            <path d="M13.5 4v4.5H18" />
-          </svg>
-          <span data-navlabel className="flex-1 whitespace-nowrap">what&apos;s new</span>
-        </button>
       </div>
     </nav>
   );

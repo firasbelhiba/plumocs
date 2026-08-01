@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 const Console = dynamic(() => import('@/components/Console'), { ssr: false });
 
 export default function Page() {
-  // Defaults mirror the design's data-props: light theme, balanced density,
-  // green accent, lead role, index start screen.
-  return <Console theme="light" softness="balanced" role="lead" startScreen="index" />;
+  // The console opens on the inbox; the design's index-of-pages screen was a
+  // template artefact and is gone.
+  return <Console theme="light" softness="balanced" role="lead" startScreen="queue" />;
 }

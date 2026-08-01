@@ -18,7 +18,18 @@ import { RealtimeService } from './realtime.service';
  * `team:<id>`, and `role:<role>`. Ticket traffic goes to the owning team
  * (admins get an all-teams room); notifications go only to their recipients.
  */
-@WebSocketGateway({ cors: { origin: true }, path: '/ws' })
+/**
+ * Origins are taken from the same CORS_ORIGINS list the HTTP side uses, rather
+ * than reflecting whatever origin asks. socket.io's polling transport is a real
+ * cross-origin HTTP request, so `origin: true` here would leave the hole the
+ * HTTP config was tightened to close. Unset (local development) still reflects.
+ */
+const wsOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+@WebSocketGateway({ cors: { origin: wsOrigins.length ? wsOrigins : true }, path: '/ws' })
 export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection {
   private readonly logger = new Logger(RealtimeGateway.name);
 
