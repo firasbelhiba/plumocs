@@ -1,0 +1,41 @@
+/* Plumo · Typography tokens
+   Inter is the ONLY typeface. Only two weights ever: 400 Regular, 500 Medium.
+   Never Bold (700), never Light. Always sentence case in UI copy.
+   Big type gets negative letter-spacing; the eyebrow is the one uppercase style. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+
+:root {
+  --plumo-font:      'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --plumo-font-mono: 'SF Mono', Menlo, Consolas, monospace;
+
+  --font-sans: var(--plumo-font);
+  --font-mono: var(--plumo-font-mono);
+
+  /* ---- Weights (only these two) ---- */
+  --plumo-fw-regular: 400; /* @kind other */
+  --plumo-fw-medium:  500; /* @kind other */
+
+  /* ---- Type scale (size) ---- */
+  --plumo-text-display-xl: 96px;
+  --plumo-text-display:    56px;
+  --plumo-text-h1:         40px;
+  --plumo-text-h2:         28px;
+  --plumo-text-h3:         20px;
+  --plumo-text-body:       16px;
+  --plumo-text-caption:    13px;
+  --plumo-text-eyebrow:    11px;
+
+  /* ---- Tracking per size (big type goes negative) ---- */
+  --plumo-track-display-xl: -4px;
+  --plumo-track-display:    -2px;
+  --plumo-track-h1:         -1.2px;
+  --plumo-track-h2:         -0.6px;
+  --plumo-track-h3:         -0.3px;
+  --plumo-track-eyebrow:    2px;
+
+  /* ---- Line-heights ---- */
+  --plumo-lh-tight: 0.95; /* @kind other */
+  --plumo-lh-snug:  1.1;  /* @kind other */
+  --plumo-lh-body:  1.65; /* @kind other */
+}

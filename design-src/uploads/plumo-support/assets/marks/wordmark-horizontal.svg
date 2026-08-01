@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 32" width="220" height="32" shape-rendering="geometricPrecision">
+  <path d="M 14 4 C 21 4, 26 9, 25 15 C 28 18, 25 24, 19 24 C 17 27, 11 27, 8 25 C 2 26, 0 19, 3 15 C 0 9, 7 4, 14 4 Z" fill="#4C9F6E" stroke="#1F4A2E" stroke-width="1.2" stroke-linejoin="round"></path>
+  <path d="M 8 14 Q 10 12, 12 14" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round"></path>
+  <path d="M 16 14 Q 18 12, 20 14" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round"></path>
+  <text x="34" y="20" font-family="Inter, sans-serif" font-size="18" font-weight="500" fill="#1F4A2E" letter-spacing="-0.5">plumo customer support</text>
+</svg>

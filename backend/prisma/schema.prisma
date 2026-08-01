@@ -1,0 +1,482 @@
+// Plumo CS — database schema (PostgreSQL 16).
+// Enums are Postgres enum types; timestamps are timestamptz; ids are UUID.
+// SLA targets are integers (minutes).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+// Two URLs on purpose (see prisma/sql/roles.sql):
+//   url       → plumo_app, the runtime. Owns nothing, NOBYPASSRLS, DML only.
+//   directUrl → plumo_migrator, the schema owner. Prisma Migrate uses this one.
+// Splitting them is what makes row-level security capable of enforcing anything:
+// a superuser or table owner is exempt from policies, so if the runtime kept
+// connecting as the owner every policy would install cleanly and do nothing.
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("MIGRATE_DATABASE_URL")
+  extensions = [citext, pgcrypto]
+}
+
+// ---- Enums -----------------------------------------------------------------
+
+enum UserRole {
+  agent
+  lead
+  admin
+
+  @@map("user_role")
+}
+
+enum TicketStatus {
+  new
+  open
+  pending
+  on_hold
+  resolved
+  closed
+
+  @@map("ticket_status")
+}
+
+enum TicketPriority {
+  low
+  normal
+  high
+  urgent
+
+  @@map("ticket_priority")
+}
+
+enum Channel {
+  email
+  api
+  widget
+  hashcare
+  manual
+  // one generic value for all third-party chatbots, never a partner-specific
+  // one — otherwise this enum grows a member per customer forever
+  chatbot
+
+  @@map("channel")
+}
+
+enum AuthorType {
+  customer
+  agent
+  system
+  // a chatbot reply. Distinct from `system` (merge markers, automated notes)
+  // and from `agent`, so reporting can separate bot work from human work
+  bot
+
+  @@map("author_type")
+}
+
+enum TicketOutcome {
+  answered
+  escalated
+  out_of_scope
+
+  @@map("ticket_outcome")
+}
+
+enum WebhookEvent {
+  ticket_created   @map("ticket.created")
+  ticket_updated   @map("ticket.updated")
+  ticket_assigned  @map("ticket.assigned")
+  ticket_resolved  @map("ticket.resolved")
+  message_added    @map("message.added")
+  sla_breached     @map("sla.breached")
+
+  @@map("webhook_event")
+}
+
+// ---- Tables ----------------------------------------------------------------
+
+model Organization {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  domain      String?
+  externalRef String?    @map("external_ref")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  customers   Customer[]
+  tickets     Ticket[]
+
+  @@map("organizations")
+}
+
+model Customer {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  // Nullable since chatbot ingest: an anonymous visitor has no email. Uniqueness
+  // is enforced by the partial index customers_email_unique_idx (WHERE email IS
+  // NOT NULL), which Prisma cannot express — so there is no @unique here and
+  // lookups use findFirst, not findUnique.
+  email          String?       @db.Citext
+  name           String
+  phone          String?
+  locale         String?
+  timezone       String?
+  externalRef    String?       @map("external_ref")
+  // Identity for a visitor with no email: the chatbot that saw them plus that
+  // chatbot's opaque reference. Unique per key via customers_visitor_unique_idx.
+  visitorApiKeyId String?      @map("visitor_api_key_id") @db.Uuid
+  visitorApiKey   ApiKey?      @relation("CustomerVisitorKey", fields: [visitorApiKeyId], references: [id])
+  visitorRef      String?      @map("visitor_ref")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz()
+  tickets        Ticket[]
+
+  @@index([organizationId])
+  // customers_email_unique_idx, customers_visitor_unique_idx and
+  // customers_identity_check are partial/check constraints in the migration and
+  // invisible here — `prisma migrate diff` will propose dropping them.
+  @@map("customers")
+}
+
+model User {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String           @unique @db.Citext
+  name            String
+  role            UserRole         @default(agent)
+  passwordHash    String           @map("password_hash")
+  avatarUrl       String?          @map("avatar_url")
+  teamId          String?          @map("team_id") @db.Uuid
+  team            Team?            @relation(fields: [teamId], references: [id])
+  isActive        Boolean          @default(true) @map("is_active")
+  availability    String           @default("available")
+  lastActiveAt    DateTime?        @map("last_active_at") @db.Timestamptz()
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
+  assignedTickets Ticket[]
+  refreshTokens   RefreshToken[]
+  apiKeys         ApiKey[]
+  cannedResponses CannedResponse[]
+  notifications   Notification[]
+  passwordResets  PasswordReset[]
+
+  @@index([teamId])
+  @@map("users")
+}
+
+model Team {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  description     String?
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
+  users           User[]
+  tickets         Ticket[]
+  cannedResponses CannedResponse[]
+  apiKeys         ApiKey[]
+
+  @@map("teams")
+}
+
+model BusinessHours {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  timezone     String
+  weeklyJson   Json        @map("weekly_json") // {mon:[["09:00","17:00"]], ...}
+  holidaysJson Json        @default("[]") @map("holidays_json") // ["2026-12-25", ...]
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz()
+  slaPolicies  SlaPolicy[]
+
+  @@map("business_hours")
+}
+
+model SlaPolicy {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String
+  priority          TicketPriority
+  firstResponseMins Int            @map("first_response_mins")
+  resolutionMins    Int            @map("resolution_mins")
+  businessHoursId   String?        @map("business_hours_id") @db.Uuid
+  businessHours     BusinessHours? @relation(fields: [businessHoursId], references: [id])
+  isActive          Boolean        @default(true) @map("is_active")
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
+  tickets           Ticket[]
+
+  @@map("sla_policies")
+}
+
+model Ticket {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number             BigInt          @unique @default(dbgenerated("nextval('ticket_number_seq')"))
+  subject            String
+  status             TicketStatus    @default(new)
+  priority           TicketPriority  @default(normal)
+  channel            Channel
+  customerId         String          @map("customer_id") @db.Uuid
+  customer           Customer        @relation(fields: [customerId], references: [id])
+  organizationId     String?         @map("organization_id") @db.Uuid
+  organization       Organization?   @relation(fields: [organizationId], references: [id])
+  assigneeId         String?         @map("assignee_id") @db.Uuid
+  assignee           User?           @relation(fields: [assigneeId], references: [id])
+  teamId             String?         @map("team_id") @db.Uuid
+  team               Team?           @relation(fields: [teamId], references: [id])
+  slaPolicyId        String?         @map("sla_policy_id") @db.Uuid
+  slaPolicy          SlaPolicy?      @relation(fields: [slaPolicyId], references: [id])
+  firstResponseDueAt DateTime?       @map("first_response_due_at") @db.Timestamptz()
+  resolutionDueAt    DateTime?       @map("resolution_due_at") @db.Timestamptz()
+  firstRespondedAt   DateTime?       @map("first_responded_at") @db.Timestamptz()
+  resolvedAt         DateTime?       @map("resolved_at") @db.Timestamptz()
+  closedAt           DateTime?       @map("closed_at") @db.Timestamptz()
+  slaPausedAt        DateTime?       @map("sla_paused_at") @db.Timestamptz()
+  outcome            TicketOutcome?
+  sourceRef          String?         @map("source_ref")
+  // Which chatbot filed this. SET NULL on key deletion: revoking a chatbot must
+  // never delete the conversations it handled.
+  createdByApiKeyId  String?         @map("created_by_api_key_id") @db.Uuid
+  createdByApiKey    ApiKey?         @relation("TicketCreatorKey", fields: [createdByApiKeyId], references: [id])
+  // Bot-first SLA: a bot reply does NOT satisfy first response, it stamps its
+  // own column. The human clock starts at handedOffAt.
+  botRepliedAt       DateTime?       @map("bot_replied_at") @db.Timestamptz()
+  handedOffAt        DateTime?       @map("handed_off_at") @db.Timestamptz()
+  tags               String[]        @default([])
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
+  messages           TicketMessage[]
+  notifications      Notification[]
+  chatSessions       ChatSession[]
+  // search_tsv tsvector column + its GIN index live in
+  // prisma/migrations/20260801170000_search_tsv_and_btree_gin, maintained by the
+  // tickets_tsv_trigger. Invisible to this schema, so `prisma migrate diff` will
+  // propose DROPping them — never apply a generated diff.
+
+  @@index([status])
+  @@index([assigneeId])
+  @@index([teamId])
+  @@index([firstResponseDueAt])
+  @@index([tags], type: Gin)
+  // the default inbox ordering — matches the (updatedAt desc, id desc) sort
+  // used by list(), including the cursor tiebreaker
+  @@index([updatedAt(sort: Desc), id(sort: Desc)])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId       String       @map("ticket_id") @db.Uuid
+  ticket         Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorType     AuthorType   @map("author_type")
+  authorId       String?      @map("author_id") @db.Uuid // user or customer id
+  body           String
+  isInternalNote Boolean      @default(false) @map("is_internal_note")
+  channel        Channel
+  emailMessageId String?      @map("email_message_id")
+  // Which chatbot wrote this, when authorType is `bot`.
+  authorApiKeyId String?      @map("author_api_key_id") @db.Uuid
+  authorApiKey   ApiKey?      @relation("MessageAuthorKey", fields: [authorApiKeyId], references: [id])
+  // The partner's own id for this turn. Unique per ticket via
+  // ticket_messages_external_ref_unique_idx, which is what makes appending a
+  // message idempotent under retry.
+  externalRef    String?      @map("external_ref")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  attachments    Attachment[]
+
+  @@index([ticketId, createdAt])
+  @@index([emailMessageId])
+  @@map("ticket_messages")
+}
+
+model Attachment {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Nullable: rows are created "pending" at presign time and linked to a
+  // message when the reply is posted (attachmentIds on POST …/messages).
+  ticketMessageId String?        @map("ticket_message_id") @db.Uuid
+  ticketMessage   TicketMessage? @relation(fields: [ticketMessageId], references: [id], onDelete: Cascade)
+  filename        String
+  contentType     String        @map("content_type")
+  sizeBytes       Int           @map("size_bytes")
+  storageKey      String        @map("storage_key")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("attachments")
+}
+
+model Tag {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key       String   @unique // slug used inside tickets.tags[]
+  label     String
+  color     String   @default("#94A3B8")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("tags")
+}
+
+model CannedResponse {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String
+  body        String
+  tags        String[] @default([])
+  teamId      String?  @map("team_id") @db.Uuid
+  team        Team?    @relation(fields: [teamId], references: [id])
+  createdById String   @map("created_by") @db.Uuid
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("canned_responses")
+}
+
+model ApiKey {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  keyHash     String    @map("key_hash") // hash only; secret shown once
+  keyPrefix   String    @map("key_prefix") // first chars, for lookup/display
+  scopes      String[]  @default([])
+  // Row-level confinement for a machine principal. When set, the key can only
+  // see and touch tickets belonging to this team — the machine equivalent of a
+  // lead's team scope. Null means instance-wide and must be granted deliberately
+  // (see ApiKeysService.create). This is the seam multi-tenancy hangs off:
+  // workspace_id joins the key right here.
+  teamId      String?   @map("team_id") @db.Uuid
+  team        Team?     @relation(fields: [teamId], references: [id])
+  createdById String    @map("created_by") @db.Uuid
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz()
+  isActive    Boolean   @default(true) @map("is_active")
+  // Partner credentials are issued with an expiry; internal keys may be null.
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  // A chatbot IS an api key, so everything a chatbot produces points back here.
+  ticketsCreated  Ticket[]        @relation("TicketCreatorKey")
+  messagesWritten TicketMessage[] @relation("MessageAuthorKey")
+  visitors        Customer[]      @relation("CustomerVisitorKey")
+  chatSessions    ChatSession[]
+
+  @@index([keyPrefix])
+  @@index([teamId])
+  @@map("api_keys")
+}
+
+// Watermark for the nightly partner export.
+//
+// This used to live in audit_log as a synthetic row with a sentinel entity id,
+// which conflated an operational cursor with an append-only compliance record —
+// and would have been lost the moment audit_log is partitioned for retention.
+model ExportState {
+  id         String   @id @default("daily")
+  watermark  DateTime @db.Timestamptz()
+  lastCount  Int      @default(0) @map("last_count")
+  lastRunAt  DateTime @default(now()) @map("last_run_at") @db.Timestamptz()
+
+  @@map("export_state")
+}
+
+model Webhook {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  url        String
+  events     WebhookEvent[]
+  secret     String
+  isActive   Boolean           @default(true) @map("is_active")
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime          @updatedAt @map("updated_at") @db.Timestamptz()
+  deliveries WebhookDelivery[]
+
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhookId   String       @map("webhook_id") @db.Uuid
+  webhook     Webhook      @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event       WebhookEvent
+  payloadJson Json         @map("payload_json")
+  status      String       @default("pending") // pending|delivered|failed
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz()
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("webhook_deliveries")
+}
+
+model RefreshToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz()
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz()
+  usedAt    DateTime? @map("used_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+model Notification {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // assignment | mention | sla_warning | sla_breach
+  text      String
+  ticketId  String?   @map("ticket_id") @db.Uuid
+  ticket    Ticket?   @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  readAt    DateTime? @map("read_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorType  String   @map("actor_type") // user | api_key | system
+  actorId    String?  @map("actor_id") @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id") @db.Uuid
+  action     String
+  diffJson   Json?    @map("diff_json")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([entityType, entityId])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_log")
+}
+
+/// One chatbot conversation, mapped to exactly one ticket.
+///
+/// The partner sends its own opaque session reference; the unique index on
+/// (apiKeyId, sessionRef) is what makes opening a conversation idempotent
+/// without a separate idempotency-key ledger. It is keyed on the API key rather
+/// than the workspace because a key belongs to exactly one workspace, so the
+/// per-key constraint is strictly narrower and stays correct after tenancy
+/// lands — it never needs widening or a data migration.
+model ChatSession {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  apiKeyId   String   @map("api_key_id") @db.Uuid
+  apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  sessionRef String   @map("session_ref")
+  ticketId   String   @map("ticket_id") @db.Uuid
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  visitorRef String?  @map("visitor_ref")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@unique([apiKeyId, sessionRef])
+  @@index([ticketId])
+  @@map("chat_sessions")
+}

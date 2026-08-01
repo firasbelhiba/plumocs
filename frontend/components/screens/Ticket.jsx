@@ -1,0 +1,541 @@
+'use client';
+
+import { Button, Card, Input, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
+
+const ON_ROW_STYLE = { background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' };
+const MENU =
+  'absolute top-[calc(100%+7px)] p-1.5 z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in';
+const MENU_ROW =
+  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2';
+const RAIL_CARD = 'rounded-token border border-[color:var(--border)] p-4 flex flex-col';
+const RAIL_LABEL = 'text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
+const RAIL_KV = 'flex justify-between gap-2.5 text-[12.5px] text-fg-3';
+const ICON_BTN =
+  'flex-none grid place-items-center w-[30px] h-[30px] rounded-full border border-[color:var(--border)] bg-surface text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:text-fg focus-ring';
+const TOOL_BTN =
+  'grid place-items-center w-7 h-7 rounded-token-sm border-none bg-transparent text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:text-fg';
+const Caret = () => (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+const LockIcon = () => (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="5" y="10.5" width="14" height="9" rx="2.2" />
+    <path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5" />
+  </svg>
+);
+const ClipIcon = ({ size = 13 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 7l-6.5 6.5a2.5 2.5 0 003.5 3.5L20 10a4.5 4.5 0 00-6.5-6.5L6 11a6.5 6.5 0 009 9l5-5" />
+  </svg>
+);
+
+const splitName = (n = '') => [n.split(' ')[0] ?? '', n.split(' ').slice(1).join(' ')];
+
+export default function Ticket({ V }) {
+  const [custFirst, custLast] = splitName(V.custName);
+  const [asgFirst, asgLast] = splitName(V.tAssigneeName);
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* toolbar */}
+      <div className="flex-none flex items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface relative z-sticky">
+        <button onClick={V.backToQueue} aria-label="back to the inbox" title="back to the inbox" className={ICON_BTN}>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </button>
+        <span className="tabular-nums text-fg-3 text-[13px] flex-none">#{V.tNum}</span>
+
+        {V.subjEdit && (
+          <input
+            value={V.subjDraft}
+            onChange={V.onSubjDraft}
+            onBlur={V.saveSubject}
+            onKeyDown={V.onSubjKey}
+            aria-label="edit subject"
+            autoFocus
+            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-token-sm border border-[color:var(--primary)] bg-surface text-fg text-[16px] font-medium outline-none focus-ring"
+          />
+        )}
+        {V.subjNotEdit && (
+          <button
+            onClick={V.editSubject}
+            title="click to rename"
+            className="flex-1 min-w-0 text-left px-2 py-1.5 rounded-token-sm border border-transparent bg-transparent text-fg text-[16px] font-medium tracking-[-.3px] cursor-text truncate transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:border-[color:var(--border)]"
+          >
+            {V.tSubject}
+          </button>
+        )}
+
+        {/* status */}
+        <div className="relative flex-none">
+          <Button variant="secondary" size="sm" onClick={V.openStatusMenu} rightIcon={<Caret />}>
+            <TonePill tone={V.tStatusTone} dot className="!bg-transparent !px-0">{V.tStatus}</TonePill>
+          </Button>
+          {V.statusOpen && (
+            <div data-anim="in" className={MENU + ' left-0 w-[180px]'}>
+              {V.statusOptions.map((o) => (
+                <button key={o.id} onClick={V.setStatus} data-v={o.id} data-on={String(o.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+                  <i data-tone={o.tone} className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
+                  <span className="flex-1">{o.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* priority */}
+        <div className="relative flex-none">
+          <Button variant="secondary" size="sm" onClick={V.openPriorityMenu} rightIcon={<Caret />}>
+            <TonePill tone={V.tPrioTone} glyph={<span className="text-[11px]">{V.tPrioGlyph}</span>} className="!bg-transparent !px-0">
+              {V.tPrio}
+            </TonePill>
+          </Button>
+          {V.prioOpen && (
+            <div data-anim="in" className={MENU + ' left-0 w-[164px]'}>
+              {V.prioOptions.map((o) => (
+                <button key={o.id} onClick={V.setPriority} data-v={o.id} data-on={String(o.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+                  <span data-tone={o.tone} className="w-4 text-center text-[11px]" style={{ color: 'var(--tone-fg)' }}>{o.glyph}</span>
+                  <span className="flex-1">{o.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* assignee */}
+        <div className="relative flex-none">
+          <button
+            onClick={V.openAssigneeMenu}
+            className="inline-flex items-center gap-2 pl-1.5 pr-3 h-btn-md rounded-full border border-[color:var(--border)] bg-surface text-fg text-[13px] whitespace-nowrap cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring"
+          >
+            <UserAvatar firstName={asgFirst} lastName={asgLast} size="sm" />
+            {V.tAssigneeName}
+            <i data-tone="sla-met" className="w-[5px] h-[5px] rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
+            <span className="text-[12px] text-fg-3">on it</span>
+            <Caret />
+          </button>
+          {V.assigneeOpen && (
+            <div data-anim="in" className={MENU + ' right-0 w-[262px] !p-2'}>
+              <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="find an agent…" aria-label="search agents" className="!rounded-full mb-1.5" />
+              <Button size="sm" onClick={V.assignMe} className="w-full mb-1 justify-start" variant="secondary"
+                style={{ background: 'var(--primary-soft)', color: 'var(--cs-brand-ink)' }}>
+                assign to me
+              </Button>
+              <div data-scroll className="max-h-[232px] overflow-y-auto">
+                {V.agentList.map((a) => {
+                  const [f, l] = splitName(a.name);
+                  return (
+                    <button key={a.id} onClick={V.setAssignee} data-v={a.id} data-on={String(a.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+                      <span className="relative flex-none">
+                        <UserAvatar firstName={f} lastName={l} size="sm" />
+                        <i data-tone={a.availTone} className="absolute -right-px -bottom-px w-2 h-2 rounded-full border-2 border-[color:var(--surface)]" style={{ background: 'var(--tone-hue)' }} />
+                      </span>
+                      <span className="flex-1">{a.name}</span>
+                      <span className="text-[11.5px] text-fg-3">{a.role}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={V.unassign} className="w-full px-2.5 py-2 mt-1 border-none border-t border-[color:var(--border)] bg-transparent text-fg-3 text-[13px] text-left cursor-pointer hover:text-fg">
+                unassign
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* team */}
+        <div className="relative flex-none">
+          <Button variant="secondary" size="sm" onClick={V.openTeamMenu} rightIcon={<Caret />} className="text-fg-3">{V.tTeam}</Button>
+          {V.teamOpen && (
+            <div data-anim="in" className={MENU + ' right-0 w-[150px]'}>
+              {V.teamList.map((o) => (
+                <button key={o.id} onClick={V.setTeam} data-v={o.id} data-on={String(o.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* overflow */}
+        <div className="relative flex-none">
+          <button onClick={V.openOverflow} aria-label="more actions" className={ICON_BTN}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="5.5" r=".7" /><circle cx="12" cy="12" r=".7" /><circle cx="12" cy="18.5" r=".7" />
+            </svg>
+          </button>
+          {V.overflowOpen && (
+            <div data-anim="in" className={MENU + ' right-0 w-[190px]'}>
+              <button onClick={V.mergeTicket} className={MENU_ROW}>merge into another conversation</button>
+              <button onClick={V.openTagMenu} className={MENU_ROW}>add a tag</button>
+              <button onClick={V.copyLink} className={MENU_ROW}>copy link</button>
+              <div className="h-px bg-[color:var(--border)] mx-2 my-1.5" />
+              <button onClick={V.askSpam} className={MENU_ROW}>mark as spam</button>
+              <button onClick={V.askDelete} className={MENU_ROW + ' !text-[color:var(--danger)] hover:!bg-[color:var(--danger-soft)]'}>
+                delete this conversation
+              </button>
+            </div>
+          )}
+        </div>
+
+        <button onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className={ICON_BTN + ' !rounded-token-sm'}>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 5h16v14H4zM15 5v14" />
+          </svg>
+        </button>
+      </div>
+
+      {/* SLA strip */}
+      <div
+        data-tone={V.tSlaTone}
+        className="flex-none flex items-center gap-3.5 px-[18px] py-[7px] border-b border-[color:var(--border)] text-[12.5px] tabular-nums"
+        style={{ background: 'color-mix(in srgb, var(--tone-hue) 9%, var(--surface))', color: 'var(--tone-fg)' }}
+      >
+        <span className="inline-flex items-center gap-[7px]">
+          <img src="/assets/icons/icon-sla.svg" alt="" className="w-[15px] h-[15px] block flex-none" />
+          first response {V.frLabel}
+        </span>
+        <i className="w-px h-3.5 bg-current opacity-25" />
+        <span>resolution {V.resLabel}</span>
+        <i className="w-px h-3.5 bg-current opacity-25" />
+        <span className="opacity-80">{V.slaPolicy} policy</span>
+        {V.tPaused && (
+          <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface border border-[color:var(--border)] text-fg-3">
+            paused — a pause is a feature ✿
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 flex min-h-0">
+        <div className="flex-1 min-w-0 flex flex-col bg-bg">
+          {V.remote && (
+            <div
+              data-anim="in"
+              className="flex-none flex items-center gap-2.5 mx-[18px] mt-3 px-3.5 py-2.5 rounded-full text-[12.5px] animate-slide-up"
+              style={{
+                background: 'var(--primary-soft)',
+                border: '1px solid color-mix(in srgb, var(--primary) 22%, transparent)',
+                color: 'var(--cs-brand-ink)',
+              }}
+            >
+              <i className="w-[7px] h-[7px] rounded-full flex-none bg-[color:var(--primary)]" />
+              <span className="flex-1">a teammate added a reply while you were reading</span>
+              <Button size="sm" onClick={V.reloadTicket}>refresh</Button>
+            </div>
+          )}
+
+          {V.ticketLoading && (
+            <div className="flex-1 flex flex-col gap-3.5 px-[18px] py-5">
+              <Skeleton className="h-[66px] w-[72%] rounded-token" />
+              <Skeleton className="h-[86px] w-[84%] rounded-token self-end" />
+              <Skeleton className="h-[52px] w-[64%] rounded-token" />
+            </div>
+          )}
+
+          {/* thread */}
+          <div ref={V.threadRef} data-scroll className="flex-1 min-h-0 overflow-y-auto px-[18px] pt-[18px] pb-2 flex flex-col gap-3">
+            {V.thread.map((m) => {
+              const [f, l] = splitName(m.author);
+              return (
+                <div key={m.id}>
+                  {m.isEvent && (
+                    <div className="flex items-center gap-3 py-0.5">
+                      <i className="flex-1 h-px bg-[color:var(--border)]" />
+                      <span className="text-[11.5px] text-fg-3 whitespace-nowrap">{m.body} · {m.rel} ago</span>
+                      <i className="flex-1 h-px bg-[color:var(--border)]" />
+                    </div>
+                  )}
+                  {m.isBubble && (
+                    <div
+                      data-side={m.sideKey}
+                      className="flex gap-3 items-start max-w-[min(760px,100%)]"
+                      style={{ marginLeft: 'var(--msg-ml)' }}
+                    >
+                      <span className="mt-0.5">
+                        <UserAvatar firstName={f} lastName={l} size="md" />
+                      </span>
+                      <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="text-[13.5px] font-medium">{m.author}</span>
+                          <span className="text-[11.5px] text-fg-3">{m.role}</span>
+                          <span title={m.exact} className="text-[11.5px] text-fg-3 tabular-nums">{m.rel} ago</span>
+                          {m.pending && <span className="text-[11.5px] text-fg-3">sending…</span>}
+                        </div>
+                        <div
+                          className="p-3.5 flex flex-col gap-2.5"
+                          style={{
+                            border: '1px solid var(--msg-bd)',
+                            background: 'var(--msg-bg)',
+                            borderRadius: 'var(--msg-r, var(--radius))',
+                          }}
+                        >
+                          {m.isNote && (
+                            <div data-tone="st-pending" className="inline-flex items-center gap-[7px] text-[11.5px] font-medium" style={{ color: 'var(--tone-fg)' }}>
+                              <LockIcon />only visible to your team
+                            </div>
+                          )}
+                          {m.paras.map((p) => (
+                            <p key={p.id} className="text-[14px] leading-relaxed text-fg">{p.text}</p>
+                          ))}
+                          {m.hasFiles && (
+                            <div className="flex gap-[7px] flex-wrap pt-0.5">
+                              {m.files.map((file, i) => (
+                                <Button key={i} variant="secondary" size="sm" leftIcon={<ClipIcon />}>
+                                  {file.name}<span className="text-fg-3">{file.size}</span>
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* suggested article */}
+          <div className="mx-[18px] mb-3 px-3.5 py-3 rounded-[10px] bg-surface flex gap-2.5 items-start" style={{ border: '1px solid var(--cs-leafsoft)' }}>
+            <span className="w-[22px] h-[22px] flex-none rounded-full grid place-items-center" style={{ background: 'var(--cs-leafsoft)' }}>
+              <img src="/assets/icons/icon-knowledge-base.svg" alt="" className="w-[13px] h-[13px] block" />
+            </span>
+            <div className="flex-1 flex flex-col gap-0.5">
+              <span className="text-[12px] font-medium" style={{ color: 'var(--cs-brand-ink)' }}>this article might help</span>
+              <span className="text-[12.5px] text-fg-3">rotating an account key without locking anyone out</span>
+            </div>
+            <Button variant="secondary" size="sm" onClick={V.mock} data-msg="article added to your reply ✿" className="whitespace-nowrap">
+              add to reply
+            </Button>
+          </div>
+
+          {/* composer */}
+          <div
+            data-side={V.composerKey}
+            className="flex-none mx-[18px] mb-[18px] rounded-token shadow-card flex flex-col"
+            style={{ border: '1px solid var(--msg-bd)', background: 'var(--msg-bg)' }}
+          >
+            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[color:var(--border)] flex-wrap">
+              <div className="flex gap-[3px] p-[3px] rounded-full bg-bg">
+                <button onClick={V.setMode} data-m="reply" data-on={String(V.isReply)} className="px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer" style={ON_ROW_STYLE}>
+                  reply to customer
+                </button>
+                <button onClick={V.setMode} data-m="note" data-on={String(V.isNote)} className="px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer" style={ON_ROW_STYLE}>
+                  internal note
+                </button>
+              </div>
+              {V.isNote && (
+                <span data-tone="st-pending" className="inline-flex items-center gap-1.5 text-[11.5px]" style={{ color: 'var(--tone-fg)' }}>
+                  <LockIcon />the customer never sees this
+                </span>
+              )}
+              <span className="flex-1" />
+              <span className="text-[11.5px] text-fg-3">press r to jump here</span>
+            </div>
+
+            <Textarea
+              ref={V.replyRef}
+              value={V.draft}
+              onChange={V.onDraft}
+              placeholder={V.composerPlaceholder}
+              rows={4}
+              className="!border-none !bg-transparent !rounded-none p-3.5 min-h-[96px] text-[14px] leading-relaxed focus:!shadow-none"
+            />
+
+            <div className="flex items-center gap-2 px-3 py-2.5 border-t border-[color:var(--border)] flex-wrap">
+              <div className="flex gap-0.5">
+                <button aria-label="bold" title="bold" className={TOOL_BTN + ' text-[13px] font-medium'}>B</button>
+                <button aria-label="italic" title="italic" className={TOOL_BTN + ' text-[13px] italic'}>i</button>
+                <button aria-label="bulleted list" title="list" className={TOOL_BTN}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 7h11M9 12h11M9 17h11M5 7h.01M5 12h.01M5 17h.01" />
+                  </svg>
+                </button>
+                <button aria-label="add a link" title="link" className={TOOL_BTN}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a4 4 0 005.7 0l2.3-2.3a4 4 0 10-5.7-5.7L11 6.3" />
+                    <path d="M14 11a4 4 0 00-5.7 0L6 13.3a4 4 0 105.7 5.7L13 17.7" />
+                  </svg>
+                </button>
+              </div>
+              <i className="w-px h-5 bg-[color:var(--border)]" />
+
+              <div className="relative">
+                <Button variant="secondary" size="sm" onClick={V.openCanned} leftIcon={
+                  <img src="/assets/icons/icon-knowledge-base.svg" alt="" className="w-[15px] h-[15px] block flex-none" />
+                }>
+                  canned responses
+                </Button>
+                {V.cannedOpen && (
+                  <div
+                    data-anim="in"
+                    data-scroll
+                    className="absolute bottom-[calc(100%+8px)] left-0 w-[340px] max-h-[330px] overflow-y-auto p-2 z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in"
+                  >
+                    <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="search responses…" aria-label="search canned responses" className="!rounded-full mb-1.5" />
+                    {V.cannedFiltered.map((r) => (
+                      <button key={r.id} onClick={V.insertCanned} data-v={r.id} className="w-full flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm border-none bg-transparent text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2">
+                        <span className="flex items-center gap-2 w-full">
+                          <span className="flex-1 text-[13px] font-medium text-fg">{r.title}</span>
+                          <span className="text-[11px] text-fg-3">{r.team}</span>
+                        </span>
+                        <span className="text-[12px] text-fg-3 leading-relaxed">{r.snippet}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Button variant="secondary" size="sm" leftIcon={<ClipIcon size={14} />}>attach</Button>
+              <span className="flex-1" />
+              <Button variant="secondary" size="sm" onClick={V.onSendPending} className="whitespace-nowrap">send &amp; set pending</Button>
+              <Button variant="secondary" size="sm" onClick={V.onSendResolved} className="whitespace-nowrap">send &amp; resolve</Button>
+              <Button size="md" onClick={V.onSend} className="whitespace-nowrap">{V.sendLabel}</Button>
+            </div>
+          </div>
+        </div>
+
+        {/* details rail */}
+        <aside
+          data-rail
+          data-scroll
+          className="flex-none overflow-y-auto p-3.5 bg-surface border-l border-[color:var(--border)] flex flex-col gap-3"
+          style={{ width: 'var(--cs-railw)' }}
+        >
+          <div className={RAIL_CARD + ' gap-3'}>
+            <div className="flex items-center gap-3">
+              <UserAvatar firstName={custFirst} lastName={custLast} size="lg" />
+              <div className="min-w-0 flex flex-col">
+                <span className="text-[14px] font-medium">{V.custName}</span>
+                <span className="text-[12px] text-fg-3">{V.custOrg}</span>
+              </div>
+            </div>
+            <button
+              onClick={V.copyLink}
+              title="copy email address"
+              className="flex items-center gap-2 px-2.5 py-[7px] rounded-token-sm border border-[color:var(--border)] bg-bg text-fg text-[12.5px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2"
+            >
+              <span className="flex-1 truncate">{V.custEmail}</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-fg-3">
+                <rect x="9" y="9" width="11" height="11" rx="2" />
+                <path d="M15 5H6a1.8 1.8 0 00-1.8 1.8V15" />
+              </svg>
+            </button>
+            <div className="flex flex-col gap-1.5">
+              <span className={RAIL_KV}>timezone <span className="text-fg">{V.custTz}</span></span>
+              <span className={RAIL_KV}>locale <span className="text-fg">{V.custLocale}</span></span>
+            </div>
+            <Button variant="link" size="sm" onClick={V.openCustomer} data-id={V.custId} className="self-start text-[12.5px]">
+              view profile →
+            </Button>
+          </div>
+
+          <div className={RAIL_CARD + ' gap-2.5'}>
+            <span className={RAIL_LABEL}>sla</span>
+            {[
+              [V.frTone, 'first response', V.frLabel, V.frDue],
+              [V.resTone, 'resolution', V.resLabel, V.resDue],
+            ].map(([tone, label, value, due]) => (
+              <div
+                key={label}
+                data-tone={tone}
+                className="flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm"
+                style={{ background: 'color-mix(in srgb, var(--tone-hue) 10%, var(--surface))' }}
+              >
+                <span className="flex justify-between gap-2 text-[12.5px]">
+                  <span className="text-fg-3">{label}</span>
+                  <span className="tabular-nums" style={{ color: 'var(--tone-fg)' }}>{value}</span>
+                </span>
+                <span className="text-[11.5px] text-fg-3">target {due}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className={RAIL_CARD + ' gap-2'}>
+            <span className={RAIL_LABEL}>details</span>
+            <span className={RAIL_KV}>channel <span className="text-fg">{V.tChannel}</span></span>
+            <span className={RAIL_KV}>created <span className="text-fg">{V.tCreated}</span></span>
+            <span className={RAIL_KV}>requester <span className="text-fg truncate max-w-[170px]">{V.tRequester}</span></span>
+            <span className={RAIL_KV}>cc <span className="text-fg truncate max-w-[170px]">{V.tCc}</span></span>
+            <span className={RAIL_KV}>source <span className="text-fg">{V.tSource}</span></span>
+            <span className={RAIL_KV}>conversation id <span className="text-fg tabular-nums">{V.tId}</span></span>
+          </div>
+
+          <div className={RAIL_CARD + ' gap-2.5'}>
+            <span className={RAIL_LABEL}>tags</span>
+            <div className="flex gap-1.5 flex-wrap">
+              {V.tTags.map((g) => (
+                <TonePill key={g.id} tone={g.tone} size="md" className="!pr-1.5">
+                  {g.label}
+                  <button
+                    onClick={V.removeTag}
+                    data-v={g.id}
+                    aria-label="remove tag"
+                    className="grid place-items-center w-4 h-4 rounded-full border-none bg-transparent text-current cursor-pointer opacity-65 hover:opacity-100"
+                  >
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                </TonePill>
+              ))}
+              <div className="relative">
+                <button
+                  onClick={V.openTagMenu}
+                  className="inline-flex items-center gap-1 px-3 h-[22px] rounded-full border border-dashed border-[color:var(--border)] bg-transparent text-fg-3 text-[12px] cursor-pointer transition-colors duration-[var(--dur-instant)] hover:text-[color:var(--primary)] hover:border-[color:var(--primary)]"
+                >
+                  + add
+                </button>
+                {V.tagOpen && (
+                  <div data-anim="in" className={MENU + ' left-0 w-[170px]'}>
+                    {V.tagAddOptions.map((o) => (
+                      <button key={o.id} onClick={V.addTag} data-v={o.id} className={MENU_ROW}>
+                        <i data-tone={o.tone} className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className={RAIL_CARD + ' gap-2.5'}>
+            <span className={RAIL_LABEL}>how did we do?</span>
+            <div className="flex gap-1.5 items-center">
+              {[1, 2, 3].map((n) => (
+                <span
+                  key={n}
+                  className="w-6 h-6 rounded-full grid place-items-center text-[12px]"
+                  style={{ background: 'var(--cs-leafsoft)', color: 'var(--cs-forest)', border: '1px solid var(--cs-forest)' }}
+                >
+                  ✓
+                </span>
+              ))}
+              {[4, 5].map((n) => (
+                <span key={n} className="w-6 h-6 rounded-full grid place-items-center text-[12px] bg-surface text-fg-3 border border-[color:var(--border)]">·</span>
+              ))}
+              <span className="ml-1 text-[12px] text-fg-3">ines said 3 of 5</span>
+            </div>
+            <span className="text-[12px] text-fg-3 leading-relaxed">asked once the conversation closes — never during.</span>
+          </div>
+
+          <div className={RAIL_CARD + ' gap-2.5'}>
+            <span className={RAIL_LABEL}>activity</span>
+            {V.activity.map((a) => (
+              <div key={a.id} className="flex gap-2.5 items-start">
+                <i className="flex-none w-1.5 h-1.5 rounded-full bg-[color:var(--border-strong)] mt-1.5" />
+                <span className="text-[12.5px] text-fg-3 leading-relaxed">
+                  <span className="text-fg">{a.who}</span> {a.what} · {a.rel} ago
+                </span>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}

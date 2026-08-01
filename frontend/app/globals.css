@@ -1,0 +1,309 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Plumo Design System tokens
+   (ported from _ds/plumo-design-system/tokens/*.css)
+   ============================================================ */
+
+:root {
+  /* ---- Brand blues ---- */
+  --plumo-night: #1E3A8A;
+  --plumo-blue:  #2563EB;
+  --plumo-sky:   #60A5FA;
+  --plumo-mist:  #EFF6FF;
+
+  /* ---- Warm accents ---- */
+  --plumo-peach:  #FFD4B8;
+  --plumo-butter: #FFE8A3;
+
+  /* ---- Neutrals ---- */
+  --plumo-dark:   #0F172A;
+  --plumo-muted:  #64748B;
+  --plumo-border: #E5E7EB;
+  --plumo-canvas: #F8FAFC;
+  --plumo-white:  #FFFFFF;
+
+  /* ---- Text-on-color pairings ---- */
+  --plumo-on-peach:  #7A3E1F;
+  --plumo-on-butter: #7A5F1F;
+  --plumo-on-night:  #DBEAFE;
+
+  /* ---- Semantic aliases ---- */
+  --text-primary:    var(--plumo-dark);
+  --text-secondary:  var(--plumo-muted);
+  --text-brand:      var(--plumo-blue);
+  --text-on-dark:    var(--plumo-on-night);
+  --surface-page:    var(--plumo-white);
+  --surface-canvas:  var(--plumo-canvas);
+  --surface-card:    var(--plumo-white);
+  --surface-soft:    var(--plumo-mist);
+  --surface-warm:    #FFF6EC;
+  --surface-dark:    var(--plumo-night);
+  --border-default:  var(--plumo-border);
+  --border-focus:    var(--plumo-sky);
+  --accent-primary:  var(--plumo-blue);
+  --accent-hover:    var(--plumo-night);
+
+  /* ---- Typography ---- */
+  --plumo-font:      'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --plumo-font-mono: 'SF Mono', Menlo, Consolas, monospace;
+  --font-sans: var(--plumo-font);
+  --font-mono: var(--plumo-font-mono);
+  --plumo-fw-regular: 400;
+  --plumo-fw-medium:  500;
+  --plumo-text-display-xl: 96px;
+  --plumo-text-display:    56px;
+  --plumo-text-h1:         40px;
+  --plumo-text-h2:         28px;
+  --plumo-text-h3:         20px;
+  --plumo-text-body:       16px;
+  --plumo-text-caption:    13px;
+  --plumo-text-eyebrow:    11px;
+  --plumo-track-display-xl: -4px;
+  --plumo-track-display:    -2px;
+  --plumo-track-h1:         -1.2px;
+  --plumo-track-h2:         -0.6px;
+  --plumo-track-h3:         -0.3px;
+  --plumo-track-eyebrow:    2px;
+  --plumo-lh-tight: 0.95;
+  --plumo-lh-snug:  1.1;
+  --plumo-lh-body:  1.65;
+
+  /* ---- Radius ---- */
+  --plumo-radius-sm:   8px;
+  --plumo-radius-md:   12px;
+  --plumo-radius-lg:   16px;
+  --plumo-radius-xl:   20px;
+  --plumo-radius-pill: 100px;
+
+  /* ---- Motion ---- */
+  --plumo-ease:        cubic-bezier(0.34, 1.25, 0.64, 1);
+  --plumo-dur-micro:   150ms;
+  --plumo-dur-default: 250ms;
+  --plumo-dur-moment:  400ms;
+  --plumo-dur-hero:    700ms;
+
+  /* ---- Spacing ---- */
+  --plumo-space-1:  4px;
+  --plumo-space-2:  8px;
+  --plumo-space-3:  12px;
+  --plumo-space-4:  16px;
+  --plumo-space-6:  24px;
+  --plumo-space-8:  32px;
+  --plumo-space-10: 40px;
+  --plumo-space-12: 48px;
+
+  /* ---- Soft elevation ---- */
+  --plumo-shadow-card:  0 10px 30px rgba(15,23,42,0.06), 0 0 0 1px var(--plumo-border);
+  --plumo-shadow-float: 0 30px 80px rgba(30,58,138,0.12);
+  --plumo-shadow-toast: 0 20px 50px rgba(30,58,138,0.25);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+img, svg { display: block; max-width: 100%; }
+
+h1, h2, h3, h4 {
+  font-weight: var(--plumo-fw-medium);
+  letter-spacing: -0.3px;
+  margin: 0;
+}
+p { margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ============================================================
+   Console theme layer: semantic vars only — every component is
+   styled inline. Light/dark, density and pane state are driven
+   by data-attrs on the root element.
+   ============================================================ */
+:root{
+  --cs-canvas:#F8FAFC; --cs-surface:#FFFFFF; --cs-soft:#EDF4EE;
+  --cs-warm:#FFF9E9; --cs-text:#0F172A; --cs-muted:#475569;
+  --cs-border:#E2E8F0; --cs-hover:#F1F5F9; --cs-accent-src:#4C9F6E; --cs-brand:var(--cs-accent-src);
+  --cs-forest:#1F4A2E; --cs-leafsoft:#B8CFB4; --cs-btn:#2563EB;
+  --cs-brand-soft:color-mix(in srgb, var(--cs-brand) 10%, var(--cs-surface));
+  --cs-brand-ink:var(--cs-forest);
+  --cs-navw:236px; --cs-railw:322px; --cs-filtw:216px;
+  --cs-rowpy:10px; --cs-r-sm:8px; --cs-r-md:12px; --cs-fs:13.5px; --cs-gap:12px; --cs-cardpad:16px;
+  --cs-qcols:28px 100px 92px minmax(220px,1fr) 168px 32px 118px 88px 52px;
+  --av-bg:var(--cs-soft); --av-fg:var(--plumo-night); --av-border:1px solid transparent;
+  --tone-hue:var(--cs-muted); --tone-fg:var(--cs-muted); --tone-fg-dark:#CBD5E1;
+  --cs-subjw:400; --cs-subjc:var(--cs-text);
+  color-scheme:light;
+
+  /* ---- Shared component language (ported from the plumo PM console) -------
+     Same semantic token names, so the primitives are byte-identical between
+     pillars. The one deliberate difference: the brand anchor is support green
+     (#4C9F6E = hsl(145 35% 46%)) where PM uses plumo blue. Everything that
+     derives from --brand-h/--brand-s re-tints from those two values alone. */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: var(--plumo-font-mono, ui-monospace, monospace);
+  --radius: 6px;
+  --density: 1;
+
+  --brand-h: 145;
+  --brand-s: 35%;
+
+  --bg: var(--cs-canvas);
+  --surface: var(--cs-surface);
+  --surface-2: #F4F6F5;
+  --surface-3: #E8EDE9;
+  --border: var(--cs-border);
+  --border-strong: #CBD5D0;
+  --text: var(--cs-text);
+  --text-2: var(--cs-muted);
+  --text-3: #8CA093;
+
+  --primary: var(--cs-accent-src);
+  --primary-hover: hsl(var(--brand-h) var(--brand-s) 36%);
+  --primary-soft: var(--cs-soft);
+  --primary-soft-border: hsl(var(--brand-h) var(--brand-s) 76%);
+  --primary-fg: #ffffff;
+
+  --success: #0E8A5F; --success-soft: #E6F5EE;
+  --warning: #B7791F; --warning-soft: #FDF6E3;
+  --danger:  #C63838; --danger-soft:  #FDECEC;
+  --ring: hsl(var(--brand-h) var(--brand-s) 46% / 0.35);
+
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 1px 0 rgb(0 0 0 / 0.03);
+  --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.04);
+  --shadow-modal: 0 20px 40px -8px rgb(0 0 0 / 0.18), 0 8px 16px -4px rgb(0 0 0 / 0.08);
+
+  --dur-instant: 100ms; --dur-fast: 150ms; --dur: 200ms; --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+[data-cs-theme="dark"]{
+  --cs-canvas:#0B1710; --cs-surface:#12261A; --cs-soft:#1A3324; --cs-warm:#2A2416;
+  --cs-text:#E7F0E9; --cs-muted:#A8BCAE; --cs-border:#26402E; --cs-hover:#173023;
+  --cs-brand:color-mix(in srgb, var(--cs-accent-src) 52%, #FFFFFF);
+  --cs-brand-ink:color-mix(in srgb, var(--cs-accent-src) 60%, #FFFFFF); --cs-btn:#3B82F6; color-scheme:dark;
+
+  /* shared layer, dark */
+  --surface-2:#173023; --surface-3:#1F3D2C;
+  --border-strong:#35543F; --text-3:#7E9587;
+  --primary: hsl(var(--brand-h) var(--brand-s) 62%);
+  --primary-hover: hsl(var(--brand-h) var(--brand-s) 70%);
+  --primary-soft: hsl(var(--brand-h) var(--brand-s) 28% / 0.38);
+  --primary-soft-border: hsl(var(--brand-h) var(--brand-s) 42%);
+  --primary-fg:#0B1710;
+  --success:#3ECC8E; --success-soft:rgb(62 204 142 / 0.18);
+  --warning:#E0A82E; --warning-soft:rgb(224 168 46 / 0.18);
+  --danger:#F08A7A;  --danger-soft:rgb(240 138 122 / 0.18);
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.30), 0 1px 1px 0 rgb(0 0 0 / 0.22);
+  --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 0.42), 0 2px 4px -1px rgb(0 0 0 / 0.28);
+  --shadow-modal: 0 20px 40px -8px rgb(0 0 0 / 0.55), 0 8px 16px -4px rgb(0 0 0 / 0.35);
+}
+
+/* ---- Token-driven utilities the primitives rely on (ported from PM) ---- */
+@layer components {
+  .focus-ring:focus-visible,
+  .focus-ring:focus { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+
+  .h-btn-sm { height: calc(28px * var(--density)); }
+  .h-btn-md { height: calc(32px * var(--density)); }
+  .h-btn-lg { height: calc(40px * var(--density)); }
+  .h-input  { height: calc(32px * var(--density)); }
+  .h-row    { height: calc(44px * var(--density)); }
+  .h-row-header { height: calc(40px * var(--density)); }
+  .h-topbar { height: calc(44px * var(--density)); }
+  .h-navitem { height: calc(28px * var(--density)); }
+  .h-segment { height: calc(28px * var(--density)); }
+  .min-h-textarea { min-height: calc(72px * var(--density)); }
+}
+
+/* The console's own density switch drives the shared --density multiplier. */
+[data-cs-soft="dense"] { --density: 0.85; }
+[data-cs-soft="soft"]  { --density: 1.15; }
+
+@keyframes shimmer { 0% { background-position:-200% 0 } 100% { background-position:200% 0 } }
+.shimmer {
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite linear;
+}
+[data-cs-theme="dark"] [data-tone]{--tone-fg:var(--tone-fg-dark);}
+[data-cs-soft="soft"]{--cs-rowpy:17px; --cs-r-sm:12px; --cs-r-md:16px; --cs-fs:14px; --cs-gap:16px; --cs-cardpad:20px;
+  --cs-qcols:28px 106px 96px minmax(220px,1fr) 180px 34px 124px 92px 56px;}
+[data-cs-soft="dense"]{--cs-rowpy:4px; --cs-r-sm:6px; --cs-r-md:8px; --cs-fs:13px; --cs-gap:9px; --cs-cardpad:13px;
+  --cs-qcols:26px 92px 84px minmax(200px,1fr) 156px 30px 108px 82px 48px;}
+[data-cs-nav="off"]{--cs-navw:64px;}
+[data-cs-nav="off"] [data-navlabel]{display:none !important;}
+[data-cs-rail="off"] [data-rail]{display:none;}
+[data-cs-filters="off"] [data-filterrail]{display:none;}
+[data-cs-soft="dense"] [data-snip]{display:inline; margin-left:8px;}
+[data-tone="st-new"]{--tone-hue:#94A3B8;--tone-fg:#475569;--tone-fg-dark:#C3CEDE}
+[data-tone="st-open"]{--tone-hue:#4C9F6E;--tone-fg:#1F4A2E;--tone-fg-dark:#B8CFB4}
+[data-tone="st-pending"]{--tone-hue:#E0A82E;--tone-fg:#7A5F1F;--tone-fg-dark:#F4CE72}
+[data-tone="st-hold"]{--tone-hue:#94A3B8;--tone-fg:#475569;--tone-fg-dark:#C3CEDE}
+[data-tone="st-resolved"]{--tone-hue:#B8CFB4;--tone-fg:#1F4A2E;--tone-fg-dark:#C9DEC6}
+[data-tone="st-closed"]{--tone-hue:#64748B;--tone-fg:#475569;--tone-fg-dark:#AEBACB}
+[data-tone="pr-low"]{--tone-hue:#94A3B8;--tone-fg:#64748B;--tone-fg-dark:#B7C2D2}
+[data-tone="pr-normal"]{--tone-hue:#60A5FA;--tone-fg:#3B5EA8;--tone-fg-dark:#A9CDFF}
+[data-tone="pr-high"]{--tone-hue:#E0A82E;--tone-fg:#7A5F1F;--tone-fg-dark:#F4CE72}
+[data-tone="pr-urgent"]{--tone-hue:#E8A97E;--tone-fg:#B7551A;--tone-fg-dark:#FFD4B8}
+[data-tone="sla-ok"]{--tone-hue:#94A3B8;--tone-fg:#64748B;--tone-fg-dark:#B7C2D2}
+[data-tone="sla-due"]{--tone-hue:#E0A82E;--tone-fg:#7A5F1F;--tone-fg-dark:#F4CE72}
+[data-tone="sla-breach"]{--tone-hue:#E8A97E;--tone-fg:#B7551A;--tone-fg-dark:#FFD4B8}
+[data-tone="sla-met"]{--tone-hue:#B8CFB4;--tone-fg:#1F4A2E;--tone-fg-dark:#C9DEC6}
+[data-tone="sla-paused"]{--tone-hue:#94A3B8;--tone-fg:#64748B;--tone-fg-dark:#B7C2D2}
+[data-tone="tag-billing"]{--tone-hue:#4C9F6E;--tone-fg:#1F4A2E;--tone-fg-dark:#B8CFB4}
+[data-tone="tag-bug"]{--tone-hue:#C98A5E;--tone-fg:#8A4A16;--tone-fg-dark:#F0C6A4}
+[data-tone="tag-howto"]{--tone-hue:#60A5FA;--tone-fg:#1E3A8A;--tone-fg-dark:#A9CDFF}
+[data-tone="tag-account"]{--tone-hue:#4F46E5;--tone-fg:#3730A3;--tone-fg-dark:#B6B2FF}
+[data-tone="tag-urgent"]{--tone-hue:#E8A97E;--tone-fg:#B7551A;--tone-fg-dark:#FFD4B8}
+[data-tone="tag-integration"]{--tone-hue:#0E7490;--tone-fg:#0E5A70;--tone-fg-dark:#8AD8EC}
+[data-tone="neutral"]{--tone-hue:#94A3B8;--tone-fg:var(--cs-muted);--tone-fg-dark:#B7C2D2}
+[data-av="1"]{--av-bg:#EFF6FF;--av-fg:#1E3A8A}
+[data-av="2"]{--av-bg:#FFE8D6;--av-fg:#7A3E1F}
+[data-av="3"]{--av-bg:#FFF4CE;--av-fg:#7A5F1F}
+[data-av="4"]{--av-bg:#EDF4EE;--av-fg:#1F4A2E}
+[data-av="5"]{--av-bg:#E9E7FF;--av-fg:#3730A3}
+[data-av="6"]{--av-bg:#E2F2F7;--av-fg:#0E5A70}
+[data-av="ghost"]{--av-bg:transparent;--av-fg:var(--cs-muted);--av-border:0.5px dashed var(--cs-border)}
+[data-cs-theme="dark"] [data-av]{--av-bg:color-mix(in srgb, var(--av-fg) 26%, var(--cs-surface));--av-fg:#E7EDF9}
+[data-on="true"]{--cs-onbg:var(--cs-brand-soft);--cs-onfg:var(--cs-brand-ink);--cs-onbd:color-mix(in srgb, var(--cs-brand) 26%, transparent);--cs-onw:500;--cs-onbar:transparent}
+[data-on="false"]{--cs-onbg:transparent;--cs-onfg:var(--cs-muted);--cs-onbd:transparent;--cs-onw:400;--cs-onbar:transparent}
+nav [data-on="true"]{--cs-onbg:color-mix(in srgb, var(--cs-btn) 9%, var(--cs-surface));--cs-onfg:var(--cs-btn);--cs-onbar:var(--cs-btn)}
+[data-side="customer"]{--msg-bg:var(--cs-soft);--msg-bd:var(--cs-leafsoft);--msg-ml:0;--msg-r:12px 12px 12px 4px}
+[data-side="agent"]{--msg-bg:var(--cs-surface);--msg-bd:var(--cs-border);--msg-ml:auto;--msg-r:12px 12px 4px 12px}
+[data-side="note"]{--msg-bg:var(--cs-warm);--msg-bd:color-mix(in srgb, #E0A82E 40%, transparent);--msg-ml:auto;--msg-r:12px}
+[data-side="reply"]{--msg-bg:var(--cs-surface);--msg-bd:var(--cs-border);--msg-ml:0;--msg-r:var(--cs-r-md)}
+[data-danger="true"]{--cs-okbg:#FFD4B8;--cs-okfg:#7A3E1F}
+[data-danger="false"]{--cs-okbg:var(--cs-brand);--cs-okfg:#fff}
+[data-showq="true"]{--q-op:1;--q-pe:auto}
+[data-showq="false"]{--q-op:0;--q-pe:none}
+[data-unread="true"]{--cs-subjw:500}
+[data-unread="false"]{--cs-subjw:400}
+html, body { height: 100%; }
+body{
+  margin:0;background:var(--cs-canvas);color:var(--cs-text);font-size:var(--cs-fs);
+  font-family:var(--plumo-font);font-weight:var(--plumo-fw-regular);line-height:var(--plumo-lh-body);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+}
+a{color:var(--cs-brand);text-decoration:none} a:hover{opacity:.8}
+h1,h2,h3,h4{color:var(--cs-brand-ink)}
+button,input,textarea,select{font-family:var(--plumo-font)}
+[data-scroll]{scrollbar-width:thin;scrollbar-color:var(--cs-border) transparent}
+@keyframes cs-shimmer{0%{opacity:.55}50%{opacity:.95}100%{opacity:.55}}
+@keyframes cs-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes cs-spin{to{transform:rotate(360deg)}}
+@keyframes cs-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4px) scale(1.02)}}
+[data-anim="in"]{animation:cs-in var(--plumo-dur-moment) var(--plumo-ease) both}
+[data-anim="sk"]{animation:cs-shimmer 1.4s var(--plumo-ease) infinite}
+[data-anim="spin"]{animation:cs-spin 1.1s linear infinite}
+@media (max-width:1400px){:root{--cs-qcols:28px 96px 88px minmax(200px,1fr) 152px 32px 84px 50px}[data-col="tags"]{display:none}}
+@media (max-width:1180px){:root{--cs-navw:64px;--cs-qcols:26px 92px minmax(180px,1fr) 140px 30px 82px 46px}[data-navlabel]{display:none !important}[data-col="prio"]{display:none}}
+@media (max-width:1080px){:root{--cs-filtw:0px}[data-filterrail]{display:none}}

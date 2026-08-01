@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+
+# Secrets — never commit. backend/.env holds the database passwords and JWT
+# signing keys; frontend/.env.local holds the API endpoints. The .example files
+# are the ones that belong in the repo.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Logs and local scratch
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.cache/
+*.tsbuildinfo
+
+# Editor
+.idea/
+.vscode/
+!.vscode/extensions.json

@@ -1,0 +1,52 @@
+/* Plumo · Color tokens
+   The palette is calm and blue-led, warmed by peach + butter accents.
+   Base palette values first, then semantic aliases that the UI references. */
+
+:root {
+  /* ---- Brand blues ---- */
+  --plumo-night: #1E3A8A; /* deepest blue — dark backgrounds, bold statements */
+  --plumo-blue:  #2563EB; /* PRIMARY — logo, CTAs, key UI */
+  --plumo-sky:   #60A5FA; /* accent — highlights, secondary elements */
+  --plumo-mist:  #EFF6FF; /* surface — soft backgrounds, cards */
+
+  /* ---- Warm accents ---- */
+  --plumo-peach:  #FFD4B8; /* cozy moments */
+  --plumo-butter: #FFE8A3; /* notifications, highlights */
+
+  /* ---- Neutrals ---- */
+  --plumo-dark:   #0F172A; /* primary text */
+  --plumo-muted:  #64748B; /* secondary text, captions */
+  --plumo-border: #E5E7EB; /* default borders */
+  --plumo-canvas: #F8FAFC; /* off-white background */
+  --plumo-white:  #FFFFFF;
+
+  /* ---- Text-on-color pairings (the only "extra" hexes allowed) ---- */
+  --plumo-on-peach:  #7A3E1F;
+  --plumo-on-butter: #7A5F1F;
+  --plumo-on-night:  #DBEAFE;
+
+  /* ---- Pack accent hues (each pack tints the same blob) ---- */
+  --plumo-pack-pm:        #2563EB; /* PM = brand blue */
+  --plumo-pack-hr:        #FB923C; /* HR = warm orange */
+  --plumo-pack-marketing: #F59E0B; /* marketing = amber */
+  --plumo-pack-vault:     #4F46E5; /* vault = indigo */
+
+  /* ---- Semantic aliases ---- */
+  --text-primary:    var(--plumo-dark);
+  --text-secondary:  var(--plumo-muted);
+  --text-brand:      var(--plumo-blue);
+  --text-on-dark:    var(--plumo-on-night);
+
+  --surface-page:    var(--plumo-white);
+  --surface-canvas:  var(--plumo-canvas);
+  --surface-card:    var(--plumo-white);
+  --surface-soft:    var(--plumo-mist);
+  --surface-warm:    #FFF6EC; /* peachy section wash */
+  --surface-dark:    var(--plumo-night);
+
+  --border-default:  var(--plumo-border);
+  --border-focus:    var(--plumo-sky);
+
+  --accent-primary:  var(--plumo-blue);
+  --accent-hover:    var(--plumo-night);
+}

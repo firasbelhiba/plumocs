@@ -1,0 +1,32 @@
+/* Plumo · Radius, motion & spacing tokens */
+
+:root {
+  /* ---- Radius — rounded corners always, never sharp edges ---- */
+  --plumo-radius-sm:   8px;
+  --plumo-radius-md:   12px;
+  --plumo-radius-lg:   16px;
+  --plumo-radius-xl:   20px;
+  --plumo-radius-pill: 100px;
+
+  /* ---- Motion — soft spring that overshoots slightly. Never linear. ---- */
+  --plumo-ease:        cubic-bezier(0.34, 1.25, 0.64, 1); /* @kind other */
+  --plumo-dur-micro:   150ms; /* @kind other */ /* never faster than this */
+  --plumo-dur-default: 250ms; /* @kind other */
+  --plumo-dur-moment:  400ms; /* @kind other */
+  --plumo-dur-hero:    700ms; /* @kind other */
+
+  /* ---- Spacing — 8pt grid ---- */
+  --plumo-space-1:  4px;
+  --plumo-space-2:  8px;
+  --plumo-space-3:  12px;
+  --plumo-space-4:  16px;
+  --plumo-space-6:  24px;
+  --plumo-space-8:  32px;
+  --plumo-space-10: 40px;
+  --plumo-space-12: 48px;
+
+  /* ---- Soft elevation system (low, diffuse, blue-tinted) ---- */
+  --plumo-shadow-card:  0 10px 30px rgba(15,23,42,0.06), 0 0 0 1px var(--plumo-border);
+  --plumo-shadow-float: 0 30px 80px rgba(30,58,138,0.12);
+  --plumo-shadow-toast: 0 20px 50px rgba(30,58,138,0.25);
+}
