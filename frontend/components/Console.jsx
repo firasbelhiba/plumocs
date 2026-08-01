@@ -715,7 +715,12 @@ export default class Console extends React.Component {
     const facetGroups = [
       { kind: 'status', label: 'status', options: ['new', 'open', 'pending', 'on-hold', 'resolved', 'closed'].map(id => opt('status', id, (this.STATUS[id] || {}).l || id)) },
       { kind: 'priority', label: 'priority', options: ['urgent', 'high', 'normal', 'low'].map(id => opt('priority', id, id)) },
-      { kind: 'channel', label: 'channel', options: [['email', 'email'], ['api', 'api'], ['widget', 'widget'], ['hashcare', 'HashCare']].map(p => opt('channel', p[0], p[1])) },
+      // Must track the Channel enum in prisma/schema.prisma. `chatbot` was added
+      // for third-party bot ingest and missing here meant the one channel in
+      // real use could not be filtered — every count read 0. `hashcare` was a
+      // fictional customer in the original demo data and is not a channel
+      // anybody has.
+      { kind: 'channel', label: 'channel', options: [['chatbot', 'chatbot'], ['email', 'email'], ['api', 'api'], ['widget', 'widget']].map(p => opt('channel', p[0], p[1])) },
       { kind: 'tag', label: 'tag', options: (A ? A.tags : []).map(t => ({ id: t.id, label: t.label, count: (fc.tag || {})[t.id] || 0, on: S.f.tag === t.id })) },
     ];
     const chips = [];
@@ -796,7 +801,8 @@ export default class Console extends React.Component {
 
       cAll: S.counts['all-open'] || 0, cUn: S.counts.unassigned || 0, cMy: S.counts['my-open'] || 0,
       cBr: S.counts.breaching || 0, cPd: S.counts.pending || 0, cRe: S.counts.resolved || 0,
-      vAll: S.view === 'all-open', vUn: S.view === 'unassigned', vMy: S.view === 'my-open',
+      cBot: S.counts['bot-handled'] || 0,
+      vAll: S.view === 'all-open', vUn: S.view === 'unassigned', vMy: S.view === 'my-open', vBot: S.view === 'bot-handled',
       vBr: S.view === 'breaching', vPd: S.view === 'pending', vRe: S.view === 'resolved',
       onView: this.onView, saveView: this.saveView,
       sortLabel: (this.SORTS.find(x => x.id === S.sort) || {}).label, sortOpen: S.menu === 'sort',

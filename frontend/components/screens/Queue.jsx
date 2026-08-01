@@ -29,6 +29,12 @@ export default function Queue({ V }) {
     ['breaching', 'needs attention', V.vBr, V.cBr],
     ['pending', 'waiting on them', V.vPd, V.cPd],
     ['resolved', 'recently closed', V.vRe, V.cRe],
+    // Everything a chatbot opened, in any state. Bot-resolved conversations are
+    // deliberately out of `all open` and `no one yet` — nobody should be paged
+    // for work the bot finished — which made the AI's output invisible unless
+    // you went hunting in `recently closed`. Seeing it and queueing it are
+    // different needs.
+    ['bot-handled', 'handled by AI', V.vBot, V.cBot],
   ];
 
   return (

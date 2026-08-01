@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
+import { Type } from 'class-transformer';
 import { IsArray, IsEmail, IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -21,7 +22,7 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { CustomersModule, CustomersService } from '../customers/customers.module';
 import { SlaService } from '../sla/sla.service';
 import { SlaModule } from '../sla/sla.module';
-import { TicketsService } from '../tickets/tickets.service';
+import { handlingOf, TicketsService } from '../tickets/tickets.service';
 import { TicketsModule } from '../tickets/tickets.module';
 import { AllowApiKey, CurrentUser, Principal, Scopes } from '../common/decorators';
 
@@ -85,7 +86,11 @@ class ResolveDto {
 class UpdatesDto {
   /** ISO timestamp cursor; returns agent activity strictly after it. */
   @IsOptional() @IsString() since?: string;
-  @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number;
+  // @Type is not optional here: the global ValidationPipe runs with
+  // enableImplicitConversion disabled, so a query string arrives as "5" and
+  // @IsInt rejects it — reporting the @Max message, which reads as
+  // "limit must not be greater than 200" for a limit of 5.
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
 }
 
 @Injectable()
@@ -121,7 +126,7 @@ export class ChatService {
 
     const existing = await this.prisma.chatSession.findUnique({
       where: { apiKeyId_sessionRef: { apiKeyId, sessionRef: dto.sessionRef } },
-      include: { ticket: { select: { id: true, status: true, handedOffAt: true } } },
+      include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true } } },
     });
     if (existing) return this.sessionView(existing.ticket, dto.sessionRef, false);
 
@@ -156,7 +161,7 @@ export class ChatService {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         const won = await this.prisma.chatSession.findUnique({
           where: { apiKeyId_sessionRef: { apiKeyId, sessionRef: dto.sessionRef } },
-          include: { ticket: { select: { id: true, status: true, handedOffAt: true } } },
+          include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true } } },
         });
         if (won) {
           await this.prisma.ticket.delete({ where: { id: ticket.id } }).catch(() => undefined);
@@ -377,7 +382,7 @@ export class ChatService {
   }
 
   private sessionView(
-    ticket: { id: string; status: string; handedOffAt: Date | null },
+    ticket: { id: string; status: string; handedOffAt: Date | null; createdByApiKeyId?: string | null; assigneeId?: string | null },
     sessionRef: string,
     created: boolean,
   ) {
@@ -385,6 +390,14 @@ export class ChatService {
       ticketId: ticket.id, // never `number` — see the module docblock
       sessionRef,
       status: ticket.status,
+      // Who is answering right now, so the partner's widget can say "an agent
+      // will reply" rather than guessing from `status` + `handedOff`.
+      handling: handlingOf({
+        status: ticket.status as never,
+        createdByApiKeyId: ticket.createdByApiKeyId ?? 'bot',
+        handedOffAt: ticket.handedOffAt,
+        assigneeId: ticket.assigneeId ?? null,
+      }),
       handedOff: !!ticket.handedOffAt,
       created,
     };

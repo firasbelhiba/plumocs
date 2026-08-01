@@ -29,7 +29,11 @@ export class CreateTicketDto {
 }
 
 export class ListTicketsDto {
-  @IsOptional() @IsIn(['all-open', 'unassigned', 'my-open', 'breaching', 'pending', 'resolved'])
+  // Keep in step with the switch in TicketsService.list — a view named here but
+  // not handled there silently returns an unfiltered list, and one handled there
+  // but missing here is rejected at the edge as invalid.
+  @IsOptional()
+  @IsIn(['all-open', 'unassigned', 'my-open', 'breaching', 'pending', 'resolved', 'bot-handled', 'bot-open'])
   view?: string;
 
   @IsOptional() @IsString() status?: string; // comma-separated

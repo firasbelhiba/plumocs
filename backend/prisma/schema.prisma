@@ -22,6 +22,17 @@ datasource db {
 
 // ---- Enums -----------------------------------------------------------------
 
+/// The lifecycle of a tenant. `deleting` exists so a purge can be started and
+/// resumed — nothing actually deletes a workspace today, because every tenant
+/// foreign key is ON DELETE RESTRICT.
+enum WorkspaceStatus {
+  active
+  suspended
+  deleting
+
+  @@map("workspace_status")
+}
+
 enum UserRole {
   agent
   lead
@@ -97,6 +108,7 @@ enum WebhookEvent {
 
 model Organization {
   id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   name        String
   domain      String?
   externalRef String?    @map("external_ref")
@@ -110,6 +122,7 @@ model Organization {
 
 model Customer {
   id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   organizationId String?       @map("organization_id") @db.Uuid
   organization   Organization? @relation(fields: [organizationId], references: [id])
   // Nullable since chatbot ingest: an anonymous visitor has no email. Uniqueness
@@ -142,13 +155,13 @@ model User {
   id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String           @unique @db.Citext
   name            String
-  role            UserRole         @default(agent)
   passwordHash    String           @map("password_hash")
   avatarUrl       String?          @map("avatar_url")
-  teamId          String?          @map("team_id") @db.Uuid
-  team            Team?            @relation(fields: [teamId], references: [id])
   isActive        Boolean          @default(true) @map("is_active")
-  availability    String           @default("available")
+  /// Operates the platform, not a tenant. Deliberately NOT a workspace role:
+  /// `role`, `teamId` and `availability` now live on WorkspaceMembership,
+  /// because one human can be an admin of one desk and an agent on another.
+  isPlatformAdmin Boolean          @default(false) @map("is_platform_admin")
   lastActiveAt    DateTime?        @map("last_active_at") @db.Timestamptz()
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
@@ -158,18 +171,19 @@ model User {
   cannedResponses CannedResponse[]
   notifications   Notification[]
   passwordResets  PasswordReset[]
+  memberships     WorkspaceMembership[]
 
-  @@index([teamId])
   @@map("users")
 }
 
 model Team {
   id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   name            String
   description     String?
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
-  users           User[]
+  memberships     WorkspaceMembership[]
   tickets         Ticket[]
   cannedResponses CannedResponse[]
   apiKeys         ApiKey[]
@@ -179,6 +193,7 @@ model Team {
 
 model BusinessHours {
   id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   name         String
   timezone     String
   weeklyJson   Json        @map("weekly_json") // {mon:[["09:00","17:00"]], ...}
@@ -192,6 +207,7 @@ model BusinessHours {
 
 model SlaPolicy {
   id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   name              String
   priority          TicketPriority
   firstResponseMins Int            @map("first_response_mins")
@@ -208,7 +224,11 @@ model SlaPolicy {
 
 model Ticket {
   id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  number             BigInt          @unique @default(dbgenerated("nextval('ticket_number_seq')"))
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
+  /// Assigned by tickets_number_trigger from this workspace's own sequence, NOT
+  /// by Prisma. @default(0) keeps it optional on create and pairs with the
+  /// CHECK (number > 0) so a missing trigger fails loudly on the first insert.
+  number             BigInt          @default(0)
   subject            String
   status             TicketStatus    @default(new)
   priority           TicketPriority  @default(normal)
@@ -263,6 +283,7 @@ model Ticket {
 
 model TicketMessage {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   ticketId       String       @map("ticket_id") @db.Uuid
   ticket         Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   authorType     AuthorType   @map("author_type")
@@ -288,6 +309,7 @@ model TicketMessage {
 
 model Attachment {
   id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   // Nullable: rows are created "pending" at presign time and linked to a
   // message when the reply is posted (attachmentIds on POST …/messages).
   ticketMessageId String?        @map("ticket_message_id") @db.Uuid
@@ -303,7 +325,8 @@ model Attachment {
 
 model Tag {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  key       String   @unique // slug used inside tickets.tags[]
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
+  key       String // slug used inside tickets.tags[]
   label     String
   color     String   @default("#94A3B8")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
@@ -314,6 +337,7 @@ model Tag {
 
 model CannedResponse {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   title       String
   body        String
   tags        String[] @default([])
@@ -329,6 +353,7 @@ model CannedResponse {
 
 model ApiKey {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   name        String
   keyHash     String    @map("key_hash") // hash only; secret shown once
   keyPrefix   String    @map("key_prefix") // first chars, for lookup/display
@@ -365,16 +390,20 @@ model ApiKey {
 // which conflated an operational cursor with an append-only compliance record —
 // and would have been lost the moment audit_log is partitioned for retention.
 model ExportState {
-  id         String   @id @default("daily")
+  id         String   @default("daily")
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   watermark  DateTime @db.Timestamptz()
   lastCount  Int      @default(0) @map("last_count")
   lastRunAt  DateTime @default(now()) @map("last_run_at") @db.Timestamptz()
+  watermarkId String? @map("watermark_id") @db.Uuid
 
+  @@id([workspaceId, id])
   @@map("export_state")
 }
 
 model Webhook {
   id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   url        String
   events     WebhookEvent[]
   secret     String
@@ -388,6 +417,7 @@ model Webhook {
 
 model WebhookDelivery {
   id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   webhookId   String       @map("webhook_id") @db.Uuid
   webhook     Webhook      @relation(fields: [webhookId], references: [id], onDelete: Cascade)
   event       WebhookEvent
@@ -429,6 +459,7 @@ model PasswordReset {
 
 model Notification {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   userId    String    @map("user_id") @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   kind      String // assignment | mention | sla_warning | sla_breach
@@ -444,6 +475,7 @@ model Notification {
 
 model AuditLog {
   id         BigInt   @id @default(autoincrement())
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   actorType  String   @map("actor_type") // user | api_key | system
   actorId    String?  @map("actor_id") @db.Uuid
   entityType String   @map("entity_type")
@@ -467,6 +499,7 @@ model AuditLog {
 /// lands — it never needs widening or a data migration.
 model ChatSession {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   apiKeyId   String   @map("api_key_id") @db.Uuid
   apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
   sessionRef String   @map("session_ref")
@@ -479,4 +512,65 @@ model ChatSession {
   @@unique([apiKeyId, sessionRef])
   @@index([ticketId])
   @@map("chat_sessions")
+}
+
+
+/// A tenant: one support desk. Distinct from `Organization`, which is a
+/// CUSTOMER's company. Both concepts are real and they are not the same thing.
+model Workspace {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug         String          @unique @db.Citext
+  name         String
+  status       WorkspaceStatus @default(active)
+  /// Set when this desk was imported from a Plumo PM workspace (Phase 4).
+  pmWorkspaceId String?        @map("pm_workspace_id") @db.Uuid
+  /// Affordance for per-workspace inbound mail. The email channel is NOT
+  /// multi-tenant yet: threading by "[Plumo #N]" or In-Reply-To is ambiguous
+  /// across tenants until the receiving address resolves the workspace.
+  inboundEmail String?         @map("inbound_email") @db.Citext
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
+  memberships  WorkspaceMembership[]
+
+  @@map("workspaces")
+}
+
+/// Resolves the collision between global identity and tenant-owned teams: one
+/// human, many desks, a different role and team on each.
+model WorkspaceMembership {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId       String    @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         UserRole  @default(agent)
+  teamId       String?   @map("team_id") @db.Uuid
+  team         Team?     @relation(fields: [teamId], references: [id])
+  isActive     Boolean   @default(true) @map("is_active")
+  availability String    @default("available")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_memberships")
+}
+
+/// Append-only record of authentication events.
+///
+/// MUST NOT be written with `prisma.identityAuditLog.create()`. Prisma's
+/// `create()` always emits INSERT ... RETURNING, and RETURNING needs SELECT
+/// privilege — which plumo_app deliberately does not have on this table, so the
+/// trail cannot be read back or tampered with by the runtime. Use $executeRaw.
+model IdentityAuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorType  String   @map("actor_type")
+  actorId    String?  @map("actor_id") @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id") @db.Uuid
+  action     String
+  diffJson   Json?    @map("diff_json")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("identity_audit_log")
 }

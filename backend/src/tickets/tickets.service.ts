@@ -11,6 +11,40 @@ import { Principal } from '../common/decorators';
 import { assertTransition, isReopen } from './ticket-state-machine';
 import { AssignDto, BulkDto, CreateTicketDto, ListTicketsDto, PatchTicketDto } from './dto/tickets.dto';
 
+/**
+ * Who is answering a conversation right now.
+ *
+ *   ai         a chatbot opened it and still owns it
+ *   escalated  the bot gave up; a human is needed but none has taken it
+ *   assigned   a human owns it
+ *   human      opened by a person, unassigned (the console's own tickets)
+ *   closed     resolved or closed, by whoever
+ *
+ * DERIVED, not stored, and deliberately not a `ticket_status` value. Adding
+ * `ai_handling` / `needs_human` to that enum would mean defining every legal
+ * transition to and from them in the state machine, and the enum's DECLARATION
+ * ORDER is load-bearing — it is what the inbox sorts by — so inserting members
+ * reorders every existing desk's queue. Status answers "where is this in the
+ * lifecycle"; handling answers "who is holding it". They are different
+ * questions and conflating them makes both harder to change.
+ *
+ * Derived also cannot drift: handedOffAt IS the fact. A stored duplicate is one
+ * missed write away from claiming a bot owns a conversation a human is on.
+ */
+export type TicketHandling = 'ai' | 'escalated' | 'assigned' | 'human' | 'closed';
+
+export function handlingOf(t: {
+  status: TicketStatus;
+  createdByApiKeyId?: string | null;
+  handedOffAt?: Date | null;
+  assigneeId?: string | null;
+}): TicketHandling {
+  if (t.status === 'resolved' || t.status === 'closed') return 'closed';
+  if (!t.createdByApiKeyId) return t.assigneeId ? 'assigned' : 'human';
+  if (!t.handedOffAt) return 'ai';
+  return t.assigneeId ? 'assigned' : 'escalated';
+}
+
 const TICKET_INCLUDE = {
   customer: { include: { organization: true } },
   assignee: { select: { id: true, name: true, role: true, availability: true } },
@@ -251,6 +285,24 @@ export class TicketsService {
       case 'resolved':
         and.push({ status: { in: ['resolved', 'closed'] } });
         break;
+      case 'bot-handled':
+        // Every conversation a chatbot opened, whatever its status — including
+        // the ones it answered and resolved without a human.
+        //
+        // Those are deliberately absent from `all-open` (they are resolved) and
+        // from `unassigned` (nobody should be paged for work the bot finished),
+        // which made the AI's output invisible unless you went looking in
+        // `recently closed` among the human tickets. Visibility and queue
+        // priority are different things; this view is the first without being
+        // the second.
+        and.push({ createdByApiKeyId: { not: null } });
+        break;
+      case 'bot-open':
+        // Still with the bot: it opened the conversation, nobody has handed it
+        // off, and it is not finished. The set worth watching for a bot that
+        // has quietly stopped answering.
+        and.push({ createdByApiKeyId: { not: null }, handedOffAt: null, status: { in: ['new', 'open'] } });
+        break;
     }
 
     if (dto.status) and.push({ status: { in: dto.status.split(',') as TicketStatus[] } });
@@ -336,7 +388,7 @@ export class TicketsService {
     const openStatuses: TicketStatus[] = ['new', 'open', 'pending', 'on_hold'];
     const openWhere: Prisma.TicketWhereInput = { AND: [visibility, { status: { in: openStatuses } }] };
 
-    const [allOpen, unassigned, myOpen, breaching, pending, resolved, byStatus, byPriority, byChannel, tagRows] =
+    const [allOpen, unassigned, myOpen, breaching, pending, resolved, botHandled, botOpen, byStatus, byPriority, byChannel, tagRows] =
       await Promise.all([
         this.prisma.ticket.count({ where: openWhere }),
         this.prisma.ticket.count({ where: { AND: [openWhere, { assigneeId: null }] } }),
@@ -351,6 +403,14 @@ export class TicketsService {
         }),
         this.prisma.ticket.count({ where: { AND: [visibility, { status: { in: ['pending', 'on_hold'] } }] } }),
         this.prisma.ticket.count({ where: { AND: [visibility, { status: { in: ['resolved', 'closed'] } }] } }),
+        // everything a chatbot opened, in any state
+        this.prisma.ticket.count({ where: { AND: [visibility, { createdByApiKeyId: { not: null } }] } }),
+        // still with the bot: never handed off and not finished
+        this.prisma.ticket.count({
+          where: {
+            AND: [visibility, { createdByApiKeyId: { not: null }, handedOffAt: null, status: { in: ['new', 'open'] } }],
+          },
+        }),
         this.prisma.ticket.groupBy({ by: ['status'], where: visibility, _count: true }),
         this.prisma.ticket.groupBy({ by: ['priority'], where: visibility, _count: true }),
         this.prisma.ticket.groupBy({ by: ['channel'], where: visibility, _count: true }),
@@ -379,6 +439,8 @@ export class TicketsService {
         breaching,
         pending,
         resolved,
+        'bot-handled': botHandled,
+        'bot-open': botOpen,
       },
       facets: {
         status: Object.fromEntries(byStatus.map((r) => [r.status, r._count])),
@@ -697,6 +759,6 @@ export class TicketsService {
 
   /** BigInt-safe response shape. */
   private serialize<T extends { number: bigint }>(t: T) {
-    return { ...t, number: Number(t.number) };
+    return { ...t, number: Number(t.number), handling: handlingOf(t as never) };
   }
 }
