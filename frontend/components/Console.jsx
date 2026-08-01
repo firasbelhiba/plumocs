@@ -739,8 +739,15 @@ export default class Console extends React.Component {
     const tc = t ? (t.customerFull || this.cust(t.customerId)) : null;
     const ta = t ? this.agent(t.assigneeId) : null;
     const tsla = this.sla(t);
-    const frLeft = t ? t.sla.firstResponse.dueAt - S.now : 0;
-    const resLeft = t ? t.sla.resolution.dueAt - S.now : 0;
+    // dueAt is genuinely null when no policy applies — which is every chatbot
+    // conversation, since the human clock only starts at handoff. `null - now`
+    // coerces null to 0 and reports a breach dated to the epoch: "overdue by
+    // 20666d", "target 1 jan 01:00". Keep null null and let the labels below
+    // decide.
+    const frDue = t && t.sla.firstResponse.dueAt != null ? t.sla.firstResponse.dueAt : null;
+    const resDue = t && t.sla.resolution.dueAt != null ? t.sla.resolution.dueAt : null;
+    const frLeft = frDue != null ? frDue - S.now : null;
+    const resLeft = resDue != null ? resDue - S.now : null;
     const thread = t ? t.thread.map(i => ({
       id: i.id, author: i.author, body: i.body || i.text || '', kind: i.kind, role: i.role,
       isBubble: i.kind !== 'event', sideKey: i.kind === 'note' ? 'note' : i.side,
@@ -833,12 +840,12 @@ export default class Console extends React.Component {
       tTeam: t ? (((A ? A.teams : []).find(x => x.id === t.teamId) || {}).name || '') : '',
       tAssigneeName: ta ? ta.name : 'no one yet', tAssigneeInitials: ta ? this.initials(ta.name) : '?', tAssigneeAv: ta ? ta.av : 'ghost',
       thread, tSlaLabel: tsla.label, tSlaTone: tsla.tone, tSlaTitle: tsla.title, tPaused: !!(t && t.sla.paused),
-      frLabel: t ? (t.sla.firstResponse.metAt ? 'met ' + this.rel(t.sla.firstResponse.metAt) + ' ago' : (frLeft < 0 ? 'overdue by ' + this.dur(-frLeft) : 'due in ' + this.dur(frLeft))) : '',
-      frTone: t ? (t.sla.firstResponse.metAt ? 'sla-met' : t.sla.paused ? 'sla-paused' : frLeft < 0 ? 'sla-breach' : frLeft < 1800000 ? 'sla-due' : 'sla-ok') : 'neutral',
-      frDue: t ? this.clock(t.sla.firstResponse.dueAt) : '',
-      resLabel: t ? (t.sla.resolution.metAt ? 'met ' + this.rel(t.sla.resolution.metAt) + ' ago' : (resLeft < 0 ? 'overdue by ' + this.dur(-resLeft) : 'due in ' + this.dur(resLeft))) : '',
-      resTone: t ? (t.sla.resolution.metAt ? 'sla-met' : t.sla.paused ? 'sla-paused' : resLeft < 0 ? 'sla-breach' : resLeft < 1800000 ? 'sla-due' : 'sla-ok') : 'neutral',
-      resDue: t ? this.clock(t.sla.resolution.dueAt) : '', slaPolicy: t ? t.sla.policy : '',
+      frLabel: t ? (t.sla.firstResponse.metAt ? 'met ' + this.rel(t.sla.firstResponse.metAt) + ' ago' : frLeft == null ? 'no target' : (frLeft < 0 ? 'overdue by ' + this.dur(-frLeft) : 'due in ' + this.dur(frLeft))) : '',
+      frTone: t ? (t.sla.firstResponse.metAt ? 'sla-met' : frLeft == null ? 'neutral' : t.sla.paused ? 'sla-paused' : frLeft < 0 ? 'sla-breach' : frLeft < 1800000 ? 'sla-due' : 'sla-ok') : 'neutral',
+      frDue: t && t.sla.firstResponse.dueAt != null ? this.clock(t.sla.firstResponse.dueAt) : '—',
+      resLabel: t ? (t.sla.resolution.metAt ? 'met ' + this.rel(t.sla.resolution.metAt) + ' ago' : resLeft == null ? 'no target' : (resLeft < 0 ? 'overdue by ' + this.dur(-resLeft) : 'due in ' + this.dur(resLeft))) : '',
+      resTone: t ? (t.sla.resolution.metAt ? 'sla-met' : resLeft == null ? 'neutral' : t.sla.paused ? 'sla-paused' : resLeft < 0 ? 'sla-breach' : resLeft < 1800000 ? 'sla-due' : 'sla-ok') : 'neutral',
+      resDue: t && t.sla.resolution.dueAt != null ? this.clock(t.sla.resolution.dueAt) : '—', slaPolicy: t ? t.sla.policy : '',
       tChannel: t ? t.channel : '', tCreated: t ? this.clock(t.createdAt) : '', tRequester: t ? t.requester : '',
       tCc: t && t.cc.length ? t.cc.join(', ') : '—', tSource: t && t.sourceRef ? t.sourceRef : '—', tId: t ? t.id : '',
       tTags: t ? t.tags.map(g => ({ id: g, label: g, tone: this.TAGTONE[g] || 'neutral' })) : [],

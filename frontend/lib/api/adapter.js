@@ -427,13 +427,21 @@ class Adapter {
     const isEvent = m.authorType === 'system' && !m.isInternalNote && m.body.length < 120 && !m.body.includes('\n');
     const agent = m.authorType === 'agent' ? this.agents.find((a) => a.id === m.authorId) : null;
     const isCustomer = m.authorType === 'customer';
+    const isBot = m.authorType === 'bot';
     return {
       kind: m.isInternalNote ? 'note' : isEvent ? 'event' : 'message',
       id: m.id,
       author: agent?.name ?? (isCustomer ? ticket.customer?.name ?? 'customer' : 'plumo'),
       authorId: m.authorId,
       side: isCustomer ? 'customer' : 'agent',
-      role: agent ? (agent.role === 'lead' ? 'team lead' : agent.role === 'admin' ? 'admin' : 'support') : isCustomer ? (ticket.customer?.organization?.name ?? '') : 'system',
+      // A chatbot reply is not a 'system' event — that label is for merge
+      // markers and automated notes. Showing the AI's answers as "system" makes
+      // the transcript unreadable and hides who actually said what.
+      role: agent
+        ? (agent.role === 'lead' ? 'team lead' : agent.role === 'admin' ? 'admin' : 'support')
+        : isBot ? 'AI assistant'
+        : isCustomer ? (ticket.customer?.organization?.name ?? '')
+        : 'system',
       at: ms(m.createdAt),
       body: m.body,
       attachments: (m.attachments ?? []).map((f) => ({ id: f.id, name: f.filename, size: fmtBytes(f.sizeBytes) })),

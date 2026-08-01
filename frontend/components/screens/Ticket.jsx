@@ -33,6 +33,47 @@ const ClipIcon = ({ size = 13 }) => (
 
 const splitName = (n = '') => [n.split(' ')[0] ?? '', n.split(' ').slice(1).join(' ')];
 
+/**
+ * Renders the inline markdown an AI assistant emits — **bold** and `code` — as
+ * React elements, never as HTML.
+ *
+ * Message bodies are untrusted input: they come from a chatbot relaying whatever
+ * a visitor typed. dangerouslySetInnerHTML here would be a stored-XSS hole in
+ * the one screen every agent reads all day. Building elements instead means the
+ * worst a hostile body can do is look odd.
+ *
+ * Deliberately only two tokens. Headings, links and images in a support
+ * transcript are more risk and clutter than benefit; anything else stays literal,
+ * including a list's leading "1.", which reads perfectly well as text.
+ */
+export function parseInline(text) {
+  const out = [];
+  const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push({ type: 'text', value: text.slice(last, m.index) });
+    const tok = m[0];
+    out.push(tok.startsWith('**')
+      ? { type: 'bold', value: tok.slice(2, -2) }
+      : { type: 'code', value: tok.slice(1, -1) });
+    last = m.index + tok.length;
+  }
+  if (last < text.length) out.push({ type: 'text', value: text.slice(last) });
+  return out;
+}
+
+function RichText({ text }) {
+  return (
+    <>
+      {parseInline(text).map((t, i) =>
+        t.type === 'bold' ? <strong key={i} className="font-medium">{t.value}</strong>
+        : t.type === 'code' ? <code key={i} className="px-1 py-0.5 rounded text-[13px] bg-surface-2 font-mono">{t.value}</code>
+        : t.value,
+      )}
+    </>
+  );
+}
+
 export default function Ticket({ V }) {
   const [custFirst, custLast] = splitName(V.custName);
   const [asgFirst, asgLast] = splitName(V.tAssigneeName);
@@ -278,7 +319,12 @@ export default function Ticket({ V }) {
                             </div>
                           )}
                           {m.paras.map((p) => (
-                            <p key={p.id} className="text-[14px] leading-relaxed text-fg">{p.text}</p>
+                            // whitespace-pre-wrap keeps single newlines: paragraphs are
+                            // split on blank lines only, so an AI's numbered list would
+                            // otherwise arrive as one unbroken wall of text.
+                            <p key={p.id} className="text-[14px] leading-relaxed text-fg whitespace-pre-wrap break-words">
+                              <RichText text={p.text} />
+                            </p>
                           ))}
                           {m.hasFiles && (
                             <div className="flex gap-[7px] flex-wrap pt-0.5">
