@@ -176,9 +176,14 @@ export default class Console extends React.Component {
     const S = this.state;
     if (event === 'message.added') {
       if (S.ticket && payload.ticketId === S.ticket.id && !adapter.isLocalMessage(payload.messageId)) {
-        this.setState({ remote: true });
+        // Pull the new message in rather than only offering a button. A chatbot
+        // relays a visitor's reply within a second of them typing it; making an
+        // agent notice a banner and click it is the difference between a live
+        // conversation and a slow one.
+        this.refreshOpenTicket();
       }
       this.throttledCounts();
+      this.throttledQueue();
       return;
     }
     if (event === 'notification.created') {
@@ -190,8 +195,25 @@ export default class Console extends React.Component {
     }
     if (['ticket.created', 'ticket.updated', 'ticket.assigned', 'sla.warning'].includes(event)) {
       this.throttledCounts();
+      // The counts alone used to update, so a new conversation bumped the badge
+      // to 4 while the list under it still showed 3 rows until a refresh.
+      this.throttledQueue();
     }
   };
+
+  /**
+   * Reload the inbox list, at most once every few seconds.
+   *
+   * Skipped while a conversation is open: re-fetching the list underneath does
+   * nothing visible and costs a query per message on a busy desk.
+   */
+  throttledQueue() {
+    if (this.queueTimer || this.state.screen === 'ticket') return;
+    this.queueTimer = setTimeout(() => {
+      this.queueTimer = null;
+      if (this.state.screen === 'queue') this.loadQueue({ noFail: true });
+    }, 2000);
+  }
 
   /** Counts refresh at most once every few seconds no matter how chatty the socket gets. */
   throttledCounts() {
@@ -326,6 +348,25 @@ export default class Console extends React.Component {
       this.setState({ ticketLoad: 'error' });
     }
   }
+  /**
+   * Re-fetch the open ticket in place, leaving the composer alone.
+   *
+   * openTicket() resets `draft` and `mode`, which is right when you navigate to
+   * a conversation and wrong when a message merely arrives in the one you are
+   * already reading — it would delete a half-written reply. That is why the
+   * banner used to be a manual button. This refreshes the thread and keeps
+   * whatever the agent is typing.
+   */
+  async refreshOpenTicket() {
+    const id = this.state.ticket?.id;
+    if (!id) return;
+    try {
+      const t = await this.api.getTicket(id);
+      // guard against the agent having navigated away mid-request
+      if (this.state.ticket?.id === id) this.setState({ ticket: t, remote: false });
+    } catch { /* the banner stays; a manual reload is still available */ }
+  }
+
   backToQueue = () => { this.navTo('queue'); };
   openCustomer = async (e) => {
     const id = e.currentTarget.dataset.id;

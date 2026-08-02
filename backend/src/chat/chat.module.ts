@@ -231,6 +231,22 @@ export class ChatService {
           ...(!isBot && ticket.handedOffAt && ticket.status === 'pending'
             ? { status: 'open' as const, slaPausedAt: null }
             : {}),
+          // A visitor replying to a FINISHED conversation reopens it.
+          //
+          // Without this the message is stored and then invisible: the ticket
+          // stays `resolved`, so it appears in no open view, in no unassigned
+          // queue, and in nothing the SLA sweep looks at. "That did not work,
+          // it is still pending" would sit in the database and nobody would
+          // ever read it. Losing a customer's reply is worse than reopening a
+          // ticket that did not need it.
+          //
+          // Where it lands is decided by handlingOf(), not here: a conversation
+          // the bot resolved alone goes back to the bot (`ai`), while one a
+          // human closed returns to them (`escalated`/`assigned`). Clearing the
+          // stamps keeps resolution metrics honest — this one was not finished.
+          ...(!isBot && (ticket.status === 'resolved' || ticket.status === 'closed')
+            ? { status: 'open' as const, resolvedAt: null, closedAt: null, outcome: null }
+            : {}),
         },
       });
       return created;
@@ -254,7 +270,13 @@ export class ChatService {
   async handoff(sessionRef: string, dto: HandoffDto, actor: Principal) {
     const { ticket } = await this.session(sessionRef, actor);
     if (ticket.handedOffAt) {
-      return { ticketId: ticket.id, status: ticket.status, handedOffAt: ticket.handedOffAt, alreadyHandedOff: true };
+      return {
+        ticketId: ticket.id,
+        status: ticket.status,
+        handling: handlingOf(ticket as never),
+        handedOffAt: ticket.handedOffAt,
+        alreadyHandedOff: true,
+      };
     }
 
     const priority = dto.priority ?? ticket.priority;
@@ -285,7 +307,13 @@ export class ChatService {
       teamId: updated.teamId,
       assigneeId: updated.assigneeId,
     });
-    return { ticketId: ticket.id, status: updated.status, handedOffAt: now, alreadyHandedOff: false };
+    return {
+      ticketId: ticket.id,
+      status: updated.status,
+      handling: handlingOf(updated as never),
+      handedOffAt: now,
+      alreadyHandedOff: false,
+    };
   }
 
   /** The bot answered the question and is closing the conversation itself. */
@@ -295,7 +323,12 @@ export class ChatService {
       throw new ForbiddenException('A human owns this conversation now');
     }
     if (ticket.status === 'resolved' || ticket.status === 'closed') {
-      return { ticketId: ticket.id, status: ticket.status, alreadyResolved: true };
+      return {
+        ticketId: ticket.id,
+        status: ticket.status,
+        handling: handlingOf(ticket as never),
+        alreadyResolved: true,
+      };
     }
     const updated = await this.prisma.ticket.update({
       where: { id: ticket.id },
@@ -308,7 +341,12 @@ export class ChatService {
       teamId: updated.teamId,
       assigneeId: updated.assigneeId,
     });
-    return { ticketId: ticket.id, status: updated.status, alreadyResolved: false };
+    return {
+      ticketId: ticket.id,
+      status: updated.status,
+      handling: handlingOf(updated as never),
+      alreadyResolved: false,
+    };
   }
 
   async getConversation(sessionRef: string, actor: Principal) {
