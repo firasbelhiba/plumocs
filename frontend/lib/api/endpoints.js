@@ -22,6 +22,7 @@ export const auth = {
 
 // ---- tickets ----
 export const tickets = {
+  setBotEnabled: (id, enabled) => request(`/tickets/${id}/bot-enabled`, { method: 'POST', body: { enabled } }),
   list: (params) => request(`/tickets${qs(params)}`),
   counts: () => request('/tickets/counts'),
   get: (id) => request(`/tickets/${id}`),

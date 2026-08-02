@@ -91,4 +91,21 @@ export class TicketsController {
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() principal: Principal) {
     return this.tickets.remove(id, principal);
   }
+
+  /**
+   * Hand a conversation back to the chatbot, or take it away again.
+   *
+   * Taking it away happens automatically when an agent replies; this is the
+   * explicit control for the other direction — an agent who has answered and
+   * wants the assistant to carry on handling follow-ups.
+   */
+  @Post(':id/bot-enabled')
+  @Roles('agent')
+  setBotEnabled(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: { enabled: boolean },
+    @CurrentUser() actor: Principal,
+  ) {
+    return this.tickets.setBotEnabled(id, !!dto?.enabled, actor);
+  }
 }

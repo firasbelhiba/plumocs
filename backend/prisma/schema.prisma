@@ -258,6 +258,10 @@ model Ticket {
   // Bot-first SLA: a bot reply does NOT satisfy first response, it stamps its
   // own column. The human clock starts at handedOffAt.
   botRepliedAt       DateTime?       @map("bot_replied_at") @db.Timestamptz()
+  /// May the chatbot still post here? False once a human takes over — by handing
+  /// off, or simply by replying. The ingest API refuses bot messages while this
+  /// is false, so a partner that ignores the flag still cannot talk over an agent.
+  botEnabled         Boolean         @default(true) @map("bot_enabled")
   handedOffAt        DateTime?       @map("handed_off_at") @db.Timestamptz()
   tags               String[]        @default([])
   createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz()

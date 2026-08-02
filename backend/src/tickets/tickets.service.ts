@@ -232,6 +232,29 @@ export class TicketsService {
     return { teamId, assigneeId };
   }
 
+  /**
+   * Turn the chatbot back on for a conversation, or off.
+   *
+   * Off is normally automatic — replying to a chat ticket disables the bot so it
+   * cannot talk over you. This exists for the way back: an agent who has dealt
+   * with the hard part and is happy for the assistant to take follow-ups.
+   */
+  async setBotEnabled(id: string, enabled: boolean, actor: Principal) {
+    const ticket = await this.scope.loadAndAssert(id, actor);
+    const updated = await this.prisma.ticket.update({
+      where: { id },
+      data: { botEnabled: enabled },
+    });
+    await this.audit.write({
+      actor, entityType: 'ticket', entityId: id,
+      action: enabled ? 'bot.enabled' : 'bot.disabled',
+    });
+    this.realtime.publish('ticket.updated', {
+      id, number: Number(updated.number), teamId: updated.teamId, assigneeId: updated.assigneeId,
+    });
+    return this.serialize(updated);
+  }
+
   private async defaultTeamId(): Promise<string | null> {
     const team = await this.prisma.team.findFirst({ orderBy: { createdAt: 'asc' } });
     return team?.id ?? null;

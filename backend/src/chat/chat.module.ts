@@ -126,7 +126,7 @@ export class ChatService {
 
     const existing = await this.prisma.chatSession.findUnique({
       where: { apiKeyId_sessionRef: { apiKeyId, sessionRef: dto.sessionRef } },
-      include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true } } },
+      include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true, botEnabled: true } } },
     });
     if (existing) return this.sessionView(existing.ticket, dto.sessionRef, false);
 
@@ -161,7 +161,7 @@ export class ChatService {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         const won = await this.prisma.chatSession.findUnique({
           where: { apiKeyId_sessionRef: { apiKeyId, sessionRef: dto.sessionRef } },
-          include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true } } },
+          include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true, botEnabled: true } } },
         });
         if (won) {
           await this.prisma.ticket.delete({ where: { id: ticket.id } }).catch(() => undefined);
@@ -204,6 +204,15 @@ export class ChatService {
     }
 
     const isBot = dto.author === 'bot';
+    // Enforced here, not just advertised in the response. A partner that ignores
+    // botEnabled — or races a handoff — still cannot post over an agent, and
+    // gets an error that says exactly why rather than a silent success.
+    if (isBot && ticket.botEnabled === false) {
+      throw new ForbiddenException(
+        'A human has taken over this conversation; the assistant may not post. ' +
+          'Check `botEnabled` before answering.',
+      );
+    }
     const message = await this.prisma.$transaction(async () => {
       const created = await this.prisma.ticketMessage.create({
         data: {
@@ -274,6 +283,7 @@ export class ChatService {
         ticketId: ticket.id,
         status: ticket.status,
         handling: handlingOf(ticket as never),
+        botEnabled: false,
         handedOffAt: ticket.handedOffAt,
         alreadyHandedOff: true,
       };
@@ -287,6 +297,8 @@ export class ChatService {
       where: { id: ticket.id },
       data: {
         handedOffAt: now,
+        // The bot asked for a human; it must stop talking even before one arrives.
+        botEnabled: false,
         priority,
         status: ticket.status === 'new' ? 'open' : ticket.status,
         outcome: 'escalated',
@@ -311,6 +323,7 @@ export class ChatService {
       ticketId: ticket.id,
       status: updated.status,
       handling: handlingOf(updated as never),
+      botEnabled: false,
       handedOffAt: now,
       alreadyHandedOff: false,
     };
@@ -420,7 +433,7 @@ export class ChatService {
   }
 
   private sessionView(
-    ticket: { id: string; status: string; handedOffAt: Date | null; createdByApiKeyId?: string | null; assigneeId?: string | null },
+    ticket: { id: string; status: string; handedOffAt: Date | null; createdByApiKeyId?: string | null; assigneeId?: string | null; botEnabled?: boolean },
     sessionRef: string,
     created: boolean,
   ) {
@@ -436,6 +449,8 @@ export class ChatService {
         handedOffAt: ticket.handedOffAt,
         assigneeId: ticket.assigneeId ?? null,
       }),
+      // The switch a partner must obey: false means a human owns the reply.
+      botEnabled: ticket.botEnabled !== false,
       handedOff: !!ticket.handedOffAt,
       created,
     };

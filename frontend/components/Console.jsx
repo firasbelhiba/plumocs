@@ -367,6 +367,28 @@ export default class Console extends React.Component {
     } catch { /* the banner stays; a manual reload is still available */ }
   }
 
+  /**
+   * Silence the assistant, or hand the conversation back to it.
+   *
+   * Replying already disables the bot, but there is a window between an agent
+   * deciding to answer and their message landing: the visitor writes, the bot
+   * answers in under a second, and now two of you are talking. This closes it.
+   */
+  toggleBot = async () => {
+    const t = this.state.ticket;
+    if (!t) return;
+    const next = !t.botEnabled;
+    // optimistic — the button is the feedback, and a failure restores it below
+    this.setState({ ticket: { ...t, botEnabled: next } });
+    try {
+      await this.api.setBotEnabled(t.id, next);
+      this.toast(next ? 'the assistant can reply again' : 'the assistant is silenced — this one is yours');
+    } catch {
+      this.setState((st) => (st.ticket ? { ticket: { ...st.ticket, botEnabled: !next } } : null));
+      this.toast("couldn't change that — try again in a moment", 'bad');
+    }
+  };
+
   backToQueue = () => { this.navTo('queue'); };
   openCustomer = async (e) => {
     const id = e.currentTarget.dataset.id;
@@ -897,6 +919,10 @@ export default class Console extends React.Component {
       custId: tc ? tc.id : '',
       backToQueue: this.backToQueue, toggleRail: this.toggleRail, railOn: S.rail,
       remote: S.remote, reloadTicket: this.reloadTicket,
+      // only chatbot conversations have an assistant to silence
+      isBotConversation: !!(t && t.createdByApiKeyId),
+      botEnabled: t ? t.botEnabled !== false : true,
+      toggleBot: this.toggleBot,
       subjEdit: S.subjEdit, subjDraft: S.subjDraft, editSubject: this.editSubject, onSubjDraft: this.onSubjDraft, saveSubject: this.saveSubject, onSubjKey: this.onSubjKey,
       statusOpen: S.menu === 'status', prioOpen: S.menu === 'priority', assigneeOpen: S.menu === 'assignee',
       teamOpen: S.menu === 'team', overflowOpen: S.menu === 'overflow', cannedOpen: S.menu === 'canned', tagOpen: S.menu === 'tag',

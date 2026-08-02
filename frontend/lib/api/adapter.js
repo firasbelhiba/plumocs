@@ -137,6 +137,11 @@ class Adapter {
   }
 
   /** Demo role switcher — re-authenticates as the seed user for that role. */
+  /** Silence the chatbot on one conversation, or let it speak again. */
+  setBotEnabled(ticketId, enabled) {
+    return api.tickets.setBotEnabled(ticketId, enabled);
+  }
+
   forgotPassword(email) {
     return api.auth.forgotPassword(email);
   }
@@ -417,6 +422,12 @@ class Adapter {
       requester: t.customer?.email ?? '—',
       cc: [],
       sourceRef: t.sourceRef,
+      // Needed by the AI on/off control: whether a chatbot opened this at all,
+      // and whether it is currently allowed to reply. Dropping them here is why
+      // the control would never render.
+      createdByApiKeyId: t.createdByApiKeyId ?? null,
+      botEnabled: t.botEnabled !== false,
+      handling: t.handling ?? null,
       customerFull: customer,
       thread,
       activity: auditTrail.slice(0, 6).map((a) => this.#mapAudit(a)),

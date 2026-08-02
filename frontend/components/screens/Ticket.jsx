@@ -201,6 +201,30 @@ export default function Ticket({ V }) {
           )}
         </div>
 
+        {/* AI on/off — only for conversations a chatbot opened */}
+        {V.isBotConversation && (
+          <div className="flex-none">
+            <button
+              onClick={V.toggleBot}
+              title={
+                V.botEnabled
+                  ? 'The assistant may reply to this conversation. Turn it off before you answer.'
+                  : 'The assistant is silenced. Turn it back on to let it handle follow-ups.'
+              }
+              data-tone={V.botEnabled ? 'st-open' : 'st-pending'}
+              className="inline-flex items-center gap-2 px-3 h-btn-md rounded-full border text-[13px] whitespace-nowrap cursor-pointer transition-colors duration-[var(--dur-instant)] focus-ring"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--tone-hue) 34%, transparent)',
+                background: 'color-mix(in srgb, var(--tone-hue) 12%, var(--surface))',
+                color: 'var(--tone-fg)',
+              }}
+            >
+              <i className="w-[6px] h-[6px] rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
+              {V.botEnabled ? 'AI is replying' : 'AI is off'}
+            </button>
+          </div>
+        )}
+
         {/* overflow */}
         <div className="relative flex-none">
           <button onClick={V.openOverflow} aria-label="more actions" className={ICON_BTN}>

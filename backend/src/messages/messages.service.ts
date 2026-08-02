@@ -59,6 +59,18 @@ export class MessagesService {
           ...(stampFirstResponse ? { firstRespondedAt: new Date() } : {}),
           // a public agent reply to a 'new' ticket moves it to open
           ...(isAgentMessage && !isNote && ticket.status === 'new' ? { status: 'open' } : {}),
+          // A human replying TAKES the conversation from the bot, whether or not
+          // anyone called /handoff. Agents answer straight out of the inbox all
+          // the time; before this, handedOffAt stayed null, `handling` stayed
+          // 'ai', and the chatbot carried on answering over the top of a person.
+          // handedOffAt is stamped too so the response clock starts from the
+          // moment a human actually engaged.
+          ...(isAgentMessage && !isNote
+            ? {
+                botEnabled: false,
+                ...(ticket.handedOffAt ? {} : { handedOffAt: new Date() }),
+              }
+            : {}),
         },
       });
       return msg;
