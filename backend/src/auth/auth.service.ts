@@ -110,12 +110,19 @@ export class AuthService {
       where: { workspaceId_userId: { workspaceId: principal.workspaceId, userId: principal.id } },
       select: { availability: true },
     });
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: principal.workspaceId },
+      select: { slug: true },
+    });
 
     return {
       ...user,
       role: principal.role,
       teamId: principal.teamId ?? null,
       availability: membership?.availability ?? 'available',
+      // Also on /me, so a console restored from a stored token — which never
+      // saw the login response — can still learn its workspace.
+      workspace: { id: principal.workspaceId, slug: workspace?.slug ?? null },
     };
   }
 
@@ -217,6 +224,14 @@ export class AuthService {
         name: user.name,
         role: membership.role,
         teamId: membership.teamId,
+      },
+      // Which desk this session is on. The console stores the slug and sends it
+      // back as X-Workspace-Slug on every subsequent request, so it stops
+      // relying on the server guessing "the only workspace" — a guess that
+      // stops working, for everyone at once, the day a second one is created.
+      workspace: {
+        id: membership.workspaceId,
+        slug: membership.workspaceSlug,
       },
     };
   }

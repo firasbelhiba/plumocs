@@ -112,7 +112,16 @@ class Adapter {
   async login(email, password, keepSignedIn = true) {
     const data = await api.auth.login(email, password);
     setSession(
-      { accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user },
+      {
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        user: data.user,
+        // Which desk this session belongs to. Stored so every later request can
+        // name it explicitly instead of letting the server fall back to "the
+        // only workspace" — a fallback that switches itself off, for everyone
+        // at once, the moment a second workspace is created.
+        workspace: data.workspace ?? null,
+      },
       { persist: keepSignedIn },
     );
     return data.user;
@@ -195,6 +204,18 @@ class Adapter {
   async bootstrap() {
     const me = await api.auth.me();
     this.currentUser = me;
+
+    // Backfill the workspace onto sessions that predate it.
+    //
+    // Anyone already signed in when this shipped has a stored session with no
+    // workspace, and they will not log in again for weeks. Learning it here —
+    // on the one call every session makes at startup — means those sessions
+    // start naming their workspace too, rather than quietly depending on the
+    // single-tenant fallback until the next time they sign out.
+    const s = currentSession();
+    if (s && me?.workspace?.slug && s.workspace?.slug !== me.workspace.slug) {
+      setSession({ ...s, workspace: me.workspace });
+    }
 
     const [usersRes, teamsRes, tagsRes, cannedRes, customersRes, notifsRes, slaRes, hoursRes] = await Promise.all([
       api.users.list(),

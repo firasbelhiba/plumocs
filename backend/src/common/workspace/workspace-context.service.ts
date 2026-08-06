@@ -17,6 +17,17 @@ export const WORKSPACE_SLUG_HEADER = 'x-workspace-slug';
 /** The half of a Principal that comes from a workspace_memberships row. */
 export interface ResolvedMembership {
   workspaceId: string;
+  /**
+   * The workspace's slug, carried back so the caller can be TOLD which desk it
+   * landed on.
+   *
+   * Without this the console has no way to learn its own workspace, so it can
+   * never send the X-Workspace-Slug header — and the single-workspace fallback
+   * below is the only thing keeping logins working. The day a second workspace
+   * exists that fallback disables itself and every login fails. Returning the
+   * slug is what lets the client stop depending on the guess.
+   */
+  workspaceSlug: string;
   role: Role;
   teamId: string | null;
 }
@@ -89,12 +100,13 @@ export class WorkspaceContextService {
     }
 
     const rows = await this.prisma.$queryRaw<
-      Array<{ workspaceId: string; role: Role; teamId: string | null; membershipActive: boolean }>
+      Array<{ workspaceId: string; role: Role; teamId: string | null; membershipActive: boolean; workspaceSlug: string }>
     >(Prisma.sql`
       SELECT workspace_id      AS "workspaceId",
              role              AS "role",
              team_id           AS "teamId",
-             membership_active AS "membershipActive"
+             membership_active AS "membershipActive",
+             workspace_slug    AS "workspaceSlug"
       FROM app_resolve_membership(${userId}::uuid, ${target}::citext)
     `);
 
@@ -112,7 +124,7 @@ export class WorkspaceContextService {
       throw new ForbiddenException('Your access to this workspace has been disabled');
     }
 
-    return { workspaceId: row.workspaceId, role: row.role, teamId: row.teamId };
+    return { workspaceId: row.workspaceId, workspaceSlug: row.workspaceSlug, role: row.role, teamId: row.teamId };
   }
 
   /**

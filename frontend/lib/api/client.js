@@ -96,6 +96,17 @@ async function rawRequest(path, { method = 'GET', body, headers = {}, auth = tru
       headers: {
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(auth && session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {}),
+        // Name the workspace explicitly whenever we know it.
+        //
+        // The server can infer it while exactly one workspace exists, and that
+        // is the only reason logins work today. That inference deliberately
+        // disables itself as soon as there are two — at which point every
+        // request without this header is a 403. Sending it now means the second
+        // workspace is a data change, not an outage.
+        //
+        // Older sessions stored before this shipped have no workspace, so this
+        // stays absent and the server falls back exactly as before.
+        ...(auth && session?.workspace?.slug ? { 'x-workspace-slug': session.workspace.slug } : {}),
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
