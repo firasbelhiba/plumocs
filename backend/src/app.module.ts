@@ -1,15 +1,18 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
+import { WorkspaceModule } from './common/workspace/workspace.module';
+import { WorkspaceBindingInterceptor } from './common/workspace/workspace-binding.interceptor';
 import { QueueModule } from './queue/queue.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard } from './common/guards/auth.guard';
+import { PrincipalThrottlerGuard } from './common/guards/principal-throttler.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { UsersModule } from './users/users.module';
 import { TeamsModule } from './teams/teams.module';
@@ -63,6 +66,7 @@ import { HealthModule } from './health/health.module';
       }),
     }),
     PrismaModule,
+    WorkspaceModule,
     QueueModule,
     AuditModule,
     AuthModule,
@@ -89,9 +93,12 @@ import { HealthModule } from './health/health.module';
   ],
   providers: [
     // §8.6 order: throttle → authenticate → role/scope gate
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: PrincipalThrottlerGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Runs after all three (Nest: guards → interceptors), which is required —
+    // it binds the workspace the AuthGuard resolved.
+    { provide: APP_INTERCEPTOR, useClass: WorkspaceBindingInterceptor },
   ],
 })
 export class AppModule {}

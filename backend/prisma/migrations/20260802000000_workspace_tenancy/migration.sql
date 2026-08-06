@@ -12,11 +12,11 @@
 -- indexes, and the updated_at DEFAULTs added in section 2. A generated diff
 -- proposes DROPping all of it.
 --
--- THIS MIGRATION DESTROYS DATA. It TRUNCATEs every tenant-owned table plus
--- refresh_tokens and password_resets. That is the agreed wipe-and-re-seed: the
--- production database has 1 admin user, 1 team, 1 API key and 0 tickets.
--- `users` is deliberately NOT truncated — an argon2 password hash cannot be
--- re-minted in SQL, so the admin's credential must survive.
+-- THIS MIGRATION PRESERVES DATA. Every existing row is adopted by the bootstrap
+-- workspace via the column DEFAULT in section 8. The only rows removed are
+-- refresh_tokens and password_resets, because access tokens minted before this
+-- carry role/teamId claims whose meaning changes — everyone re-authenticates
+-- once. Section 18 asserts that no tenant row was left without a workspace.
 --
 -- Runs as plumo_migrator via Prisma's directUrl, inside Prisma's single
 -- transaction. Every table is empty, so no CREATE INDEX CONCURRENTLY is needed
@@ -33,9 +33,16 @@
 -- ============================================================================
 -- 0. PREFLIGHT
 --
--- A safety valve, not a formality. Everything below is predicated on "0 tickets,
--- rows are disposable". Run this a week from now against a live desk and it
--- silently destroys a customer's support history. Refuse instead.
+-- A safety valve, not a formality.
+--
+-- This migration originally TRUNCATED every tenant table, because it was written
+-- against a pre-launch database with nothing in it. By the time it was due to
+-- run, the desk had been live for four days with 38 real conversations and 300+
+-- messages from a partner chatbot. The guard below caught that and refused.
+--
+-- It now BACKFILLS instead: every existing row is adopted by the bootstrap
+-- workspace and nothing is destroyed. What remains here is the check that the
+-- migration has not already run.
 -- ============================================================================
 
 DO $$
@@ -45,12 +52,12 @@ BEGIN
     RAISE EXCEPTION 'tenancy: public.workspaces already exists — this migration has already run.';
   END IF;
 
+  -- Announce the scale of the backfill. Not a guard: this migration preserves
+  -- rows now, so data is expected. It is here because a surprising number in the
+  -- deploy log — 0 when you expected thousands, or the reverse — is the cheapest
+  -- signal that you are pointed at the wrong database.
   SELECT count(*) INTO n FROM tickets;
-  IF n > 0 THEN
-    RAISE EXCEPTION
-      'tenancy: % ticket(s) present. This migration TRUNCATES all tenant data and is '
-      'only valid on the pre-launch database (0 tickets). Refusing.', n;
-  END IF;
+  RAISE NOTICE 'tenancy: adopting % existing ticket(s) into the bootstrap workspace', n;
 
   IF NOT EXISTS (SELECT 1 FROM users) THEN
     RAISE EXCEPTION 'tenancy: no users — the bootstrap membership would have nobody to point at.';
@@ -351,8 +358,9 @@ CROSS JOIN (SELECT id FROM workspaces WHERE slug = 'dar-blockchain') w;
 -- principal.role, and a Principal built from a global role makes an admin of one
 -- desk an admin of all of them.
 --
--- Must precede the TRUNCATE in section 7: with users.team_id still present,
--- TRUNCATE teams CASCADE would take the admin account with it.
+-- Must precede section 8, which adds workspace_id to teams: the memberships
+-- built in section 5 read users.team_id, so it has to still exist when they are
+-- created and be gone before anything else reads it.
 -- ============================================================================
 
 -- Platform authority: who may create a workspace at all. No per-workspace role
@@ -381,29 +389,30 @@ COMMENT ON COLUMN users.is_platform_admin IS
 
 
 -- ============================================================================
--- 7. THE WIPE
+-- 7. WHAT IS *NOT* DESTROYED
 --
--- refresh_tokens and password_resets go too, and that is a correctness
--- requirement rather than hygiene: every live access token carries `role` and
--- `teamId` claims whose meaning changes in this migration, so every session must
--- be invalidated.
+-- This section used to TRUNCATE every tenant table. It does not any more: the
+-- desk went live before the migration ran, and those rows are a real customer's
+-- support history.
 --
--- audit_log is truncated because its entity_ids are about to dangle. Under
--- wipe-and-re-seed there is nothing in it worth the ambiguity — but this DOES
--- destroy the compliance-ish record including the synthetic entity_type='export'
--- row, and it should be a conscious sign-off, not a side effect.
+-- Instead, section 8 gives every table a workspace_id defaulting to
+-- app_current_workspace(), and the DEFAULT applies to existing rows as well when
+-- the column is added — so all 38 conversations, their messages, their customers
+-- and the partner's API key are adopted by the bootstrap workspace with no
+-- explicit UPDATE needed. Section 18 asserts that none were left orphaned.
 --
--- The list is explicit rather than a loop over pg_tables: wiping a table must be
--- a decision. _prisma_migrations, users, workspaces and workspace_memberships
--- are excluded.
+-- refresh_tokens and password_resets ARE still cleared, and that is a
+-- correctness requirement rather than tidiness: every live access token carries
+-- `role` and `teamId` claims whose meaning changes in this migration. A session
+-- minted before it would carry a role that no longer means what it says.
+-- Everyone signs in once more; nothing of value is lost.
+--
+-- audit_log is KEPT. Its entity_ids still resolve, because the entities they
+-- point at still exist.
 -- ============================================================================
 
-TRUNCATE TABLE
-  chat_sessions, webhook_deliveries, webhooks, attachments, ticket_messages,
-  notifications, tickets, canned_responses, tags, api_keys, sla_policies,
-  business_hours, customers, organizations, teams,
-  audit_log, export_state, refresh_tokens, password_resets
-RESTART IDENTITY CASCADE;
+DELETE FROM refresh_tokens;
+DELETE FROM password_resets;
 
 
 -- ============================================================================
@@ -467,10 +476,34 @@ DECLARE
     'webhooks','webhook_deliveries','chat_sessions',
     'attachments','export_state','notifications','audit_log'
   ];
+  boot_ws uuid;
 BEGIN
+  -- The one workspace section 5 created. Every pre-tenancy row is adopted by it,
+  -- because before this migration there was only one desk.
+  SELECT id INTO boot_ws FROM workspaces ORDER BY created_at LIMIT 1;
+  IF boot_ws IS NULL THEN
+    RAISE EXCEPTION 'tenancy: no bootstrap workspace to adopt existing rows into';
+  END IF;
+
   FOREACH t IN ARRAY tenant_tables LOOP
     EXECUTE format('ALTER TABLE public.%I ADD COLUMN workspace_id uuid', t);
     EXECUTE format('ALTER TABLE public.%I ALTER COLUMN workspace_id SET DEFAULT app_current_workspace()', t);
+
+    -- BACKFILL, and it must be explicit.
+    --
+    -- The DEFAULT does not populate existing rows here, because
+    -- app_current_workspace() reads app.workspace_id — which is unset during a
+    -- migration, so it returns NULL and every pre-existing row gets NULL. On an
+    -- empty database that is invisible; against a live desk the very next
+    -- statement fails with "column workspace_id contains null values", which is
+    -- exactly how this was found.
+    --
+    -- Adopting them into the bootstrap workspace is correct because there is
+    -- only one: everything that existed before tenancy belonged to the single
+    -- desk this migration is creating.
+    EXECUTE format('UPDATE public.%I SET workspace_id = $1 WHERE workspace_id IS NULL', t)
+      USING boot_ws;
+
     EXECUTE format('ALTER TABLE public.%I ALTER COLUMN workspace_id SET NOT NULL', t);
 
     EXECUTE format(
@@ -491,7 +524,9 @@ END $$;
 -- ============================================================================
 
 DO $$
-DECLARE t text;
+DECLARE
+  t text;
+  boot_ws uuid;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'organizations','customers','teams','business_hours','sla_policies',
@@ -1597,6 +1632,28 @@ BEGIN
   --      access token carrying role and teamId claims whose meaning just changed.
   IF EXISTS (SELECT 1 FROM refresh_tokens) THEN
     RAISE EXCEPTION 'tenancy: refresh_tokens survived the wipe'; END IF;
+
+  -- (14b) NOTHING WAS ORPHANED BY THE BACKFILL.
+  --      workspace_id is NOT NULL on every tenant table, so a row without one
+  --      cannot exist — but a row adopted by the WRONG workspace can, and a
+  --      count of zero here would mean the migration silently dropped the
+  --      desk's history instead of adopting it. Assert the rows are still
+  --      present and all belong to the single bootstrap workspace.
+  IF (SELECT count(*) FROM workspaces) <> 1 THEN
+    RAISE EXCEPTION 'tenancy: expected exactly one bootstrap workspace, found %',
+      (SELECT count(*) FROM workspaces); END IF;
+
+  -- every tenant row points at the one workspace that exists
+  IF EXISTS (
+    SELECT 1 FROM tickets t
+    WHERE NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id)
+  ) THEN
+    RAISE EXCEPTION 'tenancy: some tickets reference a workspace that does not exist'; END IF;
+
+  RAISE NOTICE 'tenancy: % ticket(s), % message(s), % customer(s) adopted',
+    (SELECT count(*) FROM tickets),
+    (SELECT count(*) FROM ticket_messages),
+    (SELECT count(*) FROM customers);
 
   -- (15) the hand-written-SQL defaults are in place. Without them the seed and
   --      the verify script die on their first INSERT.

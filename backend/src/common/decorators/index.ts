@@ -22,10 +22,25 @@ export const AllowApiKey = () => SetMetadata(ALLOW_API_KEY, true);
 export interface Principal {
   kind: 'user' | 'api_key';
   id: string;
+  /**
+   * The tenant this request is acting in — the workspace named by the caller
+   * (or the only one, while there is only one), resolved by AuthGuard.
+   *
+   * Required, not optional: every authenticated request happens inside exactly
+   * one workspace, and an optional field here would cost every `where` clause in
+   * the codebase a non-null assertion, which is precisely where a tenant filter
+   * gets quietly dropped.
+   */
+  workspaceId: string;
+  /**
+   * For a user: their role ON THIS DESK, read from the workspace_memberships row
+   * for `workspaceId`. One human can be an admin of one workspace and an agent
+   * on another, so this is never a property of the person.
+   */
   role?: Role; // users only
   /**
-   * For a user: the team they belong to.
-   * For an API key: the team the key is confined to, or null for instance-wide.
+   * For a user: the team they belong to IN THIS WORKSPACE.
+   * For an API key: the team the key is confined to, or null for workspace-wide.
    * Either way it is the row-level scope — see TeamScopeService.
    */
   teamId?: string | null;

@@ -17,6 +17,23 @@ const at = (msAgo: number) => new Date(T0 - msAgo);
 async function main() {
   console.log('Seeding plumo_cs…');
 
+  // ---- workspace ----
+  // Everything below belongs to a workspace now, and every tenant table
+  // defaults workspace_id to app_current_workspace(). The seed runs outside a
+  // request, so nothing has bound that GUC — bind it here, for the whole
+  // session, or the very first insert fails a NOT NULL constraint.
+  //
+  // Note `false` (session-local, not transaction-local): the seed is one long
+  // script of separate statements, unlike a request handler where the binding
+  // is transaction-scoped on a pooled connection.
+  const workspace = await prisma.workspace.upsert({
+    where: { slug: 'plumo' },
+    update: {},
+    create: { slug: 'plumo', name: 'Plumo' },
+  });
+  const workspaceId = workspace.id;
+  await prisma.$executeRawUnsafe(`SELECT set_config('app.workspace_id', $1, false)`, workspaceId);
+
   // ---- teams ----
   const tier1 = await prisma.team.create({ data: { name: 'Tier 1', description: 'Front-line support' } });
   const billing = await prisma.team.create({ data: { name: 'Billing', description: 'Payments and invoicing' } });
@@ -36,8 +53,12 @@ async function main() {
   ];
   const users: Record<string, string> = {};
   for (const [key, name, role, team, email] of userSeeds) {
-    const u = await prisma.user.create({
-      data: { name, role, email, teamId: teamId[team], passwordHash },
+    // The account is global; the role and team are per-workspace, so they move
+    // to the membership. A user seeded into two workspaces would get two rows
+    // here and could hold a different role in each.
+    const u = await prisma.user.create({ data: { name, email, passwordHash } });
+    await prisma.workspaceMembership.create({
+      data: { workspaceId, userId: u.id, role, teamId: teamId[team] },
     });
     users[key] = u.id;
   }

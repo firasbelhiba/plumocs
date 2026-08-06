@@ -15,9 +15,9 @@ describe('RolesGuard', () => {
   const ctxFor = (principal: Principal | undefined) =>
     ({ switchToHttp: () => ({ getRequest: () => ({ principal }) }), getHandler: () => null, getClass: () => null }) as unknown as ExecutionContext;
 
-  const agent: Principal = { kind: 'user', id: 'a', role: 'agent', teamId: 't1' };
-  const lead: Principal = { kind: 'user', id: 'l', role: 'lead', teamId: 't1' };
-  const admin: Principal = { kind: 'user', id: 'ad', role: 'admin', teamId: 't1' };
+  const agent: Principal = { kind: 'user', workspaceId: 'w1', id: 'a', role: 'agent', teamId: 't1' };
+  const lead: Principal = { kind: 'user', workspaceId: 'w1', id: 'l', role: 'lead', teamId: 't1' };
+  const admin: Principal = { kind: 'user', workspaceId: 'w1', id: 'ad', role: 'admin', teamId: 't1' };
 
   it('lets public routes through (no principal)', () => {
     expect(makeGuard({ roles: ['admin'] }).canActivate(ctxFor(undefined))).toBe(true);
@@ -49,7 +49,7 @@ describe('RolesGuard', () => {
   });
 
   describe('machine principals', () => {
-    const key = (scopes: string[]): Principal => ({ kind: 'api_key', id: 'k', scopes });
+    const key = (scopes: string[]): Principal => ({ kind: 'api_key', workspaceId: 'w1', id: 'k', scopes });
 
     it('grants a key holding the required scope', () => {
       const guard = makeGuard({ scopes: ['tickets:write'] });

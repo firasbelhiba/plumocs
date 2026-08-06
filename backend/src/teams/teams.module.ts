@@ -21,20 +21,42 @@ export class TeamsService {
     private readonly audit: AuditService,
   ) {}
 
-  list() {
-    return this.prisma.team.findMany({
-      include: { users: { select: { id: true, name: true, role: true, availability: true } } },
-      orderBy: { name: 'asc' },
-    });
+  /**
+   * Team membership is a property of a workspace membership now, not of the
+   * user — so `Team.users` is gone and members are reached through
+   * WorkspaceMembership. The `users` key is rebuilt on the way out so the
+   * console keeps receiving the shape it already renders.
+   */
+  private static readonly memberInclude = (workspaceId: string) => ({
+    memberships: {
+      where: { workspaceId },
+      select: { role: true, availability: true, user: { select: { id: true, name: true } } },
+    },
+  });
+
+  private static flatten<T extends { memberships: { role: string; availability: string; user: { id: string; name: string } }[] }>(team: T) {
+    const { memberships, ...rest } = team;
+    return { ...rest, users: memberships.map((m) => ({ ...m.user, role: m.role, availability: m.availability })) };
   }
 
-  async get(id: string) {
-    const team = await this.prisma.team.findUnique({
-      where: { id },
-      include: { users: { select: { id: true, name: true, role: true, availability: true } } },
+  async list(actor: Principal) {
+    const teams = await this.prisma.team.findMany({
+      where: { workspaceId: actor.workspaceId },
+      include: TeamsService.memberInclude(actor.workspaceId),
+      orderBy: { name: 'asc' },
+    });
+    return teams.map(TeamsService.flatten);
+  }
+
+  async get(id: string, actor: Principal) {
+    const team = await this.prisma.team.findFirst({
+      // findFirst with the workspace filter: a team in another workspace must
+      // read as absent, not as a team with no members.
+      where: { id, workspaceId: actor.workspaceId },
+      include: TeamsService.memberInclude(actor.workspaceId),
     });
     if (!team) throw new NotFoundException('Team not found');
-    return team;
+    return TeamsService.flatten(team);
   }
 
   async create(dto: TeamDto, actor: Principal) {
@@ -50,7 +72,13 @@ export class TeamsService {
   }
 
   async remove(id: string, actor: Principal) {
-    await this.prisma.user.updateMany({ where: { teamId: id }, data: { teamId: null } });
+    await this.get(id, actor); // 404s rather than deleting another workspace's team
+    // Scoped to this workspace: the same team id cannot exist elsewhere, but
+    // writing the filter anyway keeps the statement true if that ever changes.
+    await this.prisma.workspaceMembership.updateMany({
+      where: { workspaceId: actor.workspaceId, teamId: id },
+      data: { teamId: null },
+    });
     await this.prisma.team.delete({ where: { id } });
     await this.audit.write({ actor, entityType: 'team', entityId: id, action: 'delete' });
     return { ok: true };
@@ -58,9 +86,12 @@ export class TeamsService {
 
   /** Leads may edit membership of their own team only; admins any team. */
   async setMembership(teamId: string, userId: string, join: boolean, actor: Principal) {
-    const target = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, role: true, teamId: true },
+    // The membership IS the thing being edited now: role and team both live on
+    // it. Looking the user up instead would find people who belong to another
+    // desk entirely and let a lead here move them.
+    const target = await this.prisma.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId } },
+      select: { role: true, teamId: true, user: { select: { id: true, name: true } } },
     });
     if (!target) throw new NotFoundException('User not found');
 
@@ -72,11 +103,12 @@ export class TeamsService {
       if (target.role !== 'agent') throw new ForbiddenException('Only admins can move leads and admins between teams');
     }
 
-    const user = await this.prisma.user.update({
-      where: { id: userId },
+    const updated = await this.prisma.workspaceMembership.update({
+      where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId } },
       data: { teamId: join ? teamId : null },
-      select: { id: true, name: true, teamId: true },
+      select: { teamId: true, user: { select: { id: true, name: true } } },
     });
+    const user = { ...updated.user, teamId: updated.teamId };
     await this.audit.write({
       actor, entityType: 'team', entityId: teamId,
       action: join ? 'member.add' : 'member.remove', diff: { userId },
@@ -91,13 +123,13 @@ export class TeamsController {
   constructor(private readonly teams: TeamsService) {}
 
   @Get()
-  list() {
-    return this.teams.list();
+  list(@CurrentUser() principal: Principal) {
+    return this.teams.list(principal);
   }
 
   @Get(':id')
-  get(@Param('id', ParseUUIDPipe) id: string) {
-    return this.teams.get(id);
+  get(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() principal: Principal) {
+    return this.teams.get(id, principal);
   }
 
   @Post()

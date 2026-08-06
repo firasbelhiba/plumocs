@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { RealtimeService } from './realtime.service';
+import { WorkspaceContextService } from '../common/workspace/workspace-context.service';
 
 /**
  * WebSocket gateway (§14) — authenticated by the same JWT
@@ -40,6 +41,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection {
     private readonly realtime: RealtimeService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly workspaces: WorkspaceContextService,
   ) {}
 
   afterInit() {
@@ -72,15 +74,27 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection {
       const payload = await this.jwt.verifyAsync(token ?? '', {
         secret: this.config.get<string>('jwt.accessSecret'),
       });
+      // Rooms are named from the MEMBERSHIP, not from the token. role and teamId
+      // stopped being claims when they became per-workspace, and reading them
+      // off the payload now would silently produce a `role:undefined` room and
+      // no team room at all — a socket that connects, stays connected, and
+      // receives nothing. Same lookup the HTTP guard performs, so a socket can
+      // never be scoped more widely than the requests on the same credential.
+      const slug =
+        (client.handshake.auth?.workspaceSlug as string | undefined) ??
+        this.workspaces.slugFromHeaders(client.handshake.headers as Record<string, unknown>);
+      const membership = await this.workspaces.resolveForUser(payload.sub, slug);
+
       client.data.userId = payload.sub;
-      client.data.role = payload.role;
+      client.data.role = membership.role;
+      client.data.workspaceId = membership.workspaceId;
       client.join(`user:${payload.sub}`);
-      client.join(`role:${payload.role}`);
-      if (payload.teamId) client.join(`team:${payload.teamId}`);
+      client.join(`role:${membership.role}`);
+      if (membership.teamId) client.join(`team:${membership.teamId}`);
       // leads see their team's traffic; admins see everything
-      if (payload.role === 'admin') client.join('role:lead');
+      if (membership.role === 'admin') client.join('role:lead');
     } catch {
-      this.logger.warn('WS connection rejected (bad token)');
+      this.logger.warn('WS connection rejected (bad token or no workspace membership)');
       client.disconnect(true);
     }
   }

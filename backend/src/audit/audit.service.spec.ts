@@ -45,14 +45,14 @@ describe('AuditService', () => {
 
     it('records a human actor', async () => {
       const { service, prisma } = makeService();
-      const actor: Principal = { kind: 'user', id: 'u1', role: 'lead', teamId: 't1' };
+      const actor: Principal = { kind: 'user', workspaceId: 'w1', id: 'u1', role: 'lead', teamId: 't1' };
       await service.write({ actor, entityType: 'ticket', entityId: 'tk1', action: 'update', diff: { a: 1 } });
       expect(call(prisma)).toMatchObject({ actorType: 'user', actorId: 'u1', action: 'update' });
     });
 
     it('records a machine actor', async () => {
       const { service, prisma } = makeService();
-      const actor: Principal = { kind: 'api_key', id: 'k1', scopes: ['tickets:write'] };
+      const actor: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k1', scopes: ['tickets:write'] };
       await service.write({ actor, entityType: 'ticket', entityId: 'tk1', action: 'create' });
       expect(call(prisma)).toMatchObject({ actorType: 'api_key', actorId: 'k1' });
     });

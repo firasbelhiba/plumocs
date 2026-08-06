@@ -5,6 +5,8 @@ import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueProducer } from '../queue/queue.producer';
+import { Principal } from '../common/decorators';
+import { ResolvedMembership, WorkspaceContextService } from '../common/workspace/workspace-context.service';
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
@@ -22,20 +24,34 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly queue: QueueProducer,
+    private readonly workspaces: WorkspaceContextService,
   ) {}
 
-  async login(email: string, password: string) {
+  /**
+   * @param workspaceSlug the desk being signed in to, from the X-Workspace-Slug
+   *        header. Optional while only one workspace exists.
+   */
+  async login(email: string, password: string, workspaceSlug?: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.isActive) throw new UnauthorizedException('Incorrect email or password');
     const ok = await argon2.verify(user.passwordHash, password).catch(() => false);
     if (!ok) throw new UnauthorizedException('Incorrect email or password');
 
+    // Identity is global, authority is per desk — so the membership is resolved
+    // here and NOT stored in the token. It is resolved before the tokens are
+    // minted because the login response carries role and teamId, which the
+    // console builds its navigation from; a session with no desk would render an
+    // empty shell rather than an error. Throws 403 when this human has no
+    // membership: authentication succeeded, there is simply nothing here for
+    // them, and that is a different answer from "wrong password".
+    const membership = await this.workspaces.resolveForUser(user.id, workspaceSlug);
+
     await this.prisma.user.update({ where: { id: user.id }, data: { lastActiveAt: new Date() } });
-    return this.issueTokens(user);
+    return this.issueTokens(user, membership);
   }
 
   /** Refresh-token rotation: verify hash, revoke old, issue new pair. */
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string, workspaceSlug?: string) {
     let payload: { sub: string; jti: string };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
@@ -54,7 +70,10 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || !user.isActive) throw new UnauthorizedException('User disabled');
-    return this.issueTokens(user);
+    // Re-resolved on every refresh, not carried over from the previous pair: a
+    // membership revoked or downgraded mid-session must not be renewed by it.
+    const membership = await this.workspaces.resolveForUser(user.id, workspaceSlug);
+    return this.issueTokens(user, membership);
   }
 
   async logout(refreshToken: string) {
@@ -72,16 +91,32 @@ export class AuthService {
     return { ok: true };
   }
 
-  async me(userId: string) {
+  async me(principal: Principal) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: principal.id },
       select: {
-        id: true, email: true, name: true, role: true, teamId: true,
-        availability: true, avatarUrl: true, lastActiveAt: true, createdAt: true,
+        id: true, email: true, name: true,
+        avatarUrl: true, lastActiveAt: true, createdAt: true,
       },
     });
     if (!user) throw new UnauthorizedException();
-    return user;
+
+    // Same response shape as before, assembled from two rows instead of one:
+    // role, teamId and availability are per-desk. role/teamId are already on the
+    // principal — AuthGuard resolved them for THIS workspace — so only
+    // availability needs the membership row, and reading it by the composite key
+    // is what keeps a second desk's shift state from leaking in here.
+    const membership = await this.prisma.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId: principal.workspaceId, userId: principal.id } },
+      select: { availability: true },
+    });
+
+    return {
+      ...user,
+      role: principal.role,
+      teamId: principal.teamId ?? null,
+      availability: membership?.availability ?? 'available',
+    };
   }
 
   /** Always answers 200 — never leaks whether the address exists. */
@@ -143,12 +178,20 @@ export class AuthService {
     return { ok: true };
   }
 
-  private async issueTokens(user: { id: string; email: string; name: string; role: string; teamId: string | null }) {
+  private async issueTokens(
+    user: { id: string; email: string; name: string },
+    membership: ResolvedMembership,
+  ) {
     const accessTtl = this.config.get<string>('jwt.accessTtl') ?? '15m';
     const refreshTtl = this.config.get<string>('jwt.refreshTtl') ?? '30d';
 
+    // role and teamId are NO LONGER CLAIMS. They are per-workspace, and a token
+    // is not: the same human holding this token can address a second desk with a
+    // different role on the next request. AuthGuard re-resolves both from the
+    // membership every time. They stay in the response body below because that
+    // is the console's bootstrap payload, not a credential.
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, role: user.role, teamId: user.teamId, name: user.name },
+      { sub: user.id, name: user.name },
       { secret: this.config.get<string>('jwt.accessSecret'), expiresIn: accessTtl },
     );
 
@@ -168,7 +211,13 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, teamId: user.teamId },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: membership.role,
+        teamId: membership.teamId,
+      },
     };
   }
 }

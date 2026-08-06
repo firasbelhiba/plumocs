@@ -45,12 +45,31 @@ export function handlingOf(t: {
   return t.assigneeId ? 'assigned' : 'escalated';
 }
 
-const TICKET_INCLUDE = {
-  customer: { include: { organization: true } },
-  assignee: { select: { id: true, name: true, role: true, availability: true } },
-  team: { select: { id: true, name: true } },
-  slaPolicy: { select: { id: true, name: true } },
-} satisfies Prisma.TicketInclude;
+/**
+ * A function of the workspace now, not a constant.
+ *
+ * `role` and `availability` are properties of a membership, and Prisma cannot
+ * correlate a nested filter against the parent row's workspace_id — so the
+ * workspace has to be supplied by the caller. Every call site already knows it
+ * from the Principal.
+ */
+const ticketInclude = (workspaceId: string) =>
+  ({
+    customer: { include: { organization: true } },
+    assignee: {
+      select: {
+        id: true,
+        name: true,
+        memberships: {
+          where: { workspaceId },
+          select: { role: true, availability: true },
+          take: 1,
+        },
+      },
+    },
+    team: { select: { id: true, name: true } },
+    slaPolicy: { select: { id: true, name: true } },
+  }) satisfies Prisma.TicketInclude;
 
 /**
  * Options for in-process callers of `create()`.
@@ -139,7 +158,7 @@ export class TicketsService {
             }
           : {}),
       },
-      include: TICKET_INCLUDE,
+      include: ticketInclude(actor.workspaceId),
     });
 
     await this.audit.write({ actor, entityType: 'ticket', entityId: ticket.id, action: 'create' });
@@ -223,7 +242,8 @@ export class TicketsService {
     // agent who is not looking at it is what turns the unassigned queue into
     // noise and makes the SLA sweep page somebody for a bot's silence.
     const assigneeId =
-      dto.assigneeId ?? (opts.botHandled || !teamId ? null : await this.roundRobinAssignee(teamId));
+      dto.assigneeId ??
+      (opts.botHandled || !teamId ? null : await this.roundRobinAssignee(teamId, actor.workspaceId));
 
     // Final invariant: nobody may create a ticket they could not then read.
     // Cheap here, and it catches whatever the next edit to this method gets wrong.
@@ -261,11 +281,16 @@ export class TicketsService {
   }
 
   /** Round-robin = the available, active agent in the team with the fewest open tickets. */
-  private async roundRobinAssignee(teamId: string): Promise<string | null> {
-    const agents = await this.prisma.user.findMany({
-      where: { teamId, isActive: true, availability: 'available' },
-      select: { id: true },
+  private async roundRobinAssignee(teamId: string, workspaceId: string): Promise<string | null> {
+    // Membership, not user: team, availability and per-desk activation all
+    // live there now. `user: { isActive: true }` stays as well — a globally
+    // disabled account must not be handed work by any desk, even one whose
+    // membership row still says active.
+    const members = await this.prisma.workspaceMembership.findMany({
+      where: { workspaceId, teamId, isActive: true, availability: 'available', user: { isActive: true } },
+      select: { userId: true },
     });
+    const agents = members.map((m) => ({ id: m.userId }));
     if (agents.length === 0) return null;
     const counts = await this.prisma.ticket.groupBy({
       by: ['assigneeId'],
@@ -289,7 +314,16 @@ export class TicketsService {
         and.push({ status: { in: openStatuses } });
         break;
       case 'unassigned':
-        and.push({ status: { in: openStatuses }, assigneeId: null });
+        // `no one yet` is the queue agents PULL from, so it must only hold work
+        // waiting on a human. A conversation the bot still owns is not waiting
+        // on anyone — it is deliberately unassigned — and listing it here makes
+        // the one view agents rely on mostly noise. Escalated bot conversations
+        // DO belong: handedOffAt is set, so they pass this filter.
+        and.push({
+          status: { in: openStatuses },
+          assigneeId: null,
+          NOT: { createdByApiKeyId: { not: null }, handedOffAt: null },
+        });
         break;
       case 'my-open':
         and.push({ status: { in: openStatuses }, assigneeId: actor.id });
@@ -309,16 +343,22 @@ export class TicketsService {
         and.push({ status: { in: ['resolved', 'closed'] } });
         break;
       case 'bot-handled':
-        // Every conversation a chatbot opened, whatever its status — including
-        // the ones it answered and resolved without a human.
+        // Conversations the AI owns, or owned from start to finish.
         //
-        // Those are deliberately absent from `all-open` (they are resolved) and
-        // from `unassigned` (nobody should be paged for work the bot finished),
-        // which made the AI's output invisible unless you went looking in
-        // `recently closed` among the human tickets. Visibility and queue
-        // priority are different things; this view is the first without being
-        // the second.
-        and.push({ createdByApiKeyId: { not: null } });
+        // handedOffAt IS NULL is the whole definition. Once a human takes over —
+        // by handing off, or simply by replying — the conversation stops being
+        // the AI's and belongs in the human queues instead. Leaving it here too
+        // would double-count it and make the label untrue: an escalated ticket
+        // is precisely one the AI could NOT handle.
+        //
+        // Bot-RESOLVED conversations do stay, because the AI handled those to
+        // completion. They are absent from `all-open` (resolved) and from
+        // `unassigned` (nobody should be paged for finished work), so without
+        // this view the AI's output would be invisible.
+        //
+        // For "everything the bot ever touched", including escalations, filter
+        // by channel = chatbot instead.
+        and.push({ createdByApiKeyId: { not: null }, handedOffAt: null });
         break;
       case 'bot-open':
         // Still with the bot: it opened the conversation, nobody has handed it
@@ -370,7 +410,7 @@ export class TicketsService {
       this.prisma.ticket.findMany({
         where,
         include: {
-          ...TICKET_INCLUDE,
+          ...ticketInclude(actor.workspaceId),
           // the latest message powers the row snippet in the console;
           // machines never see internal notes (mirrors get())
           messages: {
@@ -414,7 +454,12 @@ export class TicketsService {
     const [allOpen, unassigned, myOpen, breaching, pending, resolved, botHandled, botOpen, byStatus, byPriority, byChannel, tagRows] =
       await Promise.all([
         this.prisma.ticket.count({ where: openWhere }),
-        this.prisma.ticket.count({ where: { AND: [openWhere, { assigneeId: null }] } }),
+        // mirrors the 'unassigned' view exactly — see the comment there
+        this.prisma.ticket.count({
+          where: {
+            AND: [openWhere, { assigneeId: null, NOT: { createdByApiKeyId: { not: null }, handedOffAt: null } }],
+          },
+        }),
         this.prisma.ticket.count({ where: { AND: [openWhere, { assigneeId: actor.id }] } }),
         this.prisma.ticket.count({
           where: {
@@ -426,8 +471,11 @@ export class TicketsService {
         }),
         this.prisma.ticket.count({ where: { AND: [visibility, { status: { in: ['pending', 'on_hold'] } }] } }),
         this.prisma.ticket.count({ where: { AND: [visibility, { status: { in: ['resolved', 'closed'] } }] } }),
-        // everything a chatbot opened, in any state
-        this.prisma.ticket.count({ where: { AND: [visibility, { createdByApiKeyId: { not: null } }] } }),
+        // must mirror the 'bot-handled' view above exactly — a badge that counts
+        // something different from what the tab shows is worse than no badge
+        this.prisma.ticket.count({
+          where: { AND: [visibility, { createdByApiKeyId: { not: null }, handedOffAt: null }] },
+        }),
         // still with the bot: never handed off and not finished
         this.prisma.ticket.count({
           where: {
@@ -479,7 +527,7 @@ export class TicketsService {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id },
       include: {
-        ...TICKET_INCLUDE,
+        ...ticketInclude(actor.workspaceId),
         messages: { orderBy: { createdAt: 'asc' }, include: { attachments: true } },
       },
     });
@@ -546,7 +594,7 @@ export class TicketsService {
 
     if (Object.keys(data).length === 0) return this.get(id, actor);
 
-    const updated = await this.prisma.ticket.update({ where: { id }, data, include: TICKET_INCLUDE });
+    const updated = await this.prisma.ticket.update({ where: { id }, data, include: ticketInclude(actor.workspaceId) });
     await this.audit.write({ actor, entityType: 'ticket', entityId: id, action: 'update', diff });
 
     this.queue.deliverWebhooks(
@@ -611,11 +659,16 @@ export class TicketsService {
       // ticket in that person's inbox — agents see anything assigned to them,
       // team or not — which is a leak the key's read scope would never allow.
       if (!actor.teamId || !newAssignee) return;
-      const target = await this.prisma.user.findUnique({
-        where: { id: newAssignee },
-        select: { teamId: true, isActive: true },
+      // The membership carries the team and the per-desk activation. Checking
+      // the user row instead would compare a column that no longer exists and,
+      // once there are two workspaces, would have compared the wrong desk's.
+      const target = await this.prisma.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: newAssignee } },
+        select: { teamId: true, isActive: true, user: { select: { isActive: true } } },
       });
-      if (!target || !target.isActive) throw new UnprocessableEntityException('That person is not available');
+      if (!target || !target.isActive || !target.user.isActive) {
+        throw new UnprocessableEntityException('That person is not available');
+      }
       if (target.teamId !== actor.teamId) {
         throw new ForbiddenException('Outside this key’s team');
       }
@@ -632,11 +685,16 @@ export class TicketsService {
     }
     if (actor.role === 'lead' && newAssignee && newAssignee !== actor.id) {
       // a lead hands work to their own people, not another team's
-      const target = await this.prisma.user.findUnique({
-        where: { id: newAssignee },
-        select: { teamId: true, isActive: true },
+      // The membership carries the team and the per-desk activation. Checking
+      // the user row instead would compare a column that no longer exists and,
+      // once there are two workspaces, would have compared the wrong desk's.
+      const target = await this.prisma.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: newAssignee } },
+        select: { teamId: true, isActive: true, user: { select: { isActive: true } } },
       });
-      if (!target || !target.isActive) throw new UnprocessableEntityException('That person is not available');
+      if (!target || !target.isActive || !target.user.isActive) {
+        throw new UnprocessableEntityException('That person is not available');
+      }
       if (target.teamId !== actor.teamId) {
         throw new ForbiddenException('Leads can only assign people in their own team');
       }

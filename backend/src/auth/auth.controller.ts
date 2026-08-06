@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { CurrentUser, Principal, Public } from '../common/decorators';
+import { WORKSPACE_SLUG_HEADER } from '../common/workspace/workspace-context.service';
 import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswordDto } from './dto/auth.dto';
 
 @ApiTags('auth')
@@ -14,15 +15,17 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.email, dto.password);
+  // These two routes are @Public, so AuthGuard never runs and no principal
+  // exists to carry the workspace — they take the slug off the wire themselves.
+  login(@Body() dto: LoginDto, @Headers(WORKSPACE_SLUG_HEADER) slug?: string) {
+    return this.auth.login(dto.email, dto.password, slug?.trim() || undefined);
   }
 
   @Public()
   @HttpCode(200)
   @Post('refresh')
-  refresh(@Body() dto: RefreshDto) {
-    return this.auth.refresh(dto.refreshToken);
+  refresh(@Body() dto: RefreshDto, @Headers(WORKSPACE_SLUG_HEADER) slug?: string) {
+    return this.auth.refresh(dto.refreshToken, slug?.trim() || undefined);
   }
 
   @Public()
@@ -49,7 +52,7 @@ export class AuthController {
 
   @Get('me')
   me(@CurrentUser() principal: Principal) {
-    return this.auth.me(principal.id);
+    return this.auth.me(principal);
   }
 
   @HttpCode(200)

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { simpleParser } from 'mailparser';
 import { PrismaService } from '../prisma/prisma.service';
@@ -130,16 +131,35 @@ export class EmailService {
     }
     text = stripQuotedHistory(text);
 
-    // Threading: In-Reply-To / References → subject [Plumo #n] → new ticket
+    // Threading: In-Reply-To / References → subject [Plumo #n] → new ticket.
+    //
+    // Both threading keys are tenant-ambiguous now: ticket numbers restart per
+    // workspace, and email_message_id is only unique within one. So the tenant
+    // has to come from the transaction binding rather than from anything in the
+    // message — the From: line and the subject are unauthenticated, and matching
+    // them globally would let a stranger steer a reply into another desk's
+    // conversation. Resolving it here also keeps the lookups and the writes below
+    // in the same workspace by construction, since workspace_id defaults to
+    // exactly this value.
+    const workspaceId = await this.boundWorkspaceId();
+
     let ticketId: string | null = null;
     if (inReplyTo) {
-      const linked = await this.prisma.ticketMessage.findFirst({ where: { emailMessageId: inReplyTo } });
+      const linked = await this.prisma.ticketMessage.findFirst({
+        where: { workspaceId, emailMessageId: inReplyTo },
+      });
       ticketId = linked?.ticketId ?? null;
     }
     if (!ticketId) {
       const num = ticketNumberFromSubject(subject);
       if (num != null) {
-        const t = await this.prisma.ticket.findUnique({ where: { number: BigInt(num) } });
+        // (workspace_id, number) is UNIQUE in the database but is not declared in
+        // schema.prisma, so Prisma exposes no compound key to findUnique on.
+        // findFirst over both columns is the same index scan with the same single
+        // answer — what must not happen is dropping back to number alone.
+        const t = await this.prisma.ticket.findFirst({
+          where: { workspaceId, number: BigInt(num) },
+        });
         ticketId = t?.id ?? null;
       }
     }
@@ -187,6 +207,33 @@ export class EmailService {
     });
     this.logger.log(`Inbound email opened ticket #${ticket.number}`);
     return ticket.id;
+  }
+
+  /**
+   * The workspace bound to the current transaction.
+   *
+   * Inbound email is the one write path with no Principal to read a workspace
+   * off — the webhook is @Public and the work happens on a queue — so the tenant
+   * is whatever the caller bound with WorkspaceContextService.runInWorkspace().
+   * Reading the binding rather than taking a parameter is deliberate: this is the
+   * same value every workspace_id column default resolves to, so a lookup here
+   * can never disagree with the workspace the message is then written into.
+   *
+   * Unbound means the caller forgot to wrap, which is a bug in the caller and not
+   * a bad email — hence a legible failure here instead of an unscoped read
+   * followed by a not-null violation on the insert.
+   */
+  private async boundWorkspaceId(): Promise<string> {
+    const [row] = await this.prisma.$queryRaw<Array<{ workspaceId: string | null }>>(
+      Prisma.sql`SELECT app_current_workspace() AS "workspaceId"`,
+    );
+    if (!row?.workspaceId) {
+      throw new Error(
+        'Inbound email processed with no workspace bound. Wrap the call in ' +
+          'WorkspaceContextService.runInWorkspace() so the tenant is resolved before threading.',
+      );
+    }
+    return row.workspaceId;
   }
 
   private renderReplyHtml(name: string, body: string, number: number): string {

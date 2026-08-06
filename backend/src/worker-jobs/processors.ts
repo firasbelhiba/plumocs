@@ -202,14 +202,24 @@ export class SlaSweepProcessor extends WorkerHost {
     const teamIds = [...new Set(candidates.map((t) => t.teamId).filter(Boolean))] as string[];
     const leadsByTeam = new Map<string, string[]>();
     if (teamIds.length) {
-      const leads = await this.prisma.user.findMany({
-        where: { teamId: { in: teamIds }, role: 'lead', isActive: true },
-        select: { id: true, teamId: true },
+      // Memberships, not users — role and team both live there now.
+      //
+      // No workspace filter is needed and none is wanted: these team ids came
+      // from the tickets being swept, and a team belongs to exactly one
+      // workspace, so filtering on them is already workspace-scoped. Adding a
+      // workspace filter here would mean picking ONE, and this sweep is
+      // deliberately cross-workspace — it runs unattended over every desk.
+      //
+      // `user: { isActive: true }` as well as the membership's own flag: a
+      // disabled account should not be paged by any desk.
+      const leads = await this.prisma.workspaceMembership.findMany({
+        where: { teamId: { in: teamIds }, role: 'lead', isActive: true, user: { isActive: true } },
+        select: { userId: true, teamId: true },
       });
       for (const l of leads) {
         if (!l.teamId) continue;
         const arr = leadsByTeam.get(l.teamId) ?? [];
-        arr.push(l.id);
+        arr.push(l.userId);
         leadsByTeam.set(l.teamId, arr);
       }
     }
@@ -348,11 +358,33 @@ export class ExportDailyProcessor extends WorkerHost {
    * to the log in dev — swap `emit` for the partner call in production.
    */
   async process(_job: Job) {
-    const state = await this.prisma.exportState.findUnique({ where: { id: 'daily' } });
+    // One export run per workspace.
+    //
+    // The watermark is per-workspace now (export_states is keyed on
+    // (workspace_id, id)), and it has to be: a single shared watermark would
+    // let a busy desk drag every other desk's cursor past rows they had never
+    // exported, silently skipping them for good.
+    //
+    // app_active_workspaces() is the supported enumeration for unattended work
+    // — a SECURITY DEFINER function, because the worker has no request and
+    // therefore no bound workspace, and once RLS is on a plain SELECT from
+    // here returns nothing.
+    const rows = await this.prisma.$queryRaw<{ app_active_workspaces: string }[]>`
+      SELECT app_active_workspaces()`;
+    const workspaceIds = rows.map((r) => r.app_active_workspaces);
+    for (const workspaceId of workspaceIds) {
+      await this.exportWorkspace(workspaceId);
+    }
+  }
+
+  private async exportWorkspace(workspaceId: string) {
+    const state = await this.prisma.exportState.findUnique({
+      where: { workspaceId_id: { workspaceId, id: 'daily' } },
+    });
     const since = state?.watermark ?? new Date(0);
 
     const tickets = await this.prisma.ticket.findMany({
-      where: { updatedAt: { gte: since } },
+      where: { workspaceId, updatedAt: { gte: since } },
       select: {
         id: true, number: true, subject: true, status: true, priority: true,
         channel: true, outcome: true, createdAt: true, updatedAt: true,
@@ -370,8 +402,8 @@ export class ExportDailyProcessor extends WorkerHost {
     this.emit(tickets);
 
     await this.prisma.exportState.upsert({
-      where: { id: 'daily' },
-      create: { id: 'daily', watermark: newWatermark, lastCount: tickets.length },
+      where: { workspaceId_id: { workspaceId, id: 'daily' } },
+      create: { workspaceId, id: 'daily', watermark: newWatermark, lastCount: tickets.length },
       update: { watermark: newWatermark, lastCount: tickets.length, lastRunAt: new Date() },
     });
     this.logger.log(

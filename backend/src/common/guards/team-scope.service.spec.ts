@@ -10,12 +10,12 @@ import type { Principal } from '../decorators';
 describe('TeamScopeService', () => {
   const scope = new TeamScopeService(null as never);
 
-  const admin: Principal = { kind: 'user', id: 'u-admin', role: 'admin', teamId: 't1' };
-  const lead: Principal = { kind: 'user', id: 'u-lead', role: 'lead', teamId: 't1' };
-  const agent: Principal = { kind: 'user', id: 'u-agent', role: 'agent', teamId: 't1' };
-  const orphanLead: Principal = { kind: 'user', id: 'u-ol', role: 'lead', teamId: null };
-  const orphanAgent: Principal = { kind: 'user', id: 'u-oa', role: 'agent', teamId: null };
-  const machine: Principal = { kind: 'api_key', id: 'k1', scopes: ['tickets:read'] };
+  const admin: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-admin', role: 'admin', teamId: 't1' };
+  const lead: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-lead', role: 'lead', teamId: 't1' };
+  const agent: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-agent', role: 'agent', teamId: 't1' };
+  const orphanLead: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-ol', role: 'lead', teamId: null };
+  const orphanAgent: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-oa', role: 'agent', teamId: null };
+  const machine: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k1', scopes: ['tickets:read'] };
 
   describe('visibilityWhere', () => {
     it('admins are unrestricted', () => {

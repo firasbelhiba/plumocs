@@ -10,9 +10,9 @@ import type { Principal } from '../common/decorators';
  * Collaborators are stubbed — this is about the decision logic, not Prisma.
  */
 describe('TicketsService', () => {
-  const admin: Principal = { kind: 'user', id: 'u-admin', role: 'admin', teamId: 't1' };
-  const lead: Principal = { kind: 'user', id: 'u-lead', role: 'lead', teamId: 't1' };
-  const agent: Principal = { kind: 'user', id: 'u-agent', role: 'agent', teamId: 't1' };
+  const admin: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-admin', role: 'admin', teamId: 't1' };
+  const lead: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-lead', role: 'lead', teamId: 't1' };
+  const agent: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-agent', role: 'agent', teamId: 't1' };
 
   const baseTicket = {
     id: 'tk-1',
@@ -36,6 +36,26 @@ describe('TicketsService', () => {
     const prisma = {
       ticket: { findUnique: jest.fn().mockResolvedValue(ticket), update: updateSpy, delete: jest.fn().mockResolvedValue(ticket) },
       user: { findUnique: jest.fn().mockImplementation(({ where }) => Promise.resolve(users[where.id] ?? null)) },
+      // Team and activation moved to the membership, so the guard reads that
+      // table now. Derived from the SAME `users` fixture so each test still
+      // states its case in one place — only the table underneath changed.
+      workspaceMembership: {
+        findUnique: jest.fn().mockImplementation(({ where }) => {
+          const u = users[where.workspaceId_userId.userId] as
+            | { teamId?: string | null; isActive?: boolean; role?: string }
+            | undefined;
+          return Promise.resolve(
+            u
+              ? {
+                  teamId: u.teamId ?? null,
+                  role: u.role ?? 'agent',
+                  isActive: u.isActive ?? true,
+                  user: { isActive: u.isActive ?? true },
+                }
+              : null,
+          );
+        }),
+      },
     };
     const scope = new TeamScopeService(prisma as never);
     const sla = new SlaService(prisma as never);
@@ -216,8 +236,8 @@ describe('TicketsService', () => {
     // so a machine caller's own team was discarded, dto.teamId was taken on
     // trust, and only agents were checked. A chatbot key bound to one team could
     // file tickets into another and then not be able to read them back.
-    const boundKey: Principal = { kind: 'api_key', id: 'k1', scopes: ['tickets:write'], teamId: 't1' };
-    const unboundKey: Principal = { kind: 'api_key', id: 'k2', scopes: ['tickets:write'], teamId: null };
+    const boundKey: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k1', scopes: ['tickets:write'], teamId: 't1' };
+    const unboundKey: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k2', scopes: ['tickets:write'], teamId: null };
 
     function makeCreateService(users: Record<string, unknown> = {}) {
       const created: Record<string, unknown>[] = [];
@@ -232,6 +252,30 @@ describe('TicketsService', () => {
         team: { findFirst: jest.fn().mockResolvedValue({ id: 't-default' }) },
         user: {
           findUnique: jest.fn().mockImplementation(({ where }) => Promise.resolve(users[where.id] ?? null)),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        // Team and activation moved to the membership, so the guard reads that
+        // table now. Derived from the SAME `users` fixture so each test still
+        // states its case in one place — only the table underneath changed.
+        workspaceMembership: {
+          findUnique: jest.fn().mockImplementation(({ where }) => {
+            const u = users[where.workspaceId_userId.userId] as
+                | { teamId?: string | null; isActive?: boolean; role?: string }
+                | undefined;
+            return Promise.resolve(
+                u
+                  ? {
+                        teamId: u.teamId ?? null,
+                        role: u.role ?? 'agent',
+                        isActive: u.isActive ?? true,
+                        user: { isActive: u.isActive ?? true },
+                    }
+                  : null,
+            );
+          }),
+          // The round-robin pool reads memberships now (it needs availability
+          // and per-desk activation). Empty by default, as user.findMany was —
+          // these tests are about which TEAM is chosen, not who gets it.
           findMany: jest.fn().mockResolvedValue([]),
         },
         customer: { findUniqueOrThrow: jest.fn() },

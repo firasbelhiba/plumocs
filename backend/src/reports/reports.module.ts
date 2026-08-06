@@ -35,21 +35,28 @@ export class ReportsService {
    * them here, not their whole team, because "own performance" is per-person —
    * but the machine and null-team cases must match, and
    * reports-scope.integration.spec.ts asserts that.
+   *
+   * The tenant pin belongs on every branch rather than at the call sites: an
+   * admin's unfiltered branch is `{}`, so a report that added the team scope and
+   * forgot the workspace would aggregate every desk on the instance into one
+   * number. Team ids are only unique per workspace, so even the narrow branches
+   * need it.
    */
   private teamScope(principal: Principal, requestedTeamId?: string): Prisma.TicketWhereInput {
+    const workspaceId = principal.workspaceId;
     if (principal.kind === 'api_key') {
       // a key confined to a team cannot widen its own scope via ?teamId=
-      if (principal.teamId) return { teamId: principal.teamId };
-      return requestedTeamId ? { teamId: requestedTeamId } : {};
+      if (principal.teamId) return { workspaceId, teamId: principal.teamId };
+      return requestedTeamId ? { workspaceId, teamId: requestedTeamId } : { workspaceId };
     }
     if (principal.role === 'admin') {
-      return requestedTeamId ? { teamId: requestedTeamId } : {};
+      return requestedTeamId ? { workspaceId, teamId: requestedTeamId } : { workspaceId };
     }
     if (principal.role === 'lead') {
-      return { teamId: principal.teamId ?? NO_TEAM };
+      return { workspaceId, teamId: principal.teamId ?? NO_TEAM };
     }
     // agents: own tickets only
-    return { assigneeId: principal.id };
+    return { workspaceId, assigneeId: principal.id };
   }
 
   /** The five KPIs behind the console's reports screen. */
@@ -140,25 +147,36 @@ export class ReportsService {
           ? teamId
           : (principal.teamId ?? NO_TEAM);
 
-    const agents = await this.prisma.user.findMany({
+    // The roster comes from workspace_memberships, not users: role and team are
+    // per-desk now, so a user row can no longer answer "who are this team's
+    // agents". Both active flags are checked — `isActive` here is "still on this
+    // desk" and `user.isActive` is "may authenticate at all"; either one alone
+    // would put an offboarded person back on the report.
+    const members = await this.prisma.workspaceMembership.findMany({
       where: {
+        workspaceId: principal.workspaceId,
         isActive: true,
-        ...(isAgent ? { id: principal.id } : {}),
+        user: { isActive: true },
+        ...(isAgent ? { userId: principal.id } : {}),
         ...(scopeTeam ? { teamId: scopeTeam } : {}),
       },
-      select: { id: true, name: true, role: true, teamId: true },
+      select: { userId: true, role: true, teamId: true, user: { select: { name: true } } },
     });
+    const agents = members.map((m) => ({ id: m.userId, name: m.user.name, role: m.role, teamId: m.teamId }));
     const ids = agents.map((a) => a.id);
     const since = new Date(Date.now() - days * DAY);
 
+    // `assigneeId in ids` is not itself a tenant filter: the same human can hold
+    // memberships on two desks, and their tickets over there would otherwise be
+    // counted into this desk's numbers.
     const [openCounts, resolvedRows] = await Promise.all([
       this.prisma.ticket.groupBy({
         by: ['assigneeId'],
-        where: { assigneeId: { in: ids }, ...OPEN },
+        where: { workspaceId: principal.workspaceId, assigneeId: { in: ids }, ...OPEN },
         _count: true,
       }),
       this.prisma.ticket.findMany({
-        where: { assigneeId: { in: ids }, resolvedAt: { gte: since } },
+        where: { workspaceId: principal.workspaceId, assigneeId: { in: ids }, resolvedAt: { gte: since } },
         select: { assigneeId: true, createdAt: true, resolvedAt: true },
       }),
     ]);
