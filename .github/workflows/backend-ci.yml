@@ -1,0 +1,125 @@
+# Backend CI.
+#
+# This exists because `main` sat with 30 TypeScript errors for several days and
+# nobody noticed — the backend could not have been rebuilt or redeployed in an
+# emergency during that window, and it was only discovered when a container
+# build failed. Both jobs below would have caught it in under two minutes.
+#
+# Two jobs, deliberately:
+#   check        fast, no services. Types, unit tests, real build.
+#   integration  a real PostgreSQL with the SPLIT ROLES, so the row-level
+#                security tests mean something.
+#
+# The integration job is the important one. Isolation tests connected as a
+# superuser or as the table owner are exempt from every RLS policy and would
+# report perfect tenant separation whether or not a single policy existed —
+# which is why global-setup.ts refuses to run on a privileged connection. CI
+# provisions plumo_app / plumo_migrator exactly as production does, so a broken
+# policy fails here instead of in front of a customer.
+
+name: backend
+
+on:
+  push:
+    branches: [main, 'tenancy-*', 'phase-*']
+    paths: ['backend/**', '.github/workflows/backend-ci.yml']
+  pull_request:
+    paths: ['backend/**', '.github/workflows/backend-ci.yml']
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  check:
+    name: types, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Match production exactly. The server runs v22; a CI green on a
+          # different major is a weaker signal than it looks.
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+
+      # Must precede tsc: the app imports types from the generated client, and
+      # without this every Prisma call is an error for the wrong reason.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      # `nest build` is not the same check as tsc --noEmit — this is the
+      # artifact that actually gets deployed.
+      - name: Build
+        run: npm run build
+
+  integration:
+    name: integration (real postgres, split roles)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # PostgreSQL 18 to match production. The tenancy migration uses the
+        # PG15+ `ON DELETE SET NULL (column)` form and partial indexes; testing
+        # on an older major would pass here and fail on the server.
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: plumo_cs_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Throwaway credentials — this database exists for the length of one job.
+      SUPERUSER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/plumo_cs_test
+      PLUMO_APP_PASSWORD: ci_app_pw
+      PLUMO_MIGRATOR_PASSWORD: ci_migrator_pw
+      DATABASE_URL: postgresql://plumo_app:ci_app_pw@localhost:5432/plumo_cs_test?schema=public
+      MIGRATE_DATABASE_URL: postgresql://plumo_migrator:ci_migrator_pw@localhost:5432/plumo_cs_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-not-a-real-secret
+      JWT_REFRESH_SECRET: ci-not-a-real-secret-2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npx prisma generate
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # Creates plumo_migrator (schema owner) and plumo_app (runtime, owns
+      # nothing, NOSUPERUSER, NOBYPASSRLS) — the same split the server runs.
+      - name: Provision split roles
+        run: npm run db:roles
+
+      # As plumo_migrator, because the tenancy migration refuses to run as
+      # anyone else — a guard that has already caught a mistake in production.
+      - name: Apply migrations
+        run: DATABASE_URL="$MIGRATE_DATABASE_URL" npx prisma migrate deploy
+
+      # global-setup.ts asserts the connection is unprivileged before the first
+      # spec, so a misprovisioned role fails loudly here rather than silently
+      # making every isolation test pass.
+      - name: Integration tests
+        run: npm run test:integration
