@@ -246,5 +246,46 @@ describe('chatbot ingest', () => {
       expect(bodies).not.toContain('bot says hi');
       expect(res.updates.find((u) => u.body === 'agent says hi')?.sessionRef).toBe(ref);
     });
+
+    it('delivers a fresh reply but holds the cursor behind the present', async () => {
+      const ref = `${TAG}-watermark`;
+      const { ticketId } = await open(ref);
+      const t0 = new Date();
+      await prisma.ticketMessage.create({
+        data: { ticketId, authorType: 'agent', body: 'just now', isInternalNote: false, channel: 'chatbot' },
+      });
+
+      const res = await chat.updates({ since: t0.toISOString() } as never, botA);
+
+      // Delivered immediately — the safety margin must not add latency.
+      expect(res.updates.map((u) => u.body)).toContain('just now');
+      // ...but the cursor stays behind, so a transaction that started before
+      // this poll and commits after it is still inside the next window. This
+      // is the invariant that stops an agent reply vanishing for good.
+      expect(new Date(res.cursor).getTime()).toBeLessThan(Date.now() - 1_000);
+      // The row is therefore re-delivered next poll. That is intended: the
+      // contract mandates dedupe on messageId.
+      const again = await chat.updates({ since: res.cursor } as never, botA);
+      expect(again.updates.map((u) => u.body)).toContain('just now');
+    });
+
+    it('never reports hasMore when the cursor did not move', async () => {
+      const ref = `${TAG}-noloop`;
+      const { ticketId } = await open(ref);
+      const t0 = new Date();
+      for (let i = 0; i < 3; i++) {
+        await prisma.ticketMessage.create({
+          data: { ticketId, authorType: 'agent', body: `r${i}`, isInternalNote: false, channel: 'chatbot' },
+        });
+      }
+      // A full page of rows that are all newer than the watermark clamps the
+      // cursor back to where it started. Answering hasMore:true there would
+      // send a client that re-polls on hasMore into a tight loop on the same
+      // page forever — so the clamp has to suppress it.
+      const res = await chat.updates({ since: t0.toISOString(), limit: 3 } as never, botA);
+      expect(res.updates).toHaveLength(3);
+      expect(new Date(res.cursor).getTime()).toBeLessThanOrEqual(t0.getTime());
+      expect(res.hasMore).toBe(false);
+    });
   });
 });

@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import { nextUpdatesCursor } from './updates-cursor';
 import { Type } from 'class-transformer';
 import { IsArray, IsEmail, IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -128,7 +130,29 @@ export class ChatService {
       where: { apiKeyId_sessionRef: { apiKeyId, sessionRef: dto.sessionRef } },
       include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true, botEnabled: true } } },
     });
-    if (existing) return this.sessionView(existing.ticket, dto.sessionRef, false);
+    if (existing) {
+      // The retry that loses a question.
+      //
+      // If the first `open` committed but its response never arrived, the
+      // partner has no ticket id and calls `open` again — carrying the *next*
+      // thing the student typed. Returning the existing session and dropping
+      // `message` on the floor made that a silent 200: the agent sees question
+      // one, answers it, and question two exists nowhere. Append it instead,
+      // keyed so a true duplicate retry still collapses to one message.
+      if (existing.ticket && dto.message) {
+        const ref = `open:${createHash('sha256').update(dto.message).digest('hex').slice(0, 24)}`;
+        await this.appendMessage(
+          dto.sessionRef,
+          { body: dto.message, author: 'visitor', externalRef: ref } as AppendMessageDto,
+          actor,
+        );
+        // Re-read: the append may have reopened a resolved ticket, and the
+        // partner must not be told the stale status it had a moment ago.
+        const { ticket } = await this.session(dto.sessionRef, actor);
+        return this.sessionView(ticket, dto.sessionRef, false);
+      }
+      return this.sessionView(existing.ticket, dto.sessionRef, false);
+    }
 
     // A visitor with no email is identified by (chatbot, visitorRef). If the
     // partner supplies neither we mint a reference from the session, so the row
@@ -138,21 +162,37 @@ export class ChatService {
       ? await this.customers.findOrCreateByEmail(dto.visitorEmail, dto.visitorName)
       : await this.customers.findOrCreateVisitor(apiKeyId, visitorRef, dto.visitorName);
 
-    const ticket = await this.tickets.create(
-      {
-        subject: dto.subject?.trim() || this.subjectFrom(dto.message) || 'Chat conversation',
-        customerId: customer.id,
-        channel: 'chatbot',
-        tags: dto.tags ?? [],
-        body: dto.message,
-      } as never,
-      actor,
-      { createdByApiKeyId: apiKeyId, botHandled: true },
-    );
-
+    // One transaction, because half of this is worse than none of it.
+    //
+    // The ticket and the session row used to be two independent writes. A pool
+    // timeout between them left a ticket with the student's question and no
+    // session — which is not merely untidy: /chat/updates finds conversations
+    // through chat_sessions, so any agent reply on that ticket is structurally
+    // undeliverable. The partner, seeing a 500, retries `open`, misses on the
+    // lookup above, and opens a *second* ticket. The desk ends up with the
+    // question twice and answers into the copy the student cannot see.
+    //
+    // The ALS proxy in PrismaService makes the nested writes join this
+    // transaction rather than opening their own — the same thing appendMessage
+    // already relies on.
+    let ticket: { id: string; status: string };
     try {
-      await this.prisma.chatSession.create({
-        data: { apiKeyId, sessionRef: dto.sessionRef, ticketId: ticket.id, visitorRef },
+      ticket = await this.prisma.$transaction(async () => {
+        const created = await this.tickets.create(
+          {
+            subject: dto.subject?.trim() || this.subjectFrom(dto.message) || 'Chat conversation',
+            customerId: customer.id,
+            channel: 'chatbot',
+            tags: dto.tags ?? [],
+            body: dto.message,
+          } as never,
+          actor,
+          { createdByApiKeyId: apiKeyId, botHandled: true },
+        );
+        await this.prisma.chatSession.create({
+          data: { apiKeyId, sessionRef: dto.sessionRef, ticketId: created.id, visitorRef },
+        });
+        return created as { id: string; status: string };
       });
     } catch (e) {
       // Two opens for one session raced. The index is the arbiter; the loser
@@ -163,10 +203,11 @@ export class ChatService {
           where: { apiKeyId_sessionRef: { apiKeyId, sessionRef: dto.sessionRef } },
           include: { ticket: { select: { id: true, status: true, handedOffAt: true, assigneeId: true, createdByApiKeyId: true, botEnabled: true } } },
         });
-        if (won) {
-          await this.prisma.ticket.delete({ where: { id: ticket.id } }).catch(() => undefined);
-          return this.sessionView(won.ticket, dto.sessionRef, false);
-        }
+        // No compensating delete any more: the losing ticket was created inside
+        // the transaction that just rolled back, so it never existed. That
+        // delete used to be best-effort with a swallowed error, which meant a
+        // failed cleanup left an invisible duplicate ticket behind for good.
+        if (won) return this.sessionView(won.ticket, dto.sessionRef, false);
       }
       throw e;
     }
@@ -200,7 +241,15 @@ export class ChatService {
       const seen = await this.prisma.ticketMessage.findFirst({
         where: { ticketId: ticket.id, externalRef: dto.externalRef },
       });
-      if (seen) return { messageId: seen.id, ticketId: ticket.id, duplicate: true };
+      if (seen) {
+        return {
+          messageId: seen.id,
+          ticketId: ticket.id,
+          duplicate: true,
+          handling: handlingOf(ticket as never),
+          botEnabled: ticket.botEnabled !== false,
+        };
+      }
     }
 
     const isBot = dto.author === 'bot';
@@ -213,7 +262,7 @@ export class ChatService {
           'Check `botEnabled` before answering.',
       );
     }
-    const message = await this.prisma.$transaction(async () => {
+    const { message, ticketAfter } = await this.prisma.$transaction(async () => {
       const created = await this.prisma.ticketMessage.create({
         data: {
           ticketId: ticket.id,
@@ -226,7 +275,7 @@ export class ChatService {
         },
       });
 
-      await this.prisma.ticket.update({
+      const after = await this.prisma.ticket.update({
         where: { id: ticket.id },
         data: {
           updatedAt: new Date(),
@@ -258,7 +307,7 @@ export class ChatService {
             : {}),
         },
       });
-      return created;
+      return { message: created, ticketAfter: after };
     });
 
     this.queue.indexTicket(ticket.id);
@@ -269,7 +318,17 @@ export class ChatService {
       teamId: ticket.teamId,
       assigneeId: ticket.assigneeId,
     });
-    return { messageId: message.id, ticketId: ticket.id, duplicate: false };
+    return {
+      messageId: message.id,
+      ticketId: ticket.id,
+      duplicate: false,
+      // Reported from the row as it stands *after* the write, not the snapshot
+      // read at the top: this same call may have reopened a resolved ticket,
+      // and telling the partner the status it had a moment ago would send it
+      // back to the bot on a conversation that just changed hands.
+      handling: handlingOf(ticketAfter as never),
+      botEnabled: ticketAfter.botEnabled !== false,
+    };
   }
 
   /**
@@ -300,7 +359,23 @@ export class ChatService {
         // The bot asked for a human; it must stop talking even before one arrives.
         botEnabled: false,
         priority,
-        status: ticket.status === 'new' ? 'open' : ticket.status,
+        // A handoff always lands the ticket in `open`, whatever it was before.
+        //
+        // Only promoting `new` left every other status where it was, and two of
+        // them make the escalation invisible. A conversation the bot resolved —
+        // the student clicked "this helped", then changed their mind and asked
+        // for a human — stays `resolved`: absent from every open view, absent
+        // from the unassigned queue, skipped by the SLA sweep. Nothing assigns
+        // it, nothing alerts, no clock can breach. The student is told an agent
+        // is coming and waits forever. `pending`/`on_hold` are the same story
+        // with a paused clock.
+        status: 'open',
+        // Reopening means it is not finished; clearing the stamps keeps the
+        // resolution metrics honest and lets the SLA sweep see it again.
+        ...(ticket.status === 'resolved' || ticket.status === 'closed'
+          ? { resolvedAt: null, closedAt: null }
+          : {}),
+        slaPausedAt: null,
         outcome: 'escalated',
         slaPolicyId: due.policyId,
         firstResponseDueAt: due.firstResponseDueAt,
@@ -412,20 +487,65 @@ export class ChatService {
         id: true,
         body: true,
         createdAt: true,
-        ticket: { select: { id: true, status: true, chatSessions: { where: { apiKeyId }, select: { sessionRef: true } } } },
+        ticket: {
+          select: {
+            id: true,
+            status: true,
+            handedOffAt: true,
+            assigneeId: true,
+            createdByApiKeyId: true,
+            botEnabled: true,
+            chatSessions: { where: { apiKeyId }, select: { sessionRef: true } },
+          },
+        },
       },
+    });
+
+    // Hold the cursor back from the present, or we lose messages.
+    //
+    // `created_at` is stamped by the DB default at transaction START, but a row
+    // only becomes visible at COMMIT — so commit order and timestamp order are
+    // not the same order. Agent A can stamp 10:00:00.100, take 200ms behind a
+    // row lock, and commit *after* agent B who stamped 10:00:00.180. A poll in
+    // between sees only B, and a cursor of B's stamp means A — committing a
+    // moment later with an older stamp — never matches `gt` again. It is gone
+    // permanently, with no error on either side.
+    //
+    // So the cursor never advances past `now - LAG`, which bounds how far back
+    // an in-flight transaction can commit (Prisma's interactive-transaction
+    // budget is seconds; 30 is generous). Rows newer than the watermark are
+    // still delivered immediately — latency is unchanged — they are simply
+    // delivered again on the next poll. That is the trade this endpoint wants:
+    // duplicates are free because the contract mandates dedupe on `messageId`,
+    // and loss is not recoverable at all.
+    const { cursor: next, hasMore } = nextUpdatesCursor({
+      since,
+      lastRowAt: rows.length ? rows[rows.length - 1].createdAt : null,
+      pageWasFull: rows.length === limit,
+      now: Date.now(),
     });
 
     return {
       // Echoing the cursor back means the partner never has to compute it, and a
       // page of zero rows still advances nothing — so nothing is skipped.
-      cursor: rows.length ? rows[rows.length - 1].createdAt.toISOString() : since.toISOString(),
-      hasMore: rows.length === limit,
+      cursor: next.toISOString(),
+      hasMore,
       updates: rows.map((m) => ({
         messageId: m.id,
         sessionRef: m.ticket.chatSessions[0]?.sessionRef ?? null,
         ticketId: m.ticket.id,
         status: m.ticket.status,
+        // Who owns the reply, as of this read. Without these the partner has to
+        // issue a second GET per update just to learn whether its bot may speak
+        // — and ours defaulted to `assigned` when it guessed, which quietly
+        // wrote the wrong state for every escalated-but-unassigned thread.
+        handling: handlingOf({
+          status: m.ticket.status as never,
+          createdByApiKeyId: m.ticket.createdByApiKeyId,
+          handedOffAt: m.ticket.handedOffAt,
+          assigneeId: m.ticket.assigneeId,
+        }),
+        botEnabled: m.ticket.botEnabled !== false,
         body: m.body,
         at: m.createdAt,
       })),
