@@ -1,0 +1,95 @@
+# Plumo CS production — API + worker in containers.
+#
+# PostgreSQL and Redis deliberately stay on the host. See §2 and §11 of
+# docs/dockerise-production.md: on a single box with no orchestrator,
+# containerising the database buys portability there is nowhere to use, while
+# making `docker compose down -v` a data-loss event. The plumo_app/
+# plumo_migrator split and the RLS policies live inside that cluster, and
+# re-provisioning them wrong fails OPEN — silently disabling the isolation.
+#
+#   deploy:    ./ops/deploy.sh <git-sha>
+#   rollback:  ./ops/deploy.sh <previous-sha>
+#
+# PLUMO_TAG is required and has no default on purpose. A `latest` fallback
+# makes rollback ambiguous at the exact moment it must be obvious.
+
+x-common: &common
+  # A default, not a hard `:?` guard. The documented emergency teardown is
+  # `docker compose down`, and a required variable made that fail exactly when
+  # you may no longer know which tag is running. `down` does not need a real
+  # image; deploy.sh always exports PLUMO_TAG explicitly, and a bare `up` with
+  # the placeholder fails loudly on a missing image rather than starting
+  # something unintended.
+  image: plumo-cs:${PLUMO_TAG:-unset}
+  # Host networking: DATABASE_URL keeps pointing at localhost:5432, Redis at
+  # localhost:6379, and the API binds 3002 where nginx already proxies. No
+  # pg_hba.conf change, no bridge subnet to authorise — the fewest moving parts
+  # for the first cutover. Revisit only if this box ever runs more than this app.
+  network_mode: host
+  env_file: /opt/plumo-cs/app/.env
+  restart: unless-stopped
+  # Reproduces what the systemd units already enforce. Containers are not
+  # automatically safer than a hardened unit — this has to be asked for.
+  read_only: true                      # ~ ProtectSystem=strict
+  tmpfs: [/tmp]                        # ~ PrivateTmp=true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]                      # better than the unit had
+  # journald rotates; Docker's json-file driver does NOT and will fill the disk
+  # given enough months. This is the most common way a containerised deploy
+  # eventually takes itself down.
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  api:
+    <<: *common
+    container_name: plumo-api
+    command: ["node", "dist/main.js"]
+    # Declared here rather than in the Dockerfile so it applies ONLY to the
+    # service that actually listens. deploy.sh gates the cutover on this
+    # reaching `healthy` for a container whose image is the tag it just built —
+    # a port probe alone cannot distinguish the new container from the old
+    # systemd process under host networking.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # NOTE: main.ts installs no SIGTERM handler today, so this grace period is
+    # currently aspirational — the container is killed at the end of it rather
+    # than draining. Fixing that means app.enableShutdownHooks() in main.ts,
+    # which worker.ts already does. Left here because the value is right once
+    # that lands, and shortening it would only hide the gap.
+    stop_grace_period: 30s
+
+  worker:
+    <<: *common
+    container_name: plumo-worker
+    command: ["node", "dist/worker.js"]
+    # Honest: this process serves no HTTP, so it has no health signal. Saying
+    # so beats inheriting the API's probe, which under host networking would
+    # report the API's health as the worker's and could never fail.
+    healthcheck:
+      disable: true
+    # Longer: a job mid-flight should finish rather than be retried.
+    stop_grace_period: 60s
+
+  # Run explicitly before switching traffic:  docker compose run --rm migrate
+  #
+  # `profiles` keeps it out of `up -d` — a migration must be a decision with an
+  # exit code someone reads, never a side effect of starting the app.
+  migrate:
+    image: plumo-cs-migrate:${PLUMO_TAG:?set PLUMO_TAG}
+    profiles: [tools]
+    network_mode: host
+    env_file: /opt/plumo-cs/app/.env
+    # prisma migrate deploy authenticates as plumo_migrator, not plumo_app.
+    # Overriding DATABASE_URL for this container only is what lets the runtime
+    # containers keep a role that cannot alter schema.
+    environment:
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:?MIGRATE_DATABASE_URL must be set for migrations}
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]

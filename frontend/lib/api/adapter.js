@@ -142,6 +142,25 @@ class Adapter {
     return api.tickets.setBotEnabled(ticketId, enabled);
   }
 
+  /** Revoke a key. The row survives so its history stays attributable. */
+  async revokeApiKey(id) {
+    await api.apiKeys.revoke(id);
+    await this.refreshApiKeys();
+    return this.apiKeys;
+  }
+
+  async refreshApiKeys() {
+    const keys = await api.apiKeys.list();
+    this.apiKeys = keys.map((k) => ({
+      id: k.id, name: k.name, scope: (k.scopes ?? []).join(', '),
+      active: k.isActive !== false,
+      team: k.team?.name ?? 'all teams',
+      created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase(),
+      last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'never',
+    }));
+    return this.apiKeys;
+  }
+
   forgotPassword(email) {
     return api.auth.forgotPassword(email);
   }
@@ -657,16 +676,21 @@ class Adapter {
    * by default — the safe choice. `teamId: null` opts into instance-wide, which
    * the settings UI should surface as a deliberate toggle rather than a default.
    */
-  async generateApiKey({ name = 'console key', teamId } = {}) {
+  /**
+   * Mint a key. `scopes` is a real argument now: it used to be hardcoded to
+   * tickets:read/write, so every key made from the console 403'd on the chat
+   * routes — which are the only ones a chatbot uses.
+   */
+  async generateApiKey({ name = 'console key', scopes, teamId } = {}) {
     const boundTo = teamId === undefined ? this.currentUser?.teamId ?? null : teamId;
     const key = await api.apiKeys.create({
       name,
-      scopes: ['tickets:read', 'tickets:write'],
+      scopes: scopes?.length ? scopes : ['tickets:read', 'tickets:write'],
       ...(boundTo ? { teamId: boundTo } : { allowInstanceWide: true }),
     });
     await api.apiKeys.list().then((keys) => {
       this.apiKeys = keys.map((k) => ({
-        id: k.id, name: k.name, scope: (k.scopes ?? []).join(', '),
+        id: k.id, name: k.name, scope: (k.scopes ?? []).join(', '), active: k.isActive !== false,
         team: k.team?.name ?? 'all teams',
         created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase(),
         last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'never',

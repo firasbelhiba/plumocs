@@ -246,7 +246,43 @@ export default function Settings({ V }) {
                 <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>api keys</h2>
                 <p className={sx('font-size:13px;color:var(--cs-muted)')}>secrets, kept softly — a key is shown once and never again.</p>
               </div>
-              <button onClick={V.genKey} className={primaryBtn()}>generate key</button>
+            </div>
+
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:16px;display:flex;flex-direction:column;gap:12px')}>
+              <span className={sx('font-size:13.5px;font-weight:500')}>new key</span>
+              <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end')}>
+                <label className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>
+                  name
+                  <input
+                    value={V.keyName}
+                    onChange={V.onKeyName}
+                    placeholder="4hacks chatbot"
+                    className={fieldInput()}
+                  />
+                </label>
+                <button onClick={V.genKey} className={primaryBtn()}>generate key</button>
+              </div>
+              <div className={sx('display:flex;flex-direction:column;gap:7px')}>
+                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>what is it for</span>
+                <div className={sx('display:flex;gap:7px;flex-wrap:wrap')}>
+                  {V.keyKinds.map((k) => (
+                    <button
+                      key={k.id}
+                      onClick={V.setKeyKind}
+                      data-v={k.id}
+                      data-on={String(k.on)}
+                      title={k.scopes.join(', ')}
+                      className={sx('padding:7px 13px;border-radius:100px;font-size:12.5px;cursor:pointer')}
+                      style={{ border: '1px solid var(--cs-onbd)', background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' }}
+                    >
+                      {k.label}
+                    </button>
+                  ))}
+                </div>
+                <span className={sx('font-size:12px;color:var(--cs-muted)')}>
+                  {(V.keyKinds.find((k) => k.on) || {}).hint}
+                </span>
+              </div>
             </div>
             {V.hasSecret && (
               <div data-anim="in" data-tone="st-pending" className={sx('display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--cs-r-md);background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));border:1px solid color-mix(in srgb, var(--tone-hue) 30%, transparent);flex-wrap:wrap')}>
@@ -254,20 +290,34 @@ export default function Settings({ V }) {
                   <span className={sx("font-size:12.5px;color:var(--tone-fg);font-weight:500")}>copy this now — we won't show it again</span>
                   <span className={sx('font-family:var(--plumo-font-mono);font-size:13px;color:var(--cs-text);word-break:break-all')}>{V.secret}</span>
                 </div>
-                <button onClick={V.copyLink} className={sx('padding:8px 14px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12.5px;cursor:pointer')}>copy</button>
+                <button onClick={V.copySecret} className={sx('padding:8px 14px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12.5px;cursor:pointer')}>copy</button>
                 <button onClick={V.hideKey} className={sx('padding:8px 14px;border:none;border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:12.5px;cursor:pointer')}>done</button>
               </div>
             )}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
-              <div className={sx('display:grid;grid-template-columns:minmax(200px,1.4fr) 140px 150px 130px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
-                <span>name</span><span>scope</span><span>created</span><span className={sx('text-align:right')}>last used</span>
+              <div className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 130px 130px 110px 90px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
+                <span>name</span><span>scope</span><span>created</span><span className={sx('text-align:right')}>last used</span><span className={sx('text-align:right')}></span>
               </div>
               {V.keyRows.map(k => (
-                <div key={k.id} className={sx('display:grid;grid-template-columns:minmax(200px,1.4fr) 140px 150px 130px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                  <span>{k.name}</span>
+                <div key={k.id} className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 130px 130px 110px 90px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
+                  <span className={sx('display:flex;align-items:center;gap:7px')}>
+                    {k.name}
+                    {k.active === false && (
+                      <span data-tone="st-closed" className={sx('font-size:11px;padding:1px 7px;border-radius:100px')}
+                        style={{ background: 'color-mix(in srgb, var(--tone-hue) 16%, transparent)', color: 'var(--tone-fg)' }}>revoked</span>
+                    )}
+                  </span>
                   <span className={sx('color:var(--cs-muted)')}>{k.scope}</span>
                   <span className={sx('color:var(--cs-muted);font-size:12.5px')}>{k.created}</span>
                   <span className={sx('text-align:right;color:var(--cs-muted);font-size:12.5px')}>{k.last}</span>
+                  <span className={sx('text-align:right')}>
+                    {k.active !== false && (
+                      <button onClick={V.revokeKey} data-id={k.id}
+                        className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:100px;background:transparent;color:var(--cs-muted);font-size:12px;cursor:pointer')}>
+                        revoke
+                      </button>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>

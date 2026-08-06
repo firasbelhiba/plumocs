@@ -1,0 +1,42 @@
+# Keep secrets and local state out of the build context.
+#
+# This file is load-bearing for security, not just build speed. The Dockerfile
+# does `COPY . .` in the build stage; without these exclusions the production
+# .env — database passwords, JWT secret, API keys — would be written into an
+# image layer. Layers are not erased by a later delete: anyone who can pull the
+# image can read it back. Env belongs at runtime via env_file, never at build.
+#
+# Patterns are ** so they match at ANY depth. Bare `.env` matches only the
+# context root — a `config/.env` or `secrets/prod.pem` would have sailed
+# straight into a layer.
+**/.env
+**/.env.*
+!.env.example
+**/secrets/
+**/*.pem
+**/*.key
+
+# Never ship a dump. These contain real customer conversations.
+**/*.dump
+**/*.sql.gz
+**/backups/
+
+# Rebuilt inside the image; copying the host's would defeat the point of a
+# reproducible build (and Alpine cannot use Windows/glibc native binaries).
+node_modules/
+dist/
+
+# Not needed at runtime.
+.git/
+.github/
+test/
+coverage/
+*.spec.ts
+*.e2e-spec.ts
+.eslintrc*
+.prettierrc*
+docs/
+ops/
+Dockerfile
+.dockerignore
+docker-compose*.yml

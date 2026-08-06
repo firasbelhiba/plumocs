@@ -51,6 +51,7 @@ export default class Console extends React.Component {
     now: Date.now(), refreshed: Date.now(), failMode: false,
     pwCur: '', pwNew: '', pwConfirm: '', reportsAt: 0,
     keepSignedIn: true, serviceUp: true,
+    keyName: '', keyKind: 'chatbot',
   };
 
   forgot = (e) => { e.preventDefault(); this.setState({ loginView: 'reset', loginError: false }); };
@@ -633,12 +634,56 @@ export default class Console extends React.Component {
   });
   copyLink = () => { this.setState({ menu: null }); this.toast('link copied to your clipboard'); };
   mergeTicket = () => { this.setState({ menu: null }); this.toast('the merge picker opens here in the real app'); };
+  onKeyName = (e) => this.setState({ keyName: e.target.value });
+  setKeyKind = (e) => this.setState({ keyKind: e.currentTarget.dataset.v });
+
+  /**
+   * Scope presets rather than a free checkbox list.
+   *
+   * The scopes are conjunctive and unforgiving: a chatbot key needs exactly
+   * chat:write + chat:read and nothing else, and the old hardcoded
+   * tickets:read/write produced keys that 403'd on every chat route. Two named
+   * intentions are harder to get wrong than seven checkboxes.
+   */
+  KEY_KINDS = {
+    chatbot: { label: 'chatbot', scopes: ['chat:write', 'chat:read'], hint: 'open conversations, post turns, hand off' },
+    readonly: { label: 'read-only', scopes: ['tickets:read', 'reports:read'], hint: 'dashboards and exports; cannot write' },
+    integration: { label: 'integration', scopes: ['tickets:read', 'tickets:write', 'customers:read', 'customers:write'], hint: 'full ticket and customer access' },
+  };
+
   genKey = async () => {
+    const kind = this.KEY_KINDS[this.state.keyKind] ?? this.KEY_KINDS.chatbot;
+    const name = this.state.keyName.trim();
+    if (!name) { this.toast('give the key a name so you can tell them apart later', 'bad'); return; }
     try {
-      const secret = await this.api.generateApiKey();
-      this.setState({ secret });
+      const secret = await this.api.generateApiKey({ name, scopes: kind.scopes });
+      this.setState({ secret, keyName: '' });
     } catch {
       this.toast("couldn't generate a key — admin only", 'bad');
+    }
+  };
+
+  revokeKey = async (e) => {
+    const id = e.currentTarget.dataset.id;
+    try {
+      await this.api.revokeApiKey(id);
+      this.forceUpdate();
+      this.toast('key revoked — it stops working immediately');
+    } catch {
+      this.toast("couldn't revoke that key — try again", 'bad');
+    }
+  };
+
+  /** Actually copies. The old handler only showed a toast saying it had. */
+  copySecret = async () => {
+    const text = this.state.secret;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this.toast('copied — store it now, we cannot show it again');
+    } catch {
+      // clipboard needs a secure context and permission; say so rather than lie
+      this.toast('select the key and copy it manually', 'bad');
     }
   };
   hideKey = () => this.setState({ secret: null });
@@ -985,7 +1030,11 @@ export default class Console extends React.Component {
       hookRows: (A ? A.webhooks : []).map(w => ({ id: w.id, url: w.url, events: w.events, status: w.status, last: w.last, tone: w.status === 'active' ? 'sla-met' : 'sla-breach' })),
       keyRows: A ? A.apiKeys : [], tagRows: (A ? A.tags : []).map(t2 => ({ id: t2.id, label: t2.label, tone: t2.tone, count: (fc.tag || {})[t2.id] || 0 })),
       cannedRows: (A ? A.cannedResponses : []).map(r => ({ id: r.id, title: r.title, team: r.team, tagList: r.tags.join(', '), snippet: r.body.slice(0, 110) + '…' })),
-      secret: S.secret, hasSecret: !!S.secret, genKey: this.genKey, hideKey: this.hideKey,
+      secret: S.secret, hasSecret: !!S.secret, copySecret: this.copySecret,
+      keyName: S.keyName, onKeyName: this.onKeyName,
+      keyKind: S.keyKind, setKeyKind: this.setKeyKind,
+      keyKinds: Object.entries(this.KEY_KINDS).map(([id, k]) => ({ id, ...k, on: S.keyKind === id })),
+      revokeKey: this.revokeKey, genKey: this.genKey, hideKey: this.hideKey,
 
       toasts: S.toasts.map(x => ({ id: x.id, text: x.text, tone: x.tone === 'bad' ? 'sla-breach' : 'sla-met' })),
       hasConfirm: !!S.confirm,
