@@ -26,6 +26,9 @@ const TAGTONE = {
 };
 const isMarkerTag = (t) => t.startsWith('sla:');
 
+const isUuid = (v) =>
+  typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
 /** Deterministic avatar bucket 1–6 from any id. */
 function av(id) {
   let h = 0;
@@ -87,6 +90,7 @@ class Adapter {
   businessHours = [];
   webhooks = [];
   apiKeys = [];
+  invitations = [];
   notifications = [];
   reports = { kpis: [], volume: [], byChannel: [], byAgent: [] };
   drilldowns = {};
@@ -741,6 +745,58 @@ class Adapter {
       }));
     }).catch(() => {});
     return key.secret;
+  }
+
+  // ---- invitations (settings pane) -------------------------------------------------------
+
+  /**
+   * Pending invitations, in the shape the team & users table reads.
+   *
+   * Timestamps become epoch ms like everywhere else, because the settings table
+   * ticks its "expires in…" off the same Date.now() clock as the SLA counters.
+   */
+  async listInvitations() {
+    const rows = await api.invitations.list();
+    this.invitations = (rows ?? []).map((i) => this.#mapInvitation(i));
+    return this.invitations;
+  }
+
+  /**
+   * `invitedBy` is whoever the API hands us — an id, a nested user, or a plain
+   * name. Resolve it against the agent cache first so the table shows a person
+   * rather than a uuid, and fall back to 'someone' rather than printing one.
+   */
+  #mapInvitation(i) {
+    const by = i.invitedBy;
+    const byId = isUuid(by) ? by : by?.id;
+    const invitedBy =
+      this.agents.find((a) => a.id === byId)?.name ??
+      (typeof by === 'string' ? (isUuid(by) ? 'someone' : by) : by?.name ?? by?.email ?? 'someone');
+    return {
+      id: i.id,
+      email: i.email,
+      role: i.role,
+      status: i.status ?? 'pending',
+      invitedBy,
+      createdAt: ms(i.createdAt),
+      expiresAt: ms(i.expiresAt),
+    };
+  }
+
+  /**
+   * Invite somebody. `teamId` is optional and only sent when chosen — an empty
+   * string would be a uuid the API has to reject.
+   */
+  async createInvitation({ email, role, teamId } = {}) {
+    const invitation = await api.invitations.create({ email, role, ...(teamId ? { teamId } : {}) });
+    return invitation;
+  }
+
+  /** Revoke. The row goes; the token it stood for stops working immediately. */
+  async revokeInvitation(id) {
+    await api.invitations.revoke(id);
+    this.invitations = this.invitations.filter((i) => i.id !== id);
+    return this.invitations;
   }
 
   // ---- realtime -----------------------------------------------------------------------------

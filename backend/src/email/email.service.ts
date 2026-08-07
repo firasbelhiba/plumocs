@@ -130,6 +130,58 @@ export class EmailService {
   }
 
   /**
+   * Invite somebody onto a desk.
+   *
+   * SENT SYNCHRONOUSLY, unlike every other outbound mail here, and unlike them it
+   * is allowed to fail its caller. The notifications queue addresses recipients
+   * by user id and writes a `notifications` row per recipient — a table whose FK
+   * requires the recipient to already be a member of the workspace. An invitee is
+   * by definition not one, so that path cannot carry this message at all. See the
+   * note at the bottom of invitations.service.ts.
+   *
+   * `acceptUrl` is built by the caller from `consoleUrl` — the browser-facing
+   * origin, NEVER `appUrl`, which in production is this api and serves no pages.
+   * That mistake is why every password-reset link ever emailed 404'd, and an
+   * invitation link that 404s is a tester who never arrives.
+   *
+   * Three facts, because an unexpected mail asking someone to create an account
+   * is exactly the shape of a phishing message: WHO invited them, WHICH
+   * organisation, and WHEN it stops working.
+   */
+  async sendInvitation(params: {
+    to: string;
+    workspaceName: string;
+    inviterName: string;
+    role: string;
+    acceptUrl: string;
+    expiresAt: Date;
+  }) {
+    const { to, workspaceName, inviterName, role, acceptUrl, expiresAt } = params;
+    const expiresOn = expiresAt.toISOString().slice(0, 10);
+    const subject = `${inviterName} invited you to ${workspaceName} on plumo`;
+
+    const text = [
+      `${inviterName} has invited you to join ${workspaceName} on Plumo CS as a ${role}.`,
+      '',
+      'Accept the invitation:',
+      acceptUrl,
+      '',
+      `This link works once and expires on ${expiresOn} — seven days from when it was sent.`,
+      '',
+      'If you were not expecting this, you can ignore it. Nothing has been created in your name.',
+    ].join('\n');
+
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject,
+      text,
+      html: this.renderInvitationHtml({ workspaceName, inviterName, role, acceptUrl, expiresOn }),
+    });
+    this.logger.log(`Invitation to "${workspaceName}" sent to ${to}`);
+  }
+
+  /**
    * Parse an inbound raw MIME message and thread it. Returns the affected
    * ticket id, or null when dropped (auto-responders).
    */
@@ -448,6 +500,28 @@ export class EmailService {
       );
     }
     return row.workspaceId;
+  }
+
+  /** Same typographic shell as renderReplyHtml, with one obvious button. */
+  private renderInvitationHtml(p: {
+    workspaceName: string;
+    inviterName: string;
+    role: string;
+    acceptUrl: string;
+    expiresOn: string;
+  }): string {
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // The URL is escaped for the attribute AND printed in full underneath: a mail
+    // client that strips the anchor, or a reader who wants to see where a link
+    // goes before clicking it, both still get there.
+    const href = esc(p.acceptUrl).replace(/"/g, '&quot;');
+    return `<!doctype html><html><body style="font-family:Inter,system-ui,sans-serif;color:#0F172A;max-width:560px;margin:0 auto;padding:24px">
+      <p style="margin:0 0 16px;line-height:1.6"><strong>${esc(p.inviterName)}</strong> has invited you to join <strong>${esc(p.workspaceName)}</strong> on Plumo CS as a ${esc(p.role)}.</p>
+      <p style="margin:0 0 20px"><a href="${href}" style="display:inline-block;background:#0F172A;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px">Accept the invitation</a></p>
+      <p style="margin:0 0 12px;font-size:12px;color:#64748B;word-break:break-all">${esc(p.acceptUrl)}</p>
+      <p style="margin:0 0 4px;font-size:12px;color:#64748B">This link works once and expires on ${esc(p.expiresOn)}.</p>
+      <p style="margin:0;font-size:12px;color:#64748B">If you were not expecting this you can ignore it — nothing has been created in your name.</p>
+    </body></html>`;
   }
 
   private renderReplyHtml(name: string, body: string, number: number): string {

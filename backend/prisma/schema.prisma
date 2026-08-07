@@ -569,6 +569,52 @@ model WorkspaceMembership {
   @@map("workspace_memberships")
 }
 
+/// A pending seat on a desk.
+///
+/// Tenant-scoped, unlike PasswordReset, which it otherwise resembles: a reset is
+/// about a PERSON and a person is global, while an invitation is about a SEAT and
+/// a seat belongs to exactly one workspace. So this table carries workspace_id
+/// and the workspace_isolation policy — which is why the unauthenticated accept
+/// flow reads it through app_resolve_invitation() (SECURITY DEFINER) rather than
+/// through this model: an unbound findFirst matches zero rows and would report
+/// every live invitation link as invalid.
+///
+/// NO RELATION FIELDS, on purpose. Every reference here is a COMPOSITE foreign
+/// key in the database — (workspace_id, team_id) and (workspace_id, invited_by),
+/// the latter targeting workspace_memberships so an inviter is structurally a
+/// member of the desk they are inviting into. Prisma cannot express either, and
+/// declaring the single-column versions would have `prisma migrate diff` propose
+/// replacing the real constraints with weaker ones.
+///
+/// Also invisible here: invitations_pending_email_key, the partial unique index
+/// on (workspace_id, email) WHERE accepted_at IS NULL AND revoked_at IS NULL,
+/// which is what makes re-inviting an address REPLACE its pending invitation
+/// rather than issue a second live token. Same situation as
+/// customers_email_unique_idx — never apply a generated diff.
+model Invitation {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String    @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
+  email        String    @db.Citext
+  role         UserRole  @default(agent)
+  teamId       String?   @map("team_id") @db.Uuid
+  /// sha256 of the 32 random bytes emailed to the invitee, hex. The plaintext is
+  /// never stored — same rule as PasswordReset.tokenHash and ApiKey.keyHash.
+  tokenHash    String    @unique @map("token_hash")
+  invitedById  String    @map("invited_by") @db.Uuid
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz()
+  /// Single use. Claimed atomically with `updateMany({ where: { acceptedAt: null } })`
+  /// so two simultaneous clicks resolve to one membership and one refusal.
+  acceptedAt   DateTime? @map("accepted_at") @db.Timestamptz()
+  acceptedById String?   @map("accepted_by") @db.Uuid
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz()
+  revokedById  String?   @map("revoked_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("invitations")
+}
+
 /// Append-only record of authentication events.
 ///
 /// MUST NOT be written with `prisma.identityAuditLog.create()`. Prisma's

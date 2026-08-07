@@ -75,6 +75,31 @@ export const users = {
   updateSelf: (body) => request('/users/me', { method: 'PATCH', body }),
 };
 
+/**
+ * Invitations — how somebody who is not here yet becomes somebody who is.
+ *
+ * The first three are admin-only and workspace-scoped like everything else.
+ * The last two are deliberately unauthenticated: the person holding the link
+ * has no session, and getting one is the entire point of the exchange. They
+ * pass `auth: false` so the client does not attach a stale token, and so a 401
+ * from them is never mistaken for "your session expired, refresh it".
+ */
+export const invitations = {
+  list: () => request('/invitations'),
+  create: (body) => request('/invitations', { method: 'POST', body }),
+  revoke: (id) => request(`/invitations/${id}`, { method: 'DELETE' }),
+  lookup: (token) => request(`/invitations/token/${encodeURIComponent(token)}`, { auth: false }),
+  // Returns the same session shape /auth/login does. `body` is optional — an
+  // invitee who already has an account only needs the membership, so {} is a
+  // complete request.
+  accept: (token, body) =>
+    request(`/invitations/token/${encodeURIComponent(token)}/accept`, {
+      method: 'POST',
+      body: body ?? {},
+      auth: false,
+    }),
+};
+
 export const teams = {
   list: () => request('/teams'),
   get: (id) => request(`/teams/${id}`),

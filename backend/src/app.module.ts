@@ -16,6 +16,7 @@ import { AuthGuard } from './common/guards/auth.guard';
 import { PrincipalThrottlerGuard } from './common/guards/principal-throttler.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { UsersModule } from './users/users.module';
+import { InvitationsModule } from './invitations/invitations.module';
 import { TeamsModule } from './teams/teams.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { CustomersModule } from './customers/customers.module';
@@ -73,6 +74,7 @@ import { HealthModule } from './health/health.module';
     AuditModule,
     AuthModule,
     UsersModule,
+    InvitationsModule,
     TeamsModule,
     OrganizationsModule,
     CustomersModule,

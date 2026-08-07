@@ -3,7 +3,7 @@
 import { sx } from '../sx';
 import { buttonVariants } from '../common/Button';
 import { cn } from '@/lib/utils';
-import { UserAvatar } from '../common';
+import { Button, Input, Modal, Select, UserAvatar } from '../common';
 
 /* Settings keeps its dense bespoke layout, but every control below borrows the
    shared components' own class strings (buttonVariants / the Input recipe) so
@@ -86,7 +86,7 @@ export default function Settings({ V }) {
                 <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>team &amp; users</h2>
                 <p className={sx('font-size:13px;color:var(--cs-muted)')}>eight people across two teams. roles decide what each of them can reach.</p>
               </div>
-              <button onClick={V.mock} data-msg="invite sent — they'll get a gentle nudge by email ✿" className={primaryBtn()}>invite someone</button>
+              {V.canInvite && <button onClick={V.openInvite} className={primaryBtn()}>invite someone</button>}
             </div>
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
               <div className={sx('display:grid;grid-template-columns:minmax(170px,1.2fr) minmax(180px,1.4fr) 110px 100px 120px 92px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
@@ -114,6 +114,109 @@ export default function Settings({ V }) {
                 </div>
               ))}
             </div>
+
+            {/* pending invitations — people who have been asked but haven't arrived yet */}
+            {V.canInvite && (
+              <div className={sx('display:flex;flex-direction:column;gap:10px')}>
+                <div className={sx('display:flex;flex-direction:column;gap:3px')}>
+                  <span className={sx('font-size:14.5px;font-weight:500')}>pending invitations</span>
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>each link works once, and only for seven days.</span>
+                </div>
+
+                {V.invitesLoading && (
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>one moment…</span>
+                )}
+
+                {V.invitesFailed && (
+                  <span data-tone="sla-breach" className={sx('font-size:12.5px;padding:8px 12px;border-radius:var(--cs-r-sm);background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
+                    couldn&apos;t load the invitations just now — the people above are unaffected.
+                  </span>
+                )}
+
+                {!V.invitesLoading && !V.invitesFailed && !V.hasInvites && (
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md)')}>
+                    nobody is waiting on an invitation right now.
+                  </span>
+                )}
+
+                {V.hasInvites && (
+                  <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+                    <div className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 110px minmax(130px,1fr) 120px 92px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
+                      <span>email</span><span>role</span><span>invited by</span><span>expires</span><span className={sx('text-align:right')}>actions</span>
+                    </div>
+                    {V.inviteRows.map(i => (
+                      <div key={i.id} className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 110px minmax(130px,1fr) 120px 92px;gap:12px;padding:10px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
+                        <span className={sx('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{i.email}</span>
+                        <span data-tone="st-open" className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>{i.role}</span>
+                        <span className={sx('color:var(--cs-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{i.invitedBy} · {i.sentRel}</span>
+                        <span data-tone={i.tone} className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>{i.expiresLabel}</span>
+                        <span className={sx('display:flex;justify-content:flex-end')}>
+                          <button onClick={V.revokeInvite} data-id={i.id} data-email={i.email}
+                            className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:100px;background:transparent;color:var(--cs-muted);font-size:12px;cursor:pointer', { hover: 'background:var(--cs-hover);color:var(--cs-text)' })}>
+                            revoke
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Modal
+              isOpen={V.inviteOpen}
+              onClose={V.closeInvite}
+              title="invite someone"
+              size="md"
+              footer={
+                <>
+                  <Button variant="secondary" size="md" onClick={V.closeInvite}>not now</Button>
+                  <Button size="md" onClick={V.submitInvite} disabled={V.inviteBusy}>
+                    {V.inviteBusy ? 'sending…' : 'send the invitation'}
+                  </Button>
+                </>
+              }
+            >
+              <div className="flex flex-col gap-3.5">
+                <p className="text-[13px] text-fg-3">
+                  we&apos;ll email them a link that works once and expires in seven days. if they already
+                  have a plumo account, it simply adds this desk to it.
+                </p>
+
+                {V.inviteError && (
+                  <div className="px-3 py-2.5 rounded-token-sm text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
+                    {V.inviteError}
+                  </div>
+                )}
+
+                <Input
+                  label="email"
+                  type="email"
+                  required
+                  value={V.inviteEmail}
+                  onChange={V.onInviteEmail}
+                  onKeyDown={V.onInviteKey}
+                  placeholder="them@theircompany.com"
+                  autoComplete="off"
+                  className="h-btn-lg text-[14px]"
+                />
+
+                <Select
+                  label="role"
+                  value={V.inviteRole}
+                  onChange={V.onInviteRole}
+                  options={V.inviteRoleOptions}
+                />
+
+                <Select
+                  label="team"
+                  value={V.inviteTeam}
+                  onChange={V.onInviteTeam}
+                  options={V.inviteTeamOptions}
+                  helperText="you can move them later — nothing here is final."
+                />
+              </div>
+            </Modal>
           </div>
         )}
 

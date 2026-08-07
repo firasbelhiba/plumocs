@@ -53,6 +53,8 @@ export default class Console extends React.Component {
     pwCur: '', pwNew: '', pwConfirm: '', reportsAt: 0,
     keepSignedIn: true, serviceUp: true,
     keyName: '', keyKind: 'chatbot',
+    invites: [], invitesLoad: 'idle',
+    inviteOpen: false, inviteEmail: '', inviteRole: 'agent', inviteTeam: '', inviteBusy: false, inviteError: '',
   };
 
   forgot = (e) => { e.preventDefault(); this.setState({ loginView: 'reset', loginError: false }); };
@@ -377,6 +379,16 @@ export default class Console extends React.Component {
     if (m < 1) return 'now'; if (m < 60) return m + 'm';
     const h = Math.round(m / 60); if (h < 24) return h + 'h';
     return Math.round(h / 24) + 'd';
+  }
+  /** rel() looks backwards; this looks forwards — "in 6d", for things that expire. */
+  until(at) {
+    if (at == null) return '—';
+    const m = Math.round((at - this.state.now) / 60000);
+    if (m <= 0) return 'expired';
+    if (m < 60) return 'in ' + m + 'm';
+    const h = Math.round(m / 60);
+    if (h < 24) return 'in ' + h + 'h';
+    return 'in ' + Math.round(h / 24) + 'd';
   }
   dur(ms) {
     const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
@@ -816,7 +828,95 @@ export default class Console extends React.Component {
     }
   };
   hideKey = () => this.setState({ secret: null });
-  setSettingsTab = (e) => this.setState({ settingsTab: e.currentTarget.dataset.v, secret: null });
+
+  /* ---- invitations -------------------------------------------------------
+   *
+   * The button that opens this modal used to be onClick={V.mock}: it showed
+   * "invite sent — they'll get a gentle nudge by email ✿" and made no request
+   * at all. Everything below is the real thing — POST /invitations, the pending
+   * list, and revoke — and every message the reader sees is the server's actual
+   * answer rather than a cheerful guess.
+   */
+
+  ROLE_OPTIONS = [
+    { value: 'agent', label: 'agent · answers conversations' },
+    { value: 'lead', label: 'lead · agent, plus their team' },
+    { value: 'admin', label: 'admin · everything, settings included' },
+  ];
+
+  async loadInvites() {
+    // Only admins may list them; asking as anyone else is a guaranteed 403.
+    if (!this.api || this.state.role !== 'admin') return;
+    this.setState({ invitesLoad: 'loading' });
+    try {
+      const rows = await this.api.listInvitations();
+      this.setState({ invites: rows, invitesLoad: 'ok' });
+    } catch (e) {
+      this.setState({ invites: [], invitesLoad: 'error' });
+    }
+  }
+
+  openInvite = () => this.setState({
+    inviteOpen: true, inviteEmail: '', inviteRole: 'agent', inviteTeam: '', inviteError: '', menu: null,
+  });
+  closeInvite = () => this.setState({ inviteOpen: false, inviteError: '' });
+  onInviteEmail = (e) => this.setState({ inviteEmail: e.target.value, inviteError: '' });
+  onInviteRole = (e) => this.setState({ inviteRole: e.target.value });
+  onInviteTeam = (e) => this.setState({ inviteTeam: e.target.value });
+  onInviteKey = (e) => { if (e.key === 'Enter') this.submitInvite(); };
+
+  submitInvite = async () => {
+    const email = this.state.inviteEmail.trim().toLowerCase();
+    // Say the obvious thing before the round trip; everything else is the
+    // server's to judge — already a member, already invited, not an admin.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.setState({ inviteError: "that address doesn't look quite right — have another look" });
+      return;
+    }
+    this.setState({ inviteBusy: true, inviteError: '' });
+    try {
+      const inv = await this.api.createInvitation({
+        email, role: this.state.inviteRole, teamId: this.state.inviteTeam || undefined,
+      });
+      this.setState({ inviteOpen: false, inviteBusy: false, inviteEmail: '' });
+      this.toast('invitation on its way to ' + (inv?.email || email) + ' ✿');
+      this.loadInvites();
+    } catch (e) {
+      this.setState({
+        inviteBusy: false,
+        inviteError:
+          e?.status === 0 ? "can't reach the server — nothing was sent"
+          : e?.status === 403 ? 'inviting people is an admin thing — ask one of yours'
+          : e?.message || "that didn't send — try again in a moment",
+      });
+    }
+  };
+
+  revokeInvite = (e) => {
+    const { id, email } = e.currentTarget.dataset;
+    this.setState({
+      confirm: {
+        title: 'revoke the invitation to ' + email + '?',
+        body: "their link stops working straight away. nothing else changes, and you can invite them again whenever you like.",
+        ok: 'revoke it', tone: 'warn',
+        action: async () => {
+          this.setState({ confirm: null });
+          try {
+            await this.api.revokeInvitation(id);
+            this.setState((s) => ({ invites: s.invites.filter((i) => i.id !== id) }));
+            this.toast('revoked — that link no longer opens anything');
+          } catch (err) {
+            this.toast(err?.message || "couldn't revoke that one — try again in a moment", 'bad');
+          }
+        },
+      },
+    });
+  };
+
+  setSettingsTab = (e) => {
+    const v = e.currentTarget.dataset.v;
+    this.setState({ settingsTab: v, secret: null }, () => { if (v === 'team') this.loadInvites(); });
+  };
   /** Value-form of setAvail — Segment hands us the next value directly. */
   pickAvail = (v) => this.applyAvail(v);
   setAvail = (e) => this.applyAvail(e.currentTarget.dataset.a);
@@ -1009,6 +1109,21 @@ export default class Console extends React.Component {
       created: this.clock(x.createdAt), updated: this.rel(x.updatedAt),
     })) : [];
 
+    // Pending only: an accepted invitation is a person in the table above, and a
+    // revoked one is deliberately gone. Anything past its expiry is still shown
+    // — it is the reason nobody arrived, and it can be replaced by re-inviting.
+    const inviteRows = (S.invites || [])
+      .filter((i) => i.status !== 'accepted' && i.status !== 'revoked')
+      .map((i) => {
+        const expired = i.status === 'expired' || (i.expiresAt != null && i.expiresAt <= S.now);
+        return {
+          id: i.id, email: i.email, role: i.role, invitedBy: i.invitedBy,
+          sentRel: i.createdAt != null ? this.rel(i.createdAt) + ' ago' : '—',
+          expiresLabel: expired ? 'expired' : this.until(i.expiresAt),
+          expired, tone: expired ? 'sla-breach' : 'sla-paused',
+        };
+      });
+
     const dd = (A && S.drill && A.drilldowns) ? A.drilldowns[S.drill] : null;
     const rep = A ? A.reports : { kpis: [], volume: [], byChannel: [], byAgent: [] };
     const maxVol = Math.max(1, ...rep.volume.map(v => Math.max(v.created, v.resolved)));
@@ -1172,6 +1287,22 @@ export default class Console extends React.Component {
       keyKind: S.keyKind, setKeyKind: this.setKeyKind,
       keyKinds: Object.entries(this.KEY_KINDS).map(([id, k]) => ({ id, ...k, on: S.keyKind === id })),
       revokeKey: this.revokeKey, genKey: this.genKey, hideKey: this.hideKey,
+
+      // invitations. `canInvite` is admin and only admin — the endpoints are,
+      // so offering the button to a lead would be offering them a 403.
+      canInvite: S.role === 'admin',
+      inviteOpen: S.inviteOpen, openInvite: this.openInvite, closeInvite: this.closeInvite,
+      inviteEmail: S.inviteEmail, onInviteEmail: this.onInviteEmail, onInviteKey: this.onInviteKey,
+      inviteRole: S.inviteRole, onInviteRole: this.onInviteRole,
+      inviteTeam: S.inviteTeam, onInviteTeam: this.onInviteTeam,
+      inviteBusy: !!S.inviteBusy, inviteError: S.inviteError || '',
+      submitInvite: this.submitInvite, revokeInvite: this.revokeInvite,
+      inviteRoleOptions: this.ROLE_OPTIONS,
+      inviteTeamOptions: [{ value: '', label: 'no team for now' }].concat(
+        (A ? A.teams : []).map((x) => ({ value: x.id, label: x.name })),
+      ),
+      inviteRows, hasInvites: inviteRows.length > 0,
+      invitesLoading: S.invitesLoad === 'loading', invitesFailed: S.invitesLoad === 'error',
 
       toasts: S.toasts.map(x => ({ id: x.id, text: x.text, tone: x.tone === 'bad' ? 'sla-breach' : 'sla-met' })),
       hasConfirm: !!S.confirm,
