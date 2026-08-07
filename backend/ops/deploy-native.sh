@@ -85,7 +85,25 @@ pending=$(npx prisma migrate status 2>&1 | grep -ci 'following migration.*not.*a
 if [[ "$pending" -gt 0 ]]; then
   if [[ "${WITH_MIGRATIONS:-0}" == "1" ]]; then
     log "Applying pending migrations"
+
+    # The credential normally lives in app/.env, not the deploying shell. Read it
+    # from there rather than making every caller export it by hand — and with
+    # `cut -d= -f2-` so a password containing '=' survives. An explicit
+    # environment variable still wins, for one-off restores against another host.
+    if [[ -z "${MIGRATE_DATABASE_URL:-}" && -f "$APP_DIR/.env" ]]; then
+      MIGRATE_DATABASE_URL="$(grep -E '^MIGRATE_DATABASE_URL=' "$APP_DIR/.env" | head -1 | cut -d= -f2- | sed 's/^"\(.*\)"$/\1/; s/^'"'"'\(.*\)'"'"'$/\1/')"
+    fi
     [[ -n "${MIGRATE_DATABASE_URL:-}" ]] || die "Pending migrations need MIGRATE_DATABASE_URL (the plumo_migrator role). plumo_app owns nothing and cannot run DDL."
+
+    # A backup before DDL, always. This is production data and a migration is the
+    # one deploy step that cannot be undone by swapping dist back.
+    if [[ -x /opt/plumo-cs/ops/pg-backup.sh ]]; then
+      log "Backing up the database first"
+      /opt/plumo-cs/ops/pg-backup.sh || die "Backup failed — refusing to migrate."
+    else
+      warn "ops/pg-backup.sh not found or not executable — migrating WITHOUT a fresh backup."
+    fi
+
     DATABASE_URL="$MIGRATE_DATABASE_URL" npx prisma migrate deploy
   else
     die "There are unapplied migrations. Take a backup (ops/pg-backup.sh), review them, then re-run with WITH_MIGRATIONS=1."
