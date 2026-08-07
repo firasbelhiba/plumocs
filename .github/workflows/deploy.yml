@@ -16,30 +16,28 @@
 name: deploy
 
 on:
-  # THE PUSH TRIGGER IS DELIBERATELY DISABLED. Re-enable it by uncommenting,
-  # once the two defects below are fixed and a manual run has proven green.
+  # Re-armed after this workflow took production down on 2026-08-07 and both
+  # causes were fixed and proven by a manual run that cut over with no downtime.
   #
-  # This workflow took production down on 2026-08-07. Two faults compounding:
+  # What broke, so it is not reintroduced:
   #
-  #   1. `docker compose` interpolates ${MIGRATE_DATABASE_URL} from the SHELL,
-  #      not from env_file — env_file only passes variables INTO a container, it
-  #      does not define them for YAML substitution. So compose refused to parse
-  #      the file at all, and even `up api worker` failed although only the
-  #      migrate service references that variable.
+  #   1. `docker compose` interpolates ${MIGRATE_DATABASE_URL} from the SHELL.
+  #      env_file passes variables INTO a container; it does not define them for
+  #      YAML substitution. compose would not parse the file at all, so even
+  #      `up api worker` failed although only the migrate service uses it.
+  #      deploy-container.sh now exports it and runs `compose config -q` first.
   #
-  #   2. deploy-container.sh stops the systemd units BEFORE proving the
-  #      containers can start. The pre-flight migrate check hit fault 1 too, but
-  #      its failure was swallowed by a `|| true` in the grep pipeline, so the
-  #      script sailed past it, disabled production, and only then discovered
-  #      compose was unusable. Nothing was left serving.
+  #   2. The script stopped systemd BEFORE it had any evidence the new build
+  #      worked, so the first sign of trouble arrived after production was
+  #      already down. It now smoke-tests the image on a spare port, against the
+  #      real database, while the old stack keeps serving — and stops nothing
+  #      until that passes.
   #
-  # Leaving this armed would mean the next backend push repeats it. A pipeline
-  # that can take the site down on a green test suite is worse than no pipeline,
-  # because it looks like a safety net.
-  #
-  # push:
-  #   branches: [main]
-  #   paths: ['backend/**', '.github/workflows/deploy.yml']
+  # Anything that adds an irreversible step to this pipeline belongs AFTER that
+  # smoke test, not before it.
+  push:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/deploy.yml']
 
   # Ship a known-good commit by hand — rollbacks, and re-running a deploy whose
   # SSH step flaked without pushing an empty commit to trigger it.
