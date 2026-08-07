@@ -83,4 +83,18 @@ jobs:
           script: |
             set -Eeuo pipefail
             REF="${{ github.event.inputs.ref || github.sha }}"
-            bash /opt/plumo-cs/source/backend/ops/deploy-container.sh "$REF"
+
+            # Sync the checkout BEFORE running the script that lives in it.
+            # Otherwise this is a bootstrap paradox: the first deploy of a new
+            # ops script cannot run, because the server's copy predates it, and
+            # a script cannot fetch itself into existence. That is exactly how
+            # the first run of this workflow failed.
+            SRC=/opt/plumo-cs/source
+            if [ ! -d "$SRC/.git" ]; then
+              sudo mkdir -p "$SRC" && sudo chown -R "$(id -u):$(id -g)" "$SRC"
+              git clone https://github.com/firasbelhiba/plumocs.git "$SRC"
+            fi
+            git -C "$SRC" fetch --prune origin
+            git -C "$SRC" checkout -qf "$REF" --detach
+
+            bash "$SRC/backend/ops/deploy-container.sh" "$REF"
