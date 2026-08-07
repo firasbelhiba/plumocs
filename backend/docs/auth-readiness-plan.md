@@ -1,0 +1,198 @@
+# Auth & onboarding — plan before code
+
+Audited against `C:/Users/firas/OneDrive/Documents/plumocs` at `4a25f05`. Every claim below is a file:line I read. Nothing here has been edited.
+
+---
+
+## 1. WHERE IT STANDS
+
+| Req | Works today | Does not |
+|---|---|---|
+| **R1** access only via Plumo, or via invite | The PM route is real and correctly gated: P0/P1 check (`backend/src/auth/auth.service.ts:155-162`), desk must carry `pm_workspace_id` (`:172-183`), account resolved by `sub` only (`:239-244`). No self-signup exists — the complete `@Public` surface is login/refresh/logout/forgot/reset (`auth.controller.ts:14,24,31,38,46`), the three PM routes (`pm-identity.module.ts:171,188,231`), health, and `/email/inbound`. Only the PM callback creates an account. | **The invite exception does not exist.** The only way to create a non-PM account is `POST /users` (`users/users.module.ts:227-228`, `@Roles('admin')`) where **the admin types the invitee's password** (`CreateUserDto.password`, `users.module.ts:15`, hashed `:120`). That is the inverse of "they set an email + password". `api.users.create` exists in `frontend/lib/api/endpoints.js:72` with **no call site in the console** — an admin cannot do it from the UI at all; it takes a hand-rolled POST. |
+| **R2** invitations by email | Nothing. | **Does not exist.** No `Invitation` model in `backend/prisma/schema.prisma` (token tables are `RefreshToken:444`, `PasswordReset:457`, `PmOAuthState:613`), no migration, no endpoint, no email. The four `invit` hits in `backend/src` are all prose in comments (`auth.service.ts:143`, `workspace-context.service.ts:12`, `configuration.ts:51`, `pm-identity.module.ts:20`). The console's **"invite someone" button is a lie**: `frontend/components/screens/Settings.jsx:89` is `onClick={V.mock}` → `Console.jsx:228`, which shows the toast *"invite sent — they'll get a gentle nudge by email ✿"* and makes no network call. Same for row `edit` and `deactivate` (`Settings.jsx:109-110`). And `Console.jsx:72` points locked-out people straight at it. |
+| **R3** reset password | Works for a password account: token minted `auth.service.ts:578-581`, link built from `consoleUrl` (`:586`), landing page exists at `frontend/app/reset-password/page.jsx`. Refusal for a PM account is implemented at **both** mint (`:534`) and redeem (`:612`), and the refusal text is correct: *"This account signs in through Plumo… choose Continue with Plumo"* (`:566-576`). | The refusal branches on `pm_user_id`, which **knowingly over-matches** (the code says so at `:554-564`): anyone who had a CS password and later linked Plumo silently loses recovery. There is **no** admin-side password reset — `UpdateUserDto` has no password field (`users.module.ts:19-26`). The PM-refusal mail is still sent with the subject **"reset your plumo password"** (`worker-jobs/processors.ts:480`). Whether any of it is delivered in production is unverified (§5). The "set a password from Settings" option the owner asked about **does not exist**: there is no `set-password` endpoint, and `changePassword` requires a current password (`auth.service.ts:637`) that a PM account can never produce. |
+| **R4** same email in both products | One direction is decided and correct: PM sign-in against a taken CS email is **refused, not merged** (`auth.service.ts:246-254`), and the reasoning at `:230-238` (PM emails are mutable, so email-matching is an account-takeover shape) is right. | The remedy in that message is unreachable for most people: it says "connect Plumo from Settings", but `/auth/pm/start` is `@Roles('admin')` (`pm-identity.module.ts:143`), so an agent or lead gets *Insufficient role*. The message is also **truncated to 120 chars in transit** (`pm-identity.module.ts:328`, and `:205`), so it arrives cut mid-instruction. The reverse direction is **undecided**: an admin adding an address that a PM user holds gets an unhandled P2002 → **HTTP 500 "Something went wrong"** (`users.module.ts:116` vs `common/filters/http-exception.filter.ts:37-39`; note `Prisma` is imported at `users.module.ts:6` and never used — the mapping was intended and never written). And there is **no endpoint to add an existing user to a second workspace**: `UsersController` has only `create` `:227`, `update` `:233`, `deactivate` `:239`. With two live desks, one person cannot be staffed on both. |
+
+**Two cross-cutting facts that are not requirements but will decide the test week:**
+
+- **A user with two active memberships cannot log in, and cannot refresh.** `/auth/login` and `/auth/refresh` read the slug off the wire (`auth.controller.ts:20,27`), but the console can never send it there: the header is attached only when `auth` is truthy (`frontend/lib/api/client.js:109`) and those routes are declared `auth: false` (`frontend/lib/api/endpoints.js:12-13`). The sole-membership fallback saves the single-desk case (`common/workspace/workspace-context.service.ts:108-111` → `app_resolve_sole_membership`), but it returns `LIMIT 2` precisely so it can refuse to guess (`prisma/migrations/20260807130000_sole_membership_fallback/migration.sql:36-40`); with two memberships it returns null and `resolveForUser` throws 403 (`workspace-context.service.ts:115-117`). PM sign-in still works because it passes an explicit slug (`auth.service.ts:221`) — but 15 minutes later the access token expires, `refreshTokens()` posts with `auth:false` (`client.js:129-137`), gets that 403, and `request()` treats a failed refresh as session death (`client.js:164-167`). **A dual-membership user is silently logged out every 15 minutes.** There is no workspace picker and no `workspaces` controller anywhere in the backend.
+- **Every login failure renders as one string.** `Console.jsx:852-855` catches everything into `loginError: true`; `Login.jsx:147` prints *"incorrect email or password. no harm done — try once more."* A 403 (no membership / two memberships), a 429, and a genuinely wrong password are indistinguishable. During a test week this will burn hours.
+
+---
+
+## 2. THE STATE MACHINE
+
+This is the contract. `password real` means a human chose it; `password unusable` means `passwordHash` is a real argon2 hash of 32 random bytes (`auth.service.ts:263`) and is deliberately indistinguishable from a chosen one — **there is no column recording which** (`schema.prisma:154-183`; `password_set_at` is proposed in `backend/ops/audit-pm-passwords.sh:418-425` and `backend/ops/README.md:124-135`, and exists in no migration).
+
+Each cell: **defined behaviour** — and where today differs, `TODAY:`.
+
+| # | State | Password login | Continue with Plumo | forgot-password | Invite-accept for that address | Verdict |
+|---|---|---|---|---|---|---|
+| **A** | No PM link · password real (created by `POST /users`, `users.module.ts:111-131`) | Signs in (`auth.service.ts:121-138`) | Refuse, tell them to sign in and link from Settings (`:250-253`) | Mints token, mails working link (`:578-586`) | Attach a membership to the **existing** user, never create a second row, never touch the password | **correct today** except: the "link from Settings" advice 403s for non-admins (`pm-identity.module.ts:143`) and invite-accept does not exist |
+| **A′** | Same as A, **and the address is also a live PM account** | Signs in | Refused as above — permanent unless they can link | Works | As A | **wrong today** — the refusal is correct but the escape hatch is admin-only and the message arrives truncated (`pm-identity.module.ts:328`) |
+| **B** | Seed account, password `password123` (`prisma/seed.ts:43,59`) | Signs in | As A | Works | As A | **wrong today** — `seed.ts:356` runs `main()` with **no environment guard**. Not wired into `deploy.yml` (line 78 runs only `prisma generate`), so it is an operator-error path, but `ops/audit-pm-passwords.sh:301-313` already treats `password123` as a production concern |
+| **C** | PM-linked · password unusable (provisioned by `resolvePmUser`, `auth.service.ts:256-266`) | Refuse: "Incorrect email or password" (`argon2.verify` can never match) | Signs in, subject to role `:157`, desk link `:172`, desk active `:177`, membership `:141-143` | **No token.** Mail says there is no password, use Continue with Plumo (`:534`, `:565-576`) | Should be refused / redirected to Plumo, not turned into a password account | **correct today**, with two UI lies: `Account.jsx:63-69` renders a change-password form that cannot succeed and `Console.savePassword` maps the 401 to *"the current password isn't right"* |
+| **D-admin** | PM-linked · password real (A/B then linked via `PmLinkService.apply`, `pm-identity.module.ts:62-65`) · still P0/P1 of a linked org | Signs in | Signs in | **Should mint a token** — they deliberately set a password | `TODAY: no token` (`:534` matches on `pm_user_id`), so they lose recovery for a password they chose | **wrong today** (the code admits it at `:554-564`) |
+| **D-member** | PM-linked · password real · P2/P3, or P0/P1 of an org with no desk | Signs in | Refused at the role gate (`:158-162`) | Should mint a token | `TODAY: no token`, and the mail tells them to use Continue with Plumo — **which refuses them**. Closed loop | **wrong today** — hard dead end |
+| **E** | No PM link · password unusable — **C then Settings › disconnect** (`pm-identity.module.ts:106`) | Impossible (random hash) | Refused: their own row is now the email collision at `:246-254`, and the advice is to sign in with a password they do not have | `TODAY: mints a real token` (`:534` no longer fires) and `resetPassword`'s guard (`:612`) no longer fires either → they end up holding a **permanent password on a desk PM can never revoke them from** | n/a | **wrong today — the load-bearing defect.** Two clicks. It is exactly the failure the comment at `:535-545` says the design exists to prevent, and every auto-provisioned desk owner is a state-C account (`auth.service.ts:411`) |
+| **F** | No CS row · address **is** a PM account | n/a | Signs in and, if their PM org has no desk, **auto-provisions one and seats them admin** (`:203-216`, `:371`, `:411`; `PM_AUTO_PROVISION_DESKS` defaults on, `configuration.ts:58`) | n/a — no row, uniform `{ok:true}` (`:591`) | Should offer Plumo sign-in rather than minting a password credential; if accepted as a password account it will collide at `:250` forever | **undefined** — nothing in the product knows the address exists in PM before the person clicks |
+| **G** | No CS row · no PM account | n/a | Refused ("You are not an owner or admin of any Plumo workspace", `:159-161`) | uniform `{ok:true}` | Creates the user + membership; **the invitee sets the password** | **does not exist** |
+| **H** | Any of the above, **two active memberships** | `TODAY: 403` rendered as "incorrect email or password" | Signs in (explicit slug, `:221`) then **dies at the next refresh** (`client.js:164-167`) | unchanged | Inviting an existing user into a second desk puts them here | **wrong today** — and production already has two desks |
+| **I** | `users.is_active = false` | 401 (`:123`) | 401 (`:242`, only if the `sub` matches) | `TODAY: still mails a reset link` — `forgotPassword:522` does not filter on `isActive` | should be refused | **wrong today**, minor |
+| **J** | Membership deactivated on this desk | 403 at `:134` → `workspace-context.service.ts:141-143` | Reaches `ensureDeskMembership` (`:423-441`, create-if-missing, **no reactivation**) then the same 403 | unchanged | should reactivate the membership, not create a second | **correct today** |
+
+Also true of every state: `refresh()` re-checks `users.is_active` and the CS membership (`auth.service.ts:462-467`) and **nothing PM knows** — not the role, not the desk link. Each rotation mints a fresh 30-day token (`:670-676`, `configuration.ts:64`). Demote someone in PM and their CS session rolls indefinitely as long as the browser refreshes once a month.
+
+---
+
+## 3. RECOMMENDATION — password *and* Plumo
+
+**Yes: let a PM-linked user set a password, but make it an explicit recorded act, and close the unlink hole in the same change.**
+
+The codebase's own argument against is strong and I want to state it fairly, because it is the real constraint: `loginWithPm` re-validates PM role, desk link and desk status on **every** sign-in (`auth.service.ts:157-183`). `login()` validates none of them and **cannot** — CS has no way to ask PM about a `sub` without that person's own token (`:539-541`). So a password on a PM account is a credential that outlives demotion, removal from the PM org, and deletion of the PM account. On a desk auto-provisioned by one admin's first sign-in, that admin is the only admin there is (`:411`), so nobody in CS can revoke it either.
+
+Three things overturn it:
+
+1. **The refusal is already only cosmetic.** State E: disconnect (`pm-identity.module.ts:106`) → forgot-password → permanent password. Two clicks, available to every PM-provisioned admin, with no audit signal anyone reads. We are not enforcing purity; we are inconveniencing the honest and waving through the same outcome unrecorded.
+2. **There is exactly one recovery mechanism in the product and it refuses every PM account.** No admin reset exists. D-member (`:158-162`) is a closed loop today: recovery refused, PM sign-in refused.
+3. **PM being down means the desk is down**, during a week when the desk is the thing being tested.
+
+### What the user experiences
+
+- **PM-provisioned account (state C).** Settings shows *"you sign in with Plumo. want a password as a backup?"* → one field, no current-password. Setting it stamps `users.password_set_at` and revokes other sessions (the pattern `changePassword` already uses, `auth.service.ts:645-648`). Both methods work from then on.
+- **Never set one.** Forgot-password answers exactly as today: *"This account signs in through Plumo…"* (`:566-576`). Unchanged, and now it is true rather than approximately true.
+- **Had a CS password and linked later (D).** Recovery keeps working. Today it silently stops.
+- **Disconnect with no password set.** Refused: *"set a password first — otherwise you would have no way back in."* This is the fix that matters; it deletes state E.
+- **Nothing changes for anyone who never opens Settings.**
+
+The trade, stated plainly: we accept a credential PM cannot revoke, in exchange for a product where nobody is stranded with no way in — and we were already accepting that credential, just without a record of who holds one. To keep it honest, cut `JWT_REFRESH_TTL` (`configuration.ts:64`) from 30 days to something a demotion can outrun (24h–7d), so a PM-origin session cannot outlive PM's own answer by a month.
+
+Branch on `password_set_at`, **not** `pm_user_id` — that ends the over-match the code confesses to at `auth.service.ts:554-564`.
+
+---
+
+## 4. WHAT GETS BUILT
+
+Effort is one implementer, dev-days. Verification names the existing harness where one applies: unit specs alongside the code (`src/auth/auth.service.password-recovery.spec.ts`, `src/common/workspace/sole-membership.spec.ts` are the models), integration against real Postgres with split roles (`test/integration/harness.ts`, run by `.github/workflows/backend-ci.yml`).
+
+### Required before anyone is invited
+
+**0. Verify SMTP on the box. 30 minutes. Blocks 2, 3, and the existing reset flow.**
+`SMTP_HOST` has no default (`configuration.ts:74`) and is optional at boot (`env.validation.ts:33-37`), so an unset host silently becomes `localhost:1025` — the MailHog dev default (`backend/docker-compose.yml:40-44`) — and production runs `network_mode: host` (`docker-compose.prod.yml:28`) with nothing listening there. Nothing calls `transporter.verify()` anywhere. **Whether production has working SMTP cannot be determined from this repo**: both containers load `env_file: /opt/plumo-cs/app/.env` (`docker-compose.prod.yml:29`), which is not in git, and `SMTP_*` appears in no workflow.
+*Verify:* on the server, `grep SMTP /opt/plumo-cs/app/.env`, then POST `/auth/forgot-password` for a known password account and confirm the mail lands in a real inbox — not just that the API returned 200, which it always does (`auth.service.ts:591`).
+
+**1. Fix the two-membership lockout. 0.5–1 day. No dependencies. Do it first — it is the cheapest and it silently breaks PM sessions today.**
+Send `X-Workspace-Slug` on `/auth/login` and `/auth/refresh` from the console (`client.js:109` gates on `auth`, `endpoints.js:12-13` set `auth:false`); persist the last-used slug and, when login 403s with the "name yours" message, render a desk picker instead of "incorrect email or password". Backend needs a small authenticated `GET /workspaces/mine` for the picker — no such controller exists today.
+*Verify:* integration test — user with two active memberships logs in with the header and refreshes ten times without a 403; `sole-membership.spec.ts` covers the one-membership case already. Manual: sign in on `dar-blockchain`, wait past the 15-minute access TTL, confirm the session survives.
+
+**2. Invitations. 2.5–3 days. Depends on 0. The largest item.**
+- `Invitation` model: `id, workspaceId, email (citext), role, teamId?, tokenHash, invitedByUserId, expiresAt, acceptedAt, revokedAt`. Partial unique on `(workspaceId, email)` while pending.
+- **RLS is the trap.** The policy set was derived once, at `prisma/migrations/20260806140000_row_level_security/migration.sql:47-79`, over "every public table with a `workspace_id` column" — a table added later gets **no** policy automatically, and it must not get the obvious one: accept is unauthenticated, `app_current_workspace()` is NULL, and every valid token would read as invalid. Model it on `password_resets`, deliberately excluded for exactly this reason (`migration.sql:38-41`), or read through a `SECURITY DEFINER` function as `app_resolve_sole_membership` does.
+- The **accept write is the harder half**: it creates a `WorkspaceMembership`, which *is* under `workspace_isolation` (`schema.prisma:555`). Copy `provisionDesk` (`auth.service.ts:299-344`): write the unscoped row, `SELECT app_set_workspace(...)`, then the scoped writes — the audit row too, since `audit_log` is workspace-scoped (`schema.prisma:488`).
+- Token: `randomBytes(32).toString('hex')` + sha256, store the hash, mail the raw — verbatim from `auth.service.ts:578-580`, but 7 days not 1 hour.
+- Endpoints: `POST /invitations`, `GET /invitations`, `DELETE /invitations/:id`, `POST /invitations/:id/resend` (mail gets lost — you will want this next week), `@Public GET /invitations/accept?token=` (preview) and `@Public POST /invitations/accept`. Throttle the public two like forgot-password (`auth.controller.ts:39`).
+- **Send inline, not via the queue.** `notifications.fanout` special-cases `password_reset` before `requireWorkspace` (`processors.ts:472-484`); everything else writes `notifications` rows keyed on `user_id`, an FK to `users` (`schema.prisma:473-474`) — an invitee has no user row, so the insert fails regardless of workspace. `EMAIL_OUTBOUND` is ticket-shaped only (`processors.ts:52-57`). `EmailService` is exported and available in the API process (`email/email.module.ts:10`, `app.module.ts:88`). Inline with an explicit try/catch and a real error to the admin — plus resend as the recovery valve. `sendNotification` does not catch (`email.service.ts:123-130`) and `safeAdd` swallows enqueue failures into a log line (`queue/queue.producer.ts:56-63`), so an inline send is the only version whose failure the admin can see.
+- Link built from `consoleUrl` (`configuration.ts:14`), **never** `appUrl` — that exact bug sent every reset link ever mailed to a 404 (`auth.service.ts:524-527`).
+- Console: replace the `Settings.jsx:89` mock with a real modal; wire the pending list with revoke/resend; new accept page modelled on `frontend/app/reset-password/page.jsx`, which already solves token-from-URL client-side. Delete or wire `Settings.jsx:109-110` — a fake "deactivate" in front of testers is worse than no button.
+*Verify:* unit spec for token mint/redeem/expiry/replay; **integration spec that accept works on an unbound connection** (this is the one that catches the RLS mistake, and `workspace-isolation.integration.spec.ts` is the pattern); manual end-to-end to a real mailbox.
+
+**3. `password_set_at` + set-password + unlink guard. 1 day. Independent of 2; ship together.**
+Add `users.password_set_at timestamptz` nullable. Stamp it in `users.module.ts:116`, `auth.service.ts:620` and `:641`; leave NULL in `resolvePmUser` (`:256`) and in invite-accept only if the invitee never chooses one (they always do). Then: `POST /auth/set-password` (authenticated, no `currentPassword`, permitted only when `password_set_at IS NULL`, revokes other sessions, writes audit); `forgotPassword:534` and `resetPassword:612` branch on `password_set_at` instead of `pm_user_id`; **`unlink` (`pm-identity.module.ts:106`) refuses when `password_set_at IS NULL`.**
+*Verify:* extend `auth.service.password-recovery.spec.ts` with one case per row of §2's table — this is what makes that table a contract rather than a description. Manual: walk state C → disconnect → confirm refusal.
+
+**4. R4 hard edges. 0.5 day.**
+Map P2002 on `POST /users` to a 409 with a real message (`users.module.ts:116`; `chat.module.ts:201` and `customers.module.ts:164` are the in-repo pattern, and `Prisma` is already imported and unused at `users.module.ts:6`). Add `POST /users/:id/memberships` (or fold into invite-accept) so an existing user can be staffed on a second desk. Drop `@Roles('admin')` from `/auth/pm/start` (`pm-identity.module.ts:143`) to self-link-only, or the R4 refusal message stays a lie for every agent and lead. Raise the 120-char truncation (`pm-identity.module.ts:205,328`) to ~200 so the instruction survives.
+*Verify:* unit test for 409; manual — create a user with an address that already exists, read the error.
+
+**5. Tell the truth in the UI. 0.5 day. Depends on 3.**
+Return `pmLinked` and `hasPassword` from `/auth/me` (`auth.service.ts:485-517` selects neither today; note the console *can* already learn `pmLinked` from `GET /auth/pm/status`, `pm-identity.module.ts:128-134`, and does — `Console.jsx:205,1149` — it just cannot learn `hasPassword`). Gate `Account.jsx:63-69` on it: "set a password" vs "change password". Distinguish 401 / 403 / 429 at `Console.jsx:852-855` instead of collapsing to `Login.jsx:147`. Fix the subject line at `processors.ts:480` so the PM-refusal mail is not titled *"reset your plumo password"*. Hide "Continue with Google" and "Continue with SSO" (`Login.jsx:114-124`) — they toast "isn't set up on this instance yet" and they sit above the button that works.
+
+### Can wait until after the test week
+
+| Item | Why it waits |
+|---|---|
+| Re-validate PM standing on `refresh()` (`auth.service.ts:445-468`) and shorten `JWT_REFRESH_TTL` (`configuration.ts:64`) | The TTL change is a one-line env edit and *should* ship with item 3; the full PM re-check needs a token exchange design |
+| Browser-binding for the **link** callback (`pm-identity.module.ts:282` guards only `isSignIn`) | Real defect — an admin can have a victim complete a link URL and write the victim's `sub` onto the attacker's row (`:62-65`) — but it needs an authenticated admin attacker |
+| `pm_oauth_states` pruning — `pruneExpiredStates()` (`pm-identity.service.ts:404-410`) has **exactly one occurrence in the repo: its own definition**, and `/auth/pm/signin/redirect` is public at the global 120/60s | Storage growth, not correctness |
+| API keys survive `deactivate` (`users.module.ts:169-175` never touches `api_keys`; `app_resolve_api_key` filters only prefix/hash/is_active) | Not exercised by ticketing testers |
+| Login timing oracle (`auth.service.ts:122-125`, no dummy verify) | Real, low priority |
+| Write `IdentityAuditLog` (`schema.prisma:578-590`, **zero references in `src/`**) | Would be genuinely useful during the test week — refused sign-ins currently leave no trail anywhere. Cheap; promote it if item 2 lands early |
+| `returnTo` is stored (`pm-identity.service.ts:209`) and never read | Cosmetic |
+| `@Query('state')` typed `string`, 500s on a repeated `?state=` (`pm-identity.module.ts:249`) | Needs a malicious caller |
+| `adoptPmSession` hardcodes `keepSignedIn = true` (`frontend/lib/api/adapter.js:120`) | Cosmetic |
+
+---
+
+## 5. WHAT THE OWNER MUST PROVIDE
+
+### SMTP — exact variables
+
+Read at `backend/src/config/configuration.ts:73-78`, validated at `backend/src/config/env.validation.ts:33-37`, consumed at `backend/src/email/email.service.ts:63-71`. They go in `/opt/plumo-cs/app/.env` on the server (`docker-compose.prod.yml:29`) — **both** the api and worker containers load it, and both send mail.
+
+| Var | Required | Note |
+|---|---|---|
+| `SMTP_HOST` | **yes** | No default. Unset silently becomes `localhost` (`email.service.ts:65`) and every send ECONNREFUSEDs at first use, never at boot |
+| `SMTP_PORT` | **yes** | Defaults to `1025`, the MailHog port. **Use 587.** `secure` is hardcoded `false` (`email.service.ts:67`), so port 465 implicit-TLS will not work; 587 STARTTLS will |
+| `SMTP_USER` | yes for any real provider | Auth is configured only when this is set (`email.service.ts:68-70`) |
+| `SMTP_PASS` | with `SMTP_USER` | |
+| `SMTP_FROM` | **yes** | Defaults to `plumo support <help@plumo.app>`. Must be a domain whose SPF/DKIM authorises the provider, or invitations land in spam and the test week reads as "the invite never arrived" |
+| `PM_CONSOLE_URL` | **verify it is set** | `configuration.ts:14`, falls back to `http://localhost:3000`. Every reset **and every invitation** link is built from it (`auth.service.ts:524-527`). If it is wrong, mail arrives and every link is dead |
+
+Any provider with SMTP is fine (SendGrid, Mailgun, Postmark, Google Workspace). Give me host, port 587, user, pass, and a `from` on a domain you control.
+
+### Decisions only you can make
+
+1. **R3 / password + Plumo.** Confirm §3. If you prefer the strict version (no password on a PM account, ever), then item 3 still ships — the `unlink` guard and the `password_set_at` column — because state E exists either way and the strict version is currently unenforced.
+2. **Invited people who already exist in PM.** When we email an invitation to an address PM knows, do we (a) invite them normally and let them set a CS password — which means "Continue with Plumo" is refused for them forever (`auth.service.ts:250-254`) unless they later link, or (b) send a "sign in with Plumo" mail instead? I recommend (a) plus making self-link reachable (item 4), because we cannot ask PM whether an address exists without that person's token.
+3. **Staff each tester on one desk only, for the test week.** With `dar-blockchain` and `firas2workspace` live, anyone on both hits row H of §2. Item 1 fixes it properly; a one-desk-per-tester rule removes the risk regardless of whether item 1 lands.
+4. **`PM_AUTO_PROVISION_DESKS`** (`configuration.ts:58`) — currently on. Any P0/P1 of any PM org who signs in gets a **brand-new CS desk** created and is seated admin on it (`auth.service.ts:203-216`). If testers have their own PM workspaces, you will collect junk desks during the week. Set it to `false` during the test if you want the number of desks to stay at two.
+5. **Who may invite** — admin only, or leads too — and the default role for an invitee (I assume `agent`).
+6. **Invite validity** — I propose 7 days, with resend.
+
+---
+
+## 6. TEST PLAN
+
+Run against **staging**, after item 0 and before anyone outside is invited. Two accounts you control, one real mailbox each (`+` aliases are fine — `users.email` is citext-unique, `schema.prisma:156`). ~30 minutes.
+
+| # | Steps | Expected |
+|---|---|---|
+| 1 | **Mail is real.** On the server, `docker compose exec api sh -c 'env \| grep SMTP'`. Then POST `/auth/forgot-password` with a known **password** account. | Variables are set, host is not `localhost`. A mail arrives in the real inbox within a minute with a link on the **console** origin, not the api. If the API returns 200 and no mail lands, stop here — nothing downstream works. |
+| 2 | **Reset works end to end.** Click that link, set a new password, sign in with it. | Landing page renders (`frontend/app/reset-password/page.jsx`), reset succeeds, old sessions are gone (`auth.service.ts:625-629`), new password logs in. |
+| 3 | **PM sign-in still works.** Log out. "Continue with Plumo" as a PM P0/P1 of a linked org. | Lands in the console, correct desk. Note **which** desk — with two live desks and no slug (`pm-identity.module.ts:298`), it is always `desks[0]` sorted by slug ascending (`auth.service.ts:174-176,188`), i.e. `dar-blockchain`. |
+| 4 | **The 15-minute cliff.** Stay signed in from step 3 for 16 minutes with the tab open, then click something. | You are still signed in. If you are thrown to the login screen, the account has two memberships and item 1 is not done — this is the failure that will hit testers silently. |
+| 5 | **PM account cannot reset.** Log out. Forgot-password with the PM account's address. | Response 200. Mail says *"This account signs in through Plumo, so there is no password to reset"* (`auth.service.ts:566-576`). After item 5, the subject no longer reads "reset your plumo password" (`processors.ts:480`). |
+| 6 | **PM account cannot password-login.** Try the login form with that address and any password. | "Incorrect email or password". |
+| 7 | **The unlink trap is closed.** As that PM admin: Settings → disconnect. | **After item 3:** refused — *"set a password first"*. **Today:** it succeeds, and forgot-password on that address then mails a working reset link. If you see the link, item 3 has not shipped. |
+| 8 | **Set a password (after item 3).** As a PM-linked user: Settings → set a password. Log out, sign in with email+password. Then sign in again with Continue with Plumo. | Both work. Forgot-password now mails a real link for that account. |
+| 9 | **Invite a stranger.** Settings › team & users › invite someone → an address with **no** CS and **no** PM account. | Mail arrives with a link on the console origin. Opening it shows the desk name and the invited role, not a raw token. |
+| 10 | **Accept.** Set a password on the accept page. | Account created, membership created, signed straight in, lands in the queue. The invitation is marked accepted and disappears from the pending list. |
+| 11 | **Token hygiene.** Open the same link again. Then revoke a second pending invite and open its link. | Both refused with the same generic message. No account created. |
+| 12 | **Invite someone who already has a CS account** (use the step-2 account). | Membership attached to the **existing** user. **No** second user row, **no** password change, no 500. They sign in with the password they already had. |
+| 13 | **The email collision (R4).** Create a CS user via `POST /users` with the address of a PM P0/P1 who has never used CS. Then have that person click "Continue with Plumo". | Refused with the full sentence — including "…connect Plumo from Settings", not cut at 120 chars. Then: they sign in with their CS password and can complete the link **as a non-admin** (item 4). |
+| 14 | **Duplicate address.** `POST /users` with an address that already exists. | 409 with a readable message. **Today this is a 500 "Something went wrong"** (`users.module.ts:116`, `http-exception.filter.ts:37-39`). |
+| 15 | **Wrong password vs no access.** Log in with a real account and a wrong password; then log in with an account that has no membership on the target desk. | Two different messages. **Today both read "incorrect email or password"** (`Console.jsx:852-855` → `Login.jsx:147`). |
+| 16 | **Nothing in the console lies.** Walk Settings › team & users. | Every button either does something or is gone. `Settings.jsx:89`, `:109`, `:110` are all mocks today (`Console.jsx:228-232`). |
+
+---
+
+## 7. RISKS
+
+- **SMTP is the single largest unknown and it is invisible from this repo.** If it is unconfigured in production, invitations and resets fail with `ECONNREFUSED` at first send and never at boot; `sendNotification` does not catch (`email.service.ts:123-130`), the fanout awaits it (`processors.ts:478`), the job retries five times with backoff (`queue/queue.constants.ts:12-15`) and dies silently. The console shows *"It's on its way ✿"* regardless, because `sendReset` does `.catch(() => {})` (`Console.jsx:59-63`). Test 1 exists to catch this on day one.
+- **Deliverability.** Even with working SMTP, an invitation from an unaligned `SMTP_FROM` goes to spam and reads to testers as "your product is broken". Send test 9 to Gmail, Outlook, and one corporate address.
+- **The two-membership 403** (row H). It does not present as an auth error; it presents as random logouts fifteen minutes in. If item 1 slips, enforce one desk per tester (decision 3).
+- **The new `invitations` table and RLS.** Get the policy wrong and the accept flow returns zero rows for every valid token — indistinguishable from "the link is broken". The integration suite is the only place this surfaces before production; `workspace-isolation.integration.spec.ts` is the model, and the split-role CI job (`.github/workflows/backend-ci.yml`) is what makes it meaningful.
+- **Worker jobs are unverified in production** (your own note from the tenancy cutover). Item 2 sends invitation mail inline from the API specifically so it does not depend on that — but **password reset still goes through the queue** (`auth.service.ts:583`, `processors.ts:472-484`), so test 1 doubles as the worker check.
+- **Auto-provisioned desks** (`configuration.ts:58`). A tester who happens to be a P0/P1 of their own PM org creates a third, fourth, fifth desk by signing in. Decide 4 before the invites go out.
+- **A 30-day refresh token means a mistake this week persists for a month** (`configuration.ts:64`). Cut it before inviting, even if the full PM re-check waits.
+- **No trail when a sign-in is refused.** `IdentityAuditLog` exists in the schema and nothing writes it. When a tester says "it wouldn't let me in", you will have only the api log line, and the reason they saw was truncated at 120 chars. Consider promoting it out of "can wait".
+- **`prisma/seed.ts` has no environment guard** (`:356`) and creates eight accounts with `password123`. It is not in the deploy workflow, so this is operator error only — but during a hurried test week, operator error is the failure mode.
+
+---
+
+## Appendix — where the three audits disagree, and what I found
+
+- **`api.users.list` is not dead code.** The invitations audit says the whole `users` group in `endpoints.js:69-76` has zero call sites. `users.list()` **is** called — `frontend/lib/api/adapter.js:244`, feeding `this.agents` (`:255`), which is what `Settings.jsx` renders through `Console.jsx:1165`. What genuinely has no call site is `users.create`, `users.get`, `users.patch`, `users.deactivate`. So the team table shows **real** people; only the buttons are fake. That is worse, not better — an admin looking at it has no reason to suspect anything.
+- **The console is not blind to PM linkage.** Two audits say `/auth/me` does not return `pmUserId` (true, `auth.service.ts:485-492`) and conclude the console cannot gate the password card. It can: `GET /auth/pm/status` returns `{available, linked}` (`pm-identity.module.ts:128-134`) and the console already reads it (`Console.jsx:205`, `:1149`) to render the Settings card (`Settings.jsx:55`). The missing fact is `hasPassword`, not `pmLinked` — which is item 5, and it does not exist until `password_set_at` does.
+- **Unresolved, and only you can settle it: production SMTP.** All three audits stop at the same wall. `SMTP_*` appears in no workflow and no compose file; both containers read `env_file: /opt/plumo-cs/app/.env` (`docker-compose.prod.yml:29`), which is not in git. Nobody can tell from this repository whether a single email has ever been delivered in production. That is why it is item 0 rather than a footnote.
+- **Not averaged:** the adversarial audit ranks the immortal PM session (no PM re-check on `refresh`) as Tier 1; the credential audit treats it as a follow-on to the password decision. I have put the one-line TTL cut in the required set and the full re-check in the deferred set, because a shorter refresh window buys most of the safety for none of the design risk during a week when logging people out unexpectedly is the thing you least want.
