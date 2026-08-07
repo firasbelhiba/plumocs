@@ -93,6 +93,7 @@ export class MessagesService {
     }
     this.queue.indexTicket(ticketId);
     this.realtime.publish('message.added', {
+      workspaceId: actor.workspaceId,
       ticketId,
       messageId: message.id,
       isInternalNote: isNote,

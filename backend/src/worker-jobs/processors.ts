@@ -66,25 +66,56 @@ export class EmailInboundProcessor extends WorkerHost {
     private readonly queue: QueueProducer,
     private readonly realtime: RealtimeService,
     private readonly prisma: PrismaService,
+    private readonly workspaces: WorkspaceContextService,
   ) {
     super();
   }
 
-  async process(job: Job<{ raw?: string; parsed?: Record<string, unknown> }>) {
-    const ticketId = await this.email.processInbound(job.data as never);
-    if (ticketId) {
+  /**
+   * NOTE: this queue has no tenant routing yet, so every job here currently
+   * fails. That is pre-existing and deliberate, not a regression from stamping
+   * the realtime event.
+   *
+   * `parseInboundEmail` enqueues unscoped (see the comment on it): an email
+   * arrives from the outside world and belongs to no desk until its recipient
+   * address has been mapped to one, and no such mapping exists. Until it does,
+   * requireWorkspace throws and the job lands in the dead-letter set.
+   *
+   * The alternative — inventing a tenant here — is the one thing that must not
+   * happen. Guessing the sole workspace worked while there was only one; there
+   * are two now, and the wrong guess files a stranger's email into another
+   * customer's desk and threads their reply into that desk's conversation.
+   * Failing is the correct behaviour until routing exists.
+   *
+   * The binding also has to wrap the whole body, not just processInbound: the
+   * findUnique below reads `tickets`, and unbound it returns null under RLS —
+   * which would ship teamId/assigneeId as null and route the event to the
+   * admin+lead room instead of the team that owns the ticket.
+   */
+  async process(
+    job: Job<{
+      raw?: string;
+      parsed?: Record<string, unknown>;
+      workspaceId?: string;
+    }>,
+  ) {
+    const workspaceId = requireWorkspace(job);
+    await this.workspaces.runInWorkspace(workspaceId, async () => {
+      const ticketId = await this.email.processInbound(job.data as never);
+      if (!ticketId) return;
       this.queue.indexTicket(ticketId);
       const t = await this.prisma.ticket.findUnique({
         where: { id: ticketId },
         select: { teamId: true, assigneeId: true },
       });
       this.realtime.publish("message.added", {
+        workspaceId,
         ticketId,
         source: "email",
         teamId: t?.teamId ?? null,
         assigneeId: t?.assigneeId ?? null,
       });
-    }
+    });
   }
 }
 
@@ -256,10 +287,15 @@ export class SlaSweepProcessor extends WorkerHost {
     // Bound per workspace, for the same reason as the export: an unbound query
     // returns zero rows under RLS, so an unbound sweep finds no candidates and
     // silently does nothing — no breach tags, no lead notifications, no error.
-    await this.workspaces.forEachWorkspace(() => this.sweepWorkspace());
+    await this.workspaces.forEachWorkspace((workspaceId) =>
+      this.sweepWorkspace(workspaceId),
+    );
   }
 
-  private async sweepWorkspace() {
+  // Takes the id forEachWorkspace already resolved rather than re-reading the
+  // binding: the realtime event below leaves this process, so it has to name the
+  // desk explicitly — the gateway on another replica has no binding to consult.
+  private async sweepWorkspace(workspaceId: string) {
     const now = new Date();
     const soon = new Date(now.getTime() + 30 * 60_000);
 
@@ -363,6 +399,7 @@ export class SlaSweepProcessor extends WorkerHost {
         });
       }
       this.realtime.publish("sla.warning", {
+        workspaceId,
         ticketId: t.id,
         breached,
         teamId: t.teamId,
@@ -463,6 +500,7 @@ export class NotificationsFanoutProcessor extends WorkerHost {
       }),
     );
     this.realtime.publish("notification.created", {
+      workspaceId,
       userIds,
       kind,
       text,

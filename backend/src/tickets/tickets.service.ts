@@ -174,6 +174,7 @@ export class TicketsService {
       });
     }
     this.realtime.publish('ticket.created', {
+      workspaceId: actor.workspaceId,
       id: ticket.id,
       number: Number(ticket.number),
       teamId: ticket.teamId,
@@ -270,6 +271,7 @@ export class TicketsService {
       action: enabled ? 'bot.enabled' : 'bot.disabled',
     });
     this.realtime.publish('ticket.updated', {
+      workspaceId: actor.workspaceId,
       id, number: Number(updated.number), teamId: updated.teamId, assigneeId: updated.assigneeId,
     });
     return this.serialize(updated);
@@ -611,7 +613,7 @@ export class TicketsService {
       });
     }
     if (dto.subject !== undefined) this.queue.indexTicket(id);
-    this.realtimeUpdate(updated);
+    this.realtimeUpdate(updated, actor.workspaceId);
     return this.serialize(updated);
   }
 
@@ -789,8 +791,8 @@ export class TicketsService {
     });
     this.queue.indexTicket(targetId);
     this.queue.deliverWebhooks('ticket.updated', this.webhookPayload({ ...target, updatedAt: new Date() } as never));
-    this.realtimeUpdate(target);
-    this.realtimeUpdate(source);
+    this.realtimeUpdate(target, actor.workspaceId);
+    this.realtimeUpdate(source, actor.workspaceId);
     return { ok: true, mergedInto: targetId };
   }
 
@@ -813,9 +815,18 @@ export class TicketsService {
 
   // ---- helpers ------------------------------------------------------------------
 
-  /** Realtime payloads carry team/assignee so the gateway can scope delivery. */
-  private realtimeUpdate(ticket: { id: string; number: bigint; teamId: string | null; assigneeId: string | null }) {
+  /**
+   * Realtime payloads carry team/assignee so the gateway can scope delivery,
+   * and the workspace so it can scope it to a tenant. The gateway drops an
+   * event that names no workspace, so this is not decoration — omit it and the
+   * console simply stops updating.
+   */
+  private realtimeUpdate(
+    ticket: { id: string; number: bigint; teamId: string | null; assigneeId: string | null },
+    workspaceId: string,
+  ) {
     this.realtime.publish('ticket.updated', {
+      workspaceId,
       id: ticket.id,
       number: Number(ticket.number),
       teamId: ticket.teamId,

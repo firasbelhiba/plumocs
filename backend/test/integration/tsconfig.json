@@ -1,0 +1,23 @@
+// Typechecks the integration suite.
+//
+// backend/tsconfig.json excludes `test`, so `npx tsc --noEmit` — the check CI
+// runs — is silent about everything in here. That is how this suite came to
+// spend the whole tenancy migration uncompilable without anyone noticing: the
+// only thing that ever compiled it was ts-jest, inside the one CI job that needs
+// a PostgreSQL service to run at all.
+//
+//   npx tsc --noEmit -p test/integration/tsconfig.json
+//
+// Same compiler options as the app (extends the root), so a type that is fine
+// here is fine there.
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["jest", "node"]
+  },
+  // `exclude` is overridden, not inherited: the root config excludes "test",
+  // which is this whole directory.
+  "include": ["**/*.ts"],
+  "exclude": []
+}

@@ -2,7 +2,29 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
+/**
+ * One channel for every tenant, deliberately. Each API replica holds sockets
+ * belonging to every workspace, so each replica has to receive every
+ * workspace's events — splitting the channel per workspace would buy nothing
+ * and cost a dynamic (re)subscribe every time a desk is created.
+ *
+ * The tenant boundary lives where delivery happens, in the gateway's rooms.
+ * What this layer owes the gateway is the workspaceId to scope them by, which
+ * is why RealtimeEvent below makes it mandatory rather than optional.
+ */
 const CHANNEL = 'plumo.realtime';
+
+/**
+ * Every realtime event names the tenant it belongs to, and the type insists.
+ *
+ * Required rather than optional for the same reason `Principal.workspaceId` is
+ * required: an optional field is one that gets forgotten at exactly one call
+ * site. The gateway drops what it cannot scope, so the price of forgetting is
+ * an event that silently never arrives — a compile error is far cheaper.
+ * Every publisher runs inside a bound request or a bound job and already has
+ * the id to hand.
+ */
+export type RealtimeEvent = Record<string, unknown> & { workspaceId: string };
 
 /**
  * Fan-out across API replicas via Redis pub/sub (§14). The gateway subscribes
@@ -20,7 +42,7 @@ export class RealtimeService implements OnModuleDestroy {
     this.pub.on('error', (e) => this.logger.warn(`redis pub: ${e.message}`));
   }
 
-  publish(event: string, payload: Record<string, unknown>) {
+  publish(event: string, payload: RealtimeEvent) {
     this.pub
       .publish(CHANNEL, JSON.stringify({ event, payload, at: Date.now() }))
       .catch((e) => this.logger.warn(`publish failed: ${e.message}`));

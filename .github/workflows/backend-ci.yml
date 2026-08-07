@@ -55,6 +55,15 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Separate invocation because the root tsconfig EXCLUDES `test/`, so the
+      # step above says nothing about the integration suite. That gap is how the
+      # suite came to be broken by the tenancy migration without CI noticing:
+      # the only thing compiling it was ts-jest, inside the integration job
+      # below, so a plain type error surfaced as a failure in the one job that
+      # needs a database and read like an infrastructure flake.
+      - name: Typecheck integration suite
+        run: npx tsc --noEmit -p test/integration/tsconfig.json
+
       # Includes src/app.module.spec.ts, which resolves the entire Nest
       # dependency graph. TypeScript cannot see DI wiring — a controller can
       # inject a service its module never imports and the build stays green —

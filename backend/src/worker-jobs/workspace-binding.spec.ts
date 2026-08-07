@@ -1,4 +1,4 @@
-import { EmailOutboundProcessor, SearchIndexProcessor } from './processors';
+import { EmailInboundProcessor, EmailOutboundProcessor, SearchIndexProcessor } from './processors';
 
 /**
  * Do background jobs bind a workspace before touching tenant data?
@@ -55,5 +55,82 @@ describe('worker jobs bind a workspace', () => {
       proc.process({ data: { ticketId: 't1' }, queueName: 'search.index', name: 'index' } as never),
     ).rejects.toThrow(/carries no workspaceId/);
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  // Inbound email is the one queue with no routing yet — parseInboundEmail
+  // enqueues unscoped because an email belongs to no desk until its recipient
+  // address has been mapped to one, and nothing does that mapping. So this case
+  // pins the CURRENT, deliberate state: every inbound email fails.
+  //
+  // It is here to make the day routing arrives a deliberate one. Whoever adds it
+  // has to change this test, and changing it means reading why guessing the
+  // tenant is not an option: with two desks live, the wrong guess files a
+  // stranger's email into another customer's inbox.
+  it('refuses an inbound email that names no workspace, rather than guessing one', async () => {
+    const email = { processInbound: jest.fn() };
+    const workspaces = { runInWorkspace: jest.fn() };
+    const realtime = { publish: jest.fn() };
+    const proc = new EmailInboundProcessor(
+      email as never,
+      { indexTicket: jest.fn() } as never,
+      realtime as never,
+      { ticket: { findUnique: jest.fn() } } as never,
+      workspaces as never,
+    );
+
+    await expect(
+      proc.process({ data: { raw: 'From: a@b.c' }, queueName: 'email.inbound', name: 'parse' } as never),
+    ).rejects.toThrow(/carries no workspaceId/);
+
+    // Nothing may be parsed, stored or announced on an unbound run.
+    expect(email.processInbound).not.toHaveBeenCalled();
+    expect(realtime.publish).not.toHaveBeenCalled();
+  });
+
+  it('parses and announces inside the binding when the workspace is known', async () => {
+    // The lookup of teamId/assigneeId has to happen INSIDE the binding too:
+    // unbound it returns null under RLS, and the event would then route to the
+    // admin+lead room instead of the team that owns the ticket.
+    const order: string[] = [];
+    const email = {
+      processInbound: jest.fn(() => {
+        order.push('parse');
+        return Promise.resolve('t9');
+      }),
+    };
+    const prisma = {
+      ticket: {
+        findUnique: jest.fn(() => {
+          order.push('lookup');
+          return Promise.resolve({ teamId: 'team-7', assigneeId: null });
+        }),
+      },
+    };
+    const realtime = { publish: jest.fn() };
+    const workspaces = {
+      runInWorkspace: jest.fn((_ws: string, fn: () => unknown) => {
+        order.push('bind');
+        return fn();
+      }),
+    };
+    const proc = new EmailInboundProcessor(
+      email as never,
+      { indexTicket: jest.fn() } as never,
+      realtime as never,
+      prisma as never,
+      workspaces as never,
+    );
+
+    await proc.process({
+      data: { raw: 'From: a@b.c', workspaceId: 'ws-1' },
+      queueName: 'email.inbound',
+      name: 'parse',
+    } as never);
+
+    expect(order).toEqual(['bind', 'parse', 'lookup']);
+    expect(realtime.publish).toHaveBeenCalledWith(
+      'message.added',
+      expect.objectContaining({ workspaceId: 'ws-1', ticketId: 't9', teamId: 'team-7' }),
+    );
   });
 });

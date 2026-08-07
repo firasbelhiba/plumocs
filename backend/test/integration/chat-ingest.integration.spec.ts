@@ -1,9 +1,9 @@
-import { PrismaService } from '../../src/prisma/prisma.service';
 import { ChatService } from '../../src/chat/chat.module';
 import { CustomersService } from '../../src/customers/customers.module';
 import { TicketsService } from '../../src/tickets/tickets.service';
 import { SlaService } from '../../src/sla/sla.service';
 import { TeamScopeService } from '../../src/common/guards/team-scope.service';
+import { prisma, seedFixture, cleanup, inWorkspace, TAG, type Fixture } from './harness';
 import type { Principal } from '../../src/common/decorators';
 
 /**
@@ -20,34 +20,43 @@ import type { Principal } from '../../src/common/decorators';
  * it. Left alone, every bot conversation sits in `new` with a null
  * first_responded_at — exactly the SLA sweep's candidate set — and breaches,
  * paging whichever agent round-robin had assigned at creation.
+ *
+ * ONE `request()` PER LOGICAL CALL, never one per test. That mirrors the
+ * interceptor — a request is a transaction — and it is also required for the
+ * cursor tests to mean anything: `created_at` defaults to CURRENT_TIMESTAMP,
+ * which is frozen at transaction start, so several writes sharing one
+ * transaction would share one timestamp and the watermark assertions would be
+ * comparing a clock against itself.
  */
 describe('chatbot ingest', () => {
-  const prisma = new PrismaService();
-  const TAG = `chat-${process.pid}-${Math.floor(Math.random() * 1e6)}`;
-
+  let f: Fixture;
   let chat: ChatService;
   let botA: Principal;
   let botB: Principal;
-  let teamId: string;
   const noop = { write: jest.fn(), deliverWebhooks: jest.fn(), indexTicket: jest.fn(), notify: jest.fn(), publish: jest.fn(), sendEmail: jest.fn() };
 
+  /** One bound transaction, exactly as WorkspaceBindingInterceptor wraps a request. */
+  const request = <T>(fn: () => Promise<T>) => inWorkspace(f.id, fn);
+
   beforeAll(async () => {
-    const team = await prisma.team.create({ data: { name: `${TAG}-team` } });
-    teamId = team.id;
-    const creator = await prisma.user.create({
-      data: { name: `${TAG}-admin`, email: `${TAG}-admin@itest.invalid`, role: 'admin', passwordHash: 'x', teamId },
+    f = await seedFixture();
+
+    await request(async () => {
+      // created_by is a composite FK to (workspace_id, user_id) on
+      // workspace_memberships since tenancy, so the key's creator has to be
+      // SEATED on this desk — a global user id is no longer referenceable.
+      const mkKey = (n: string) =>
+        prisma.apiKey.create({
+          data: {
+            name: `${TAG}-${n}`, keyHash: `${TAG}-${n}-hash`, keyPrefix: `${TAG.slice(0, 8)}`,
+            scopes: ['chat:write', 'chat:read'], teamId: f.teamA, createdById: f.admin,
+          },
+        });
+      const a = await mkKey('botA');
+      const b = await mkKey('botB');
+      botA = { kind: 'api_key', workspaceId: f.id, id: a.id, scopes: a.scopes, teamId: f.teamA };
+      botB = { kind: 'api_key', workspaceId: f.id, id: b.id, scopes: b.scopes, teamId: f.teamA };
     });
-    const mkKey = async (n: string) =>
-      prisma.apiKey.create({
-        data: {
-          name: `${TAG}-${n}`, keyHash: `${TAG}-${n}-hash`, keyPrefix: `${TAG.slice(0, 8)}`,
-          scopes: ['chat:write', 'chat:read'], teamId, createdById: creator.id,
-        },
-      });
-    const a = await mkKey('botA');
-    const b = await mkKey('botB');
-    botA = { kind: 'api_key', id: a.id, scopes: a.scopes, teamId };
-    botB = { kind: 'api_key', id: b.id, scopes: b.scopes, teamId };
 
     const customers = new CustomersService(prisma, noop as never);
     const sla = new SlaService(prisma);
@@ -57,19 +66,12 @@ describe('chatbot ingest', () => {
     chat = new ChatService(prisma, tickets, sla, customers, noop as never, noop as never, noop as never);
   });
 
-  afterAll(async () => {
-    await prisma.chatSession.deleteMany({ where: { sessionRef: { startsWith: TAG } } });
-    await prisma.ticketMessage.deleteMany({ where: { ticket: { subject: { startsWith: TAG } } } });
-    await prisma.ticket.deleteMany({ where: { subject: { startsWith: TAG } } });
-    await prisma.customer.deleteMany({ where: { OR: [{ name: { startsWith: TAG } }, { visitorRef: { startsWith: TAG } }] } });
-    await prisma.apiKey.deleteMany({ where: { name: { startsWith: TAG } } });
-    await prisma.user.deleteMany({ where: { name: { startsWith: TAG } } });
-    await prisma.team.deleteMany({ where: { name: { startsWith: TAG } } });
-    await prisma.$disconnect();
-  });
+  afterAll(cleanup);
 
   const open = (ref: string, actor = botA, extra: Record<string, unknown> = {}) =>
-    chat.openConversation({ sessionRef: ref, subject: `${TAG} ${ref}`, ...extra } as never, actor);
+    request(() => chat.openConversation({ sessionRef: ref, subject: `${TAG} ${ref}`, ...extra } as never, actor));
+
+  const loadTicket = (id: string) => request(() => prisma.ticket.findUniqueOrThrow({ where: { id } }));
 
   describe('idempotency', () => {
     it('re-opening the same session returns the same ticket, not a second one', async () => {
@@ -79,15 +81,17 @@ describe('chatbot ingest', () => {
       expect(second.ticketId).toBe(first.ticketId);
       expect(first.created).toBe(true);
       expect(second.created).toBe(false);
-      const n = await prisma.chatSession.count({ where: { sessionRef: ref } });
+      const n = await request(() => prisma.chatSession.count({ where: { sessionRef: ref } }));
       expect(n).toBe(1);
     });
 
     it('a retried turn does not duplicate the message', async () => {
       const ref = `${TAG}-turn`;
       await open(ref);
-      const a = await chat.appendMessage(ref, { body: 'hello', author: 'visitor', externalRef: 'turn-1' } as never, botA);
-      const b = await chat.appendMessage(ref, { body: 'hello', author: 'visitor', externalRef: 'turn-1' } as never, botA);
+      const a = await request(() =>
+        chat.appendMessage(ref, { body: 'hello', author: 'visitor', externalRef: 'turn-1' } as never, botA));
+      const b = await request(() =>
+        chat.appendMessage(ref, { body: 'hello', author: 'visitor', externalRef: 'turn-1' } as never, botA));
       expect(b.messageId).toBe(a.messageId);
       expect(b.duplicate).toBe(true);
     });
@@ -98,7 +102,7 @@ describe('chatbot ingest', () => {
       const ref = `${TAG}-race`;
       const { ticketId } = await open(ref);
       await expect(
-        prisma.chatSession.create({ data: { apiKeyId: botA.id, sessionRef: ref, ticketId } }),
+        request(() => prisma.chatSession.create({ data: { apiKeyId: botA.id, sessionRef: ref, ticketId } })),
       ).rejects.toThrow(/Unique constraint/i);
     });
   });
@@ -108,7 +112,7 @@ describe('chatbot ingest', () => {
       const ref = `${TAG}-private`;
       await open(ref, botA);
       // Same string, different chatbot: must look like it does not exist.
-      await expect(chat.getConversation(ref, botB)).rejects.toThrow(/No such conversation/);
+      await expect(request(() => chat.getConversation(ref, botB))).rejects.toThrow(/No such conversation/);
     });
 
     it('lets each chatbot use the same session ref independently', async () => {
@@ -119,8 +123,9 @@ describe('chatbot ingest', () => {
     });
 
     it('the updates cursor only ever returns a chatbot own conversations', async () => {
-      const res = await chat.updates({ since: new Date(0).toISOString() } as never, botB);
-      const mine = await prisma.chatSession.findMany({ where: { apiKeyId: botB.id }, select: { ticketId: true } });
+      const res = await request(() => chat.updates({ since: new Date(0).toISOString() } as never, botB));
+      const mine = await request(() =>
+        prisma.chatSession.findMany({ where: { apiKeyId: botB.id }, select: { ticketId: true } }));
       const allowed = new Set(mine.map((m) => m.ticketId));
       for (const u of res.updates) expect(allowed.has(u.ticketId)).toBe(true);
     });
@@ -130,8 +135,10 @@ describe('chatbot ingest', () => {
     it('a bot conversation starts with no human clock and no assignee', async () => {
       const ref = `${TAG}-sla`;
       const { ticketId } = await open(ref);
-      const t = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
-      // all three are what make the sweep skip it and stop the false breach
+      const t = await loadTicket(ticketId);
+      // all three are what make the sweep skip it and stop the false breach.
+      // The desk DOES have SLA policies — the harness seeds the same four a real
+      // one gets — so these nulls are the botHandled path, not an empty table.
       expect(t.firstResponseDueAt).toBeNull();
       expect(t.resolutionDueAt).toBeNull();
       expect(t.assigneeId).toBeNull();
@@ -142,8 +149,8 @@ describe('chatbot ingest', () => {
     it('a bot reply stamps bot_replied_at and never first_responded_at', async () => {
       const ref = `${TAG}-botreply`;
       const { ticketId } = await open(ref);
-      await chat.appendMessage(ref, { body: 'I can help with that', author: 'bot' } as never, botA);
-      const t = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+      await request(() => chat.appendMessage(ref, { body: 'I can help with that', author: 'bot' } as never, botA));
+      const t = await loadTicket(ticketId);
       expect(t.botRepliedAt).not.toBeNull();
       expect(t.firstRespondedAt).toBeNull(); // the metric stays about humans
     });
@@ -151,12 +158,12 @@ describe('chatbot ingest', () => {
     it('handoff is what starts the human clock', async () => {
       const ref = `${TAG}-handoff`;
       const { ticketId } = await open(ref);
-      const before = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+      const before = await loadTicket(ticketId);
       expect(before.firstResponseDueAt).toBeNull();
 
-      await chat.handoff(ref, { reason: 'out of scope', priority: 'high' } as never, botA);
+      await request(() => chat.handoff(ref, { reason: 'out of scope', priority: 'high' } as never, botA));
 
-      const after = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+      const after = await loadTicket(ticketId);
       expect(after.handedOffAt).not.toBeNull();
       expect(after.firstResponseDueAt).not.toBeNull();
       expect(after.priority).toBe('high');
@@ -166,16 +173,16 @@ describe('chatbot ingest', () => {
     it('handoff twice is harmless', async () => {
       const ref = `${TAG}-handoff2`;
       await open(ref);
-      await chat.handoff(ref, {} as never, botA);
-      const second = await chat.handoff(ref, {} as never, botA);
+      await request(() => chat.handoff(ref, {} as never, botA));
+      const second = await request(() => chat.handoff(ref, {} as never, botA));
       expect(second.alreadyHandedOff).toBe(true);
     });
 
     it('the bot cannot resolve a conversation a human has taken over', async () => {
       const ref = `${TAG}-taken`;
       await open(ref);
-      await chat.handoff(ref, {} as never, botA);
-      await expect(chat.resolve(ref, {} as never, botA)).rejects.toThrow(/human owns this/i);
+      await request(() => chat.handoff(ref, {} as never, botA));
+      await expect(request(() => chat.resolve(ref, {} as never, botA))).rejects.toThrow(/human owns this/i);
     });
   });
 
@@ -183,7 +190,8 @@ describe('chatbot ingest', () => {
     it('creates a customer with no email at all', async () => {
       const ref = `${TAG}-anon`;
       const { ticketId } = await open(ref, botA, { visitorRef: `${TAG}-v1` });
-      const t = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId }, include: { customer: true } });
+      const t = await request(() =>
+        prisma.ticket.findUniqueOrThrow({ where: { id: ticketId }, include: { customer: true } }));
       expect(t.customer.email).toBeNull();
       expect(t.customer.visitorRef).toBe(`${TAG}-v1`);
       expect(t.customer.visitorApiKeyId).toBe(botA.id);
@@ -193,10 +201,7 @@ describe('chatbot ingest', () => {
       const v = `${TAG}-repeat`;
       const one = await open(`${TAG}-s1`, botA, { visitorRef: v });
       const two = await open(`${TAG}-s2`, botA, { visitorRef: v });
-      const [a, b] = await Promise.all([
-        prisma.ticket.findUniqueOrThrow({ where: { id: one.ticketId } }),
-        prisma.ticket.findUniqueOrThrow({ where: { id: two.ticketId } }),
-      ]);
+      const [a, b] = await Promise.all([loadTicket(one.ticketId), loadTicket(two.ticketId)]);
       expect(a.customerId).toBe(b.customerId);
       expect(a.id).not.toBe(b.id); // two conversations, one person
     });
@@ -204,8 +209,12 @@ describe('chatbot ingest', () => {
     it('a customer with neither an email nor a visitor identity is rejected by the database', async () => {
       // customers_identity_check — without it such a row is unfindable and
       // silently orphaned, which is how duplicate customers accumulate.
+      //
+      // Bound, and that is not incidental: unbound this insert fails first on the
+      // workspace_id not-null, so the test would go green having never reached
+      // the constraint it names.
       await expect(
-        prisma.customer.create({ data: { name: `${TAG}-nobody` } }),
+        request(() => prisma.customer.create({ data: { name: `${TAG}-nobody` } })),
       ).rejects.toThrow(/customers_identity_check|violates check constraint/i);
     });
   });
@@ -214,9 +223,9 @@ describe('chatbot ingest', () => {
     it('never exposes the ticket number', async () => {
       const ref = `${TAG}-nonum`;
       const opened = await open(ref);
-      const convo = await chat.getConversation(ref, botA);
-      // Numbers become per-workspace in the tenancy migration; a partner that
-      // learned one would see it change underneath them.
+      const convo = await request(() => chat.getConversation(ref, botA));
+      // Numbers are per-workspace now; a partner that had learned one would have
+      // seen it change underneath them, which is why they are never returned.
       expect(JSON.stringify(opened)).not.toMatch(/"number"/);
       expect(JSON.stringify(convo)).not.toMatch(/"number"/);
       expect(opened.ticketId).toMatch(/^[0-9a-f-]{36}$/);
@@ -225,10 +234,11 @@ describe('chatbot ingest', () => {
     it('never leaks an internal note to the partner', async () => {
       const ref = `${TAG}-note`;
       const { ticketId } = await open(ref);
-      await prisma.ticketMessage.create({
-        data: { ticketId, authorType: 'agent', body: 'internal: customer is a known abuser', isInternalNote: true, channel: 'chatbot' },
-      });
-      const convo = await chat.getConversation(ref, botA);
+      await request(() =>
+        prisma.ticketMessage.create({
+          data: { ticketId, authorType: 'agent', body: 'internal: customer is a known abuser', isInternalNote: true, channel: 'chatbot' },
+        }));
+      const convo = await request(() => chat.getConversation(ref, botA));
       expect(JSON.stringify(convo)).not.toMatch(/known abuser/);
     });
 
@@ -236,11 +246,12 @@ describe('chatbot ingest', () => {
       const ref = `${TAG}-cursor`;
       const { ticketId } = await open(ref);
       const t0 = new Date();
-      await chat.appendMessage(ref, { body: 'bot says hi', author: 'bot' } as never, botA);
-      await prisma.ticketMessage.create({
-        data: { ticketId, authorType: 'agent', body: 'agent says hi', isInternalNote: false, channel: 'chatbot' },
-      });
-      const res = await chat.updates({ since: t0.toISOString() } as never, botA);
+      await request(() => chat.appendMessage(ref, { body: 'bot says hi', author: 'bot' } as never, botA));
+      await request(() =>
+        prisma.ticketMessage.create({
+          data: { ticketId, authorType: 'agent', body: 'agent says hi', isInternalNote: false, channel: 'chatbot' },
+        }));
+      const res = await request(() => chat.updates({ since: t0.toISOString() } as never, botA));
       const bodies = res.updates.map((u) => u.body);
       expect(bodies).toContain('agent says hi');
       expect(bodies).not.toContain('bot says hi');
@@ -251,11 +262,12 @@ describe('chatbot ingest', () => {
       const ref = `${TAG}-watermark`;
       const { ticketId } = await open(ref);
       const t0 = new Date();
-      await prisma.ticketMessage.create({
-        data: { ticketId, authorType: 'agent', body: 'just now', isInternalNote: false, channel: 'chatbot' },
-      });
+      await request(() =>
+        prisma.ticketMessage.create({
+          data: { ticketId, authorType: 'agent', body: 'just now', isInternalNote: false, channel: 'chatbot' },
+        }));
 
-      const res = await chat.updates({ since: t0.toISOString() } as never, botA);
+      const res = await request(() => chat.updates({ since: t0.toISOString() } as never, botA));
 
       // Delivered immediately — the safety margin must not add latency.
       expect(res.updates.map((u) => u.body)).toContain('just now');
@@ -265,7 +277,7 @@ describe('chatbot ingest', () => {
       expect(new Date(res.cursor).getTime()).toBeLessThan(Date.now() - 1_000);
       // The row is therefore re-delivered next poll. That is intended: the
       // contract mandates dedupe on messageId.
-      const again = await chat.updates({ since: res.cursor } as never, botA);
+      const again = await request(() => chat.updates({ since: res.cursor } as never, botA));
       expect(again.updates.map((u) => u.body)).toContain('just now');
     });
 
@@ -274,15 +286,16 @@ describe('chatbot ingest', () => {
       const { ticketId } = await open(ref);
       const t0 = new Date();
       for (let i = 0; i < 3; i++) {
-        await prisma.ticketMessage.create({
-          data: { ticketId, authorType: 'agent', body: `r${i}`, isInternalNote: false, channel: 'chatbot' },
-        });
+        await request(() =>
+          prisma.ticketMessage.create({
+            data: { ticketId, authorType: 'agent', body: `r${i}`, isInternalNote: false, channel: 'chatbot' },
+          }));
       }
       // A full page of rows that are all newer than the watermark clamps the
       // cursor back to where it started. Answering hasMore:true there would
       // send a client that re-polls on hasMore into a tight loop on the same
       // page forever — so the clamp has to suppress it.
-      const res = await chat.updates({ since: t0.toISOString(), limit: 3 } as never, botA);
+      const res = await request(() => chat.updates({ since: t0.toISOString(), limit: 3 } as never, botA));
       expect(res.updates).toHaveLength(3);
       expect(new Date(res.cursor).getTime()).toBeLessThanOrEqual(t0.getTime());
       expect(res.hasMore).toBe(false);

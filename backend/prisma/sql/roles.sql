@@ -142,6 +142,27 @@ ALTER DEFAULT PRIVILEGES FOR ROLE plumo_migrator IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE plumo_migrator IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO plumo_app;
 
+-- The one exception to the blanket grant above, and it has to come after it.
+--
+-- The tenancy migration ends with `REVOKE DELETE ON workspaces FROM plumo_app`
+-- so the runtime cannot issue the statement at all, even after a purge job has
+-- emptied a tenant — losing a workspace row orphans every desk that hangs off
+-- it. That migration runs once; this script is re-run by hand whenever roles
+-- are reprovisioned, and `GRANT ... ON ALL TABLES` above silently hands the
+-- privilege back. The migration flags the amendment as mandatory at the revoke
+-- itself; this is it.
+--
+-- Guarded on the table existing because ORDER OF EXECUTION DIFFERS BY
+-- ENVIRONMENT: CI runs this script before `migrate deploy`, when `workspaces`
+-- does not exist yet and a bare REVOKE would abort the script. There the
+-- migration's own revoke is the one that lands, and this becomes a no-op.
+DO $$
+BEGIN
+  IF to_regclass('public.workspaces') IS NOT NULL THEN
+    EXECUTE 'REVOKE DELETE ON workspaces FROM plumo_app';
+  END IF;
+END $$;
+
 -- ---------------------------------------------------------------- verify
 
 -- Fails the script rather than leaving a half-applied state that looks fine.

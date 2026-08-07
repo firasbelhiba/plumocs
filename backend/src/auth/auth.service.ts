@@ -521,17 +521,72 @@ export class AuthService {
   async forgotPassword(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (user) {
-      const token = randomBytes(32).toString('hex');
-      await this.prisma.passwordReset.create({
-        data: { userId: user.id, tokenHash: sha256(token), expiresAt: new Date(Date.now() + 3_600_000) },
-      });
-      // Delivered via the notifications fanout (worker sends the email).
-      this.queue.notify({
-        kind: 'password_reset',
-        userIds: [user.id],
-        text: `Reset link: ${this.config.get('appUrl')}/reset-password?token=${token}`,
-        email: true,
-      });
+      // The CONSOLE's origin, not appUrl. appUrl is this api — csapi.plumo.work
+      // in production — which serves no pages, so every reset link ever emailed
+      // 404'd for every user who clicked one.
+      const consoleUrl = this.config.get<string>('consoleUrl');
+
+      // Both branches enqueue kind: 'password_reset' and nothing else. It is the
+      // ONLY kind the fanout processor handles before requireWorkspace, because
+      // forgot-password is unauthenticated and arrives with no workspace bound.
+      // A tidier-sounding kind for the branch below would fail requireWorkspace
+      // and retry to exhaustion, and the person would simply never hear back.
+      if (user.pmUserId) {
+        // NO TOKEN FOR AN ACCOUNT THAT SIGNS IN THROUGH PLUMO.
+        //
+        // loginWithPm re-checks the PM role, the desk link and the desk status on
+        // every single sign-in. login() checks none of them, and cannot: CS has
+        // no way to ask PM about a `sub` without that person's own token. So a
+        // password on one of these accounts is a credential that survives being
+        // demoted, being removed from the PM workspace, and having the PM account
+        // disabled — permanently, and on a desk auto-provisioned by one admin's
+        // first sign-in that person is the only admin there is. Refusing to mint
+        // one keeps "PM decides who may enter" true at every sign-in rather than
+        // only the first.
+        //
+        // WHY THIS IS SAID IN THE MAIL AND NOT IN THE RESPONSE: the response
+        // below stays a uniform { ok: true } for every address, known or not.
+        // Delivery already proves the reader holds the mailbox, so telling THEM
+        // how the account signs in reveals nothing they could not learn by
+        // signing in. The same sentence in the HTTP response would hand an
+        // anonymous caller an account-enumeration oracle.
+        //
+        // `pmUserId` OVER-MATCHES, KNOWINGLY. It is also set on an account that
+        // had a CS password first and linked Plumo later from Settings; those
+        // people lose password RECOVERY, keeping password sign-in and
+        // change-password for as long as they remember the password. Telling the
+        // two populations apart means recording whether a password was ever
+        // deliberately set — a new nullable column, because a provisioned
+        // account's passwordHash is an argon2 hash of random bytes and is
+        // deliberately indistinguishable from a real one. That column is worth
+        // adding; it is not worth blocking this on, because the failure it
+        // prevents is a revoked admin holding a permanent session and the failure
+        // it causes is a linked admin asking a colleague for help.
+        this.queue.notify({
+          kind: 'password_reset',
+          userIds: [user.id],
+          text: [
+            'This account signs in through Plumo, so there is no password to reset.',
+            '',
+            `Open ${consoleUrl} and choose "Continue with Plumo".`,
+            '',
+            'If you did not ask for this, you can ignore it — nothing has changed.',
+          ].join('\n'),
+          email: true,
+        });
+      } else {
+        const token = randomBytes(32).toString('hex');
+        await this.prisma.passwordReset.create({
+          data: { userId: user.id, tokenHash: sha256(token), expiresAt: new Date(Date.now() + 3_600_000) },
+        });
+        // Delivered via the notifications fanout (worker sends the email).
+        this.queue.notify({
+          kind: 'password_reset',
+          userIds: [user.id],
+          text: `Reset link: ${consoleUrl}/reset-password?token=${token}`,
+          email: true,
+        });
+      }
     }
     return { ok: true };
   }
@@ -541,6 +596,25 @@ export class AuthService {
       where: { tokenHash: sha256(token), usedAt: null, expiresAt: { gt: new Date() } },
     });
     if (!row) throw new UnauthorizedException('Reset link is invalid or expired');
+
+    // The same refusal forgotPassword now makes, repeated at the point of use.
+    // Tokens minted before that shipped stay valid for up to an hour, so without
+    // this the deploy that closes the path leaves it open for one more hour —
+    // and it is a standing bypass of every PM gate, not a cosmetic one.
+    //
+    // Says why, unlike the generic refusal above: reaching this line takes a live
+    // token, which takes the mailbox, so there is nobody here to enumerate to.
+    // The row is left to expire rather than burned — it grants nothing now.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: row.userId },
+      select: { pmUserId: true },
+    });
+    if (owner?.pmUserId) {
+      throw new UnauthorizedException(
+        'This account signs in through Plumo — use "Continue with Plumo" on the sign-in screen instead of a password.',
+      );
+    }
+
     await this.prisma.$transaction([
       this.prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
       this.prisma.user.update({

@@ -312,6 +312,7 @@ export class ChatService {
 
     this.queue.indexTicket(ticket.id);
     this.realtime.publish('message.added', {
+      workspaceId: actor.workspaceId,
       ticketId: ticket.id,
       messageId: message.id,
       isInternalNote: false,
@@ -389,6 +390,7 @@ export class ChatService {
     await this.audit.write({ actor, entityType: 'ticket', entityId: ticket.id, action: 'chat.handoff' });
     this.queue.deliverWebhooks('ticket.updated', { id: ticket.id, handedOff: true });
     this.realtime.publish('ticket.updated', {
+      workspaceId: actor.workspaceId,
       id: ticket.id,
       number: Number(updated.number),
       teamId: updated.teamId,
@@ -424,6 +426,7 @@ export class ChatService {
     });
     await this.audit.write({ actor, entityType: 'ticket', entityId: ticket.id, action: 'chat.resolve' });
     this.realtime.publish('ticket.updated', {
+      workspaceId: actor.workspaceId,
       id: ticket.id,
       number: Number(updated.number),
       teamId: updated.teamId,

@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { prisma, seedFixture, cleanup, onlyOurs, TAG, type Fixture } from './harness';
+import { prisma, seedFixture, cleanup, inWorkspace, onlyOurs, type Fixture } from './harness';
 
 /**
  * Cursor pagination against a real PostgreSQL.
@@ -8,6 +8,12 @@ import { prisma, seedFixture, cleanup, onlyOurs, TAG, type Fixture } from './har
  * tiebreaker, pages skip or duplicate rows and nothing throws. The fixture
  * deliberately gives several tickets the *same* updatedAt so the tiebreaker is
  * actually exercised — a test with distinct timestamps would pass either way.
+ *
+ * Every walk runs inside one binding, which is both what a real request does and
+ * what makes the counts mean anything: the fixture puts an identically-shaped
+ * set of tickets in a second workspace, so a page that drifted across the tenant
+ * boundary would show up as a row count that is too high rather than as nothing
+ * at all.
  */
 jest.setTimeout(30_000);
 
@@ -17,36 +23,40 @@ describe('cursor pagination (integration)', () => {
   beforeAll(async () => {
     f = await seedFixture();
     // give every fixture ticket an identical updatedAt — the worst case
-    await prisma.ticket.updateMany({
-      where: onlyOurs,
-      data: { updatedAt: new Date('2026-02-02T12:00:00Z') },
-    });
+    await inWorkspace(f.id, () =>
+      prisma.ticket.updateMany({
+        where: onlyOurs,
+        data: { updatedAt: new Date('2026-02-02T12:00:00Z') },
+      }),
+    );
   });
   afterAll(cleanup);
 
   /** Walk every page with the same ordering the service uses. */
-  async function pageThrough(limit: number) {
-    const seen: string[] = [];
-    let cursor: string | null = null;
-    for (let guard = 0; guard < 50; guard++) {
-      const rows = await prisma.ticket.findMany({
-        where: onlyOurs,
-        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        select: { id: true },
-      });
-      const hasMore = rows.length > limit;
-      const page = hasMore ? rows.slice(0, limit) : rows;
-      seen.push(...page.map((r) => r.id));
-      if (!hasMore) break;
-      cursor = page[page.length - 1].id;
-    }
-    return seen;
+  function pageThrough(limit: number) {
+    return inWorkspace(f.id, async () => {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let guard = 0; guard < 50; guard++) {
+        const rows = await prisma.ticket.findMany({
+          where: onlyOurs,
+          orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+          take: limit + 1,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+          select: { id: true },
+        });
+        const hasMore = rows.length > limit;
+        const page = hasMore ? rows.slice(0, limit) : rows;
+        seen.push(...page.map((r) => r.id));
+        if (!hasMore) break;
+        cursor = page[page.length - 1].id;
+      }
+      return seen;
+    });
   }
 
   it('visits every row exactly once when timestamps collide', async () => {
-    const all = await prisma.ticket.findMany({ where: onlyOurs, select: { id: true } });
+    const all = await inWorkspace(f.id, () => prisma.ticket.findMany({ where: onlyOurs, select: { id: true } }));
     const expected = all.length;
 
     for (const limit of [1, 2, 3, 5]) {
@@ -57,16 +67,21 @@ describe('cursor pagination (integration)', () => {
   });
 
   it('the ordering is total, so no two rows tie', async () => {
-    const rows = await prisma.ticket.findMany({
-      where: onlyOurs,
-      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      select: { id: true, updatedAt: true },
-    });
+    const rows = await inWorkspace(f.id, () =>
+      prisma.ticket.findMany({
+        where: onlyOurs,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        select: { id: true, updatedAt: true },
+      }),
+    );
     const keys = rows.map((r) => `${r.updatedAt.toISOString()}|${r.id}`);
     expect(new Set(keys).size).toBe(keys.length);
   });
 
   it('is backed by an index rather than a sort of the whole table', async () => {
+    // Unbound deliberately: EXPLAIN without ANALYZE does not execute the query,
+    // and pg_indexes is a catalog view no policy touches. Binding here would
+    // suggest the assertion depends on tenant state, and it does not.
     const plan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': string }>>(
       Prisma.sql`EXPLAIN SELECT id FROM tickets ORDER BY updated_at DESC, id DESC LIMIT 25`,
     );
@@ -81,21 +96,25 @@ describe('cursor pagination (integration)', () => {
   });
 
   it('a stale cursor yields an empty page rather than restarting from the top', async () => {
-    const ghost = await prisma.ticket.create({
-      data: {
-        subject: `${TAG}-ghost`, channel: 'manual', customerId: f.customer,
-        updatedAt: new Date('1999-01-01T00:00:00Z'),
-      },
+    const rows = await inWorkspace(f.id, async () => {
+      const ghost = await prisma.ticket.create({
+        data: {
+          subject: `${f.slug}-ghost`, channel: 'manual', customerId: f.customer,
+          updatedAt: new Date('1999-01-01T00:00:00Z'),
+        },
+      });
+      return prisma.ticket.findMany({
+        where: onlyOurs,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        cursor: { id: ghost.id },
+        skip: 1,
+        take: 5,
+        select: { id: true },
+      });
     });
-    const rows = await prisma.ticket.findMany({
-      where: onlyOurs,
-      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      cursor: { id: ghost.id },
-      skip: 1,
-      take: 5,
-      select: { id: true },
-    });
-    // the ghost sorts last, so nothing follows it
+    // the ghost sorts last, so nothing follows it. Read inside the binding, or
+    // the policy would return the same empty page for a cursor that had in fact
+    // restarted from the top.
     expect(rows).toEqual([]);
   });
 });

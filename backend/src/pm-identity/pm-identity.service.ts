@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -32,6 +32,26 @@ export interface PmUserInfo {
   name: string;
   workspaces: Array<{ id: string; slug: string; name: string; roleId: string }>;
 }
+
+/**
+ * The half of a sign-in that stays in the browser.
+ *
+ * A LINK names its user in the state row, so the callback can only ever apply
+ * the identity to the person who started it. A SIGN-IN names nobody — the whole
+ * point is that there is no session yet — which left the state row as the only
+ * credential, and a state row belongs to whoever called /signin. Attacker starts
+ * a flow, authorises it against their own PM account, stops before the callback,
+ * then hands the victim `?code=…&state=…`: the victim's console adopts the
+ * attacker's session and everything they type from then on lands in an inbox the
+ * attacker can read.
+ *
+ * The fix is a second half the attacker cannot write into the victim's browser,
+ * compared against the state on the way back.
+ */
+const SIGNIN_STATE_COOKIE = 'pm_signin_state';
+
+/** Matches the state row's TTL; a binding that outlives its row is dead weight. */
+const SIGNIN_STATE_COOKIE_MAX_AGE_SECS = 10 * 60;
 
 @Injectable()
 export class PmIdentityService {
@@ -168,7 +188,7 @@ export class PmIdentityService {
     userId: string | null;
     workspaceId?: string | null;
     returnTo?: string | null;
-  }): Promise<string> {
+  }): Promise<{ url: string; state: string }> {
     this.assertEnabled();
     const doc = await this.discover();
     const clientId = await this.clientId();
@@ -203,7 +223,113 @@ export class PmIdentityService {
     // PM binds tokens to a resource; naming it is what makes the audience check
     // on the other side pass.
     url.searchParams.set('resource', `${this.issuer}/mcp`);
-    return url.toString();
+    // The state comes back out so the caller can bind it to the browser. It is
+    // not a secret in the PKCE sense — it travels through PM in a query string —
+    // which is exactly why it needs a browser-held copy to mean anything.
+    return { url: url.toString(), state };
+  }
+
+  // ---- browser binding ------------------------------------------------------
+
+  /**
+   * Where the console sends the browser to BEGIN a sign-in.
+   *
+   * A hop through this api rather than straight to PM, because the binding
+   * cookie has to be set somewhere the browser will keep it. The console is a
+   * different origin and its fetch() sends no credentials, so a Set-Cookie on
+   * the /signin JSON response is discarded before it is ever stored. A top-level
+   * navigation to this api is not.
+   *
+   * Derived from the registered redirect URI and never from APP_URL: the hop and
+   * the callback must agree on origin AND path prefix, or the cookie one sets is
+   * not the cookie the other is sent.
+   */
+  get signInRedirectUrl(): string {
+    this.assertEnabled();
+    const u = new URL(this.redirectUri);
+    u.search = '';
+    u.hash = '';
+    u.pathname = `${this.cookiePath === '/' ? '' : this.cookiePath}/signin/redirect`;
+    return u.toString();
+  }
+
+  /**
+   * The Set-Cookie header binding a sign-in to this browser.
+   *
+   * WRITTEN BY HAND ON PURPOSE. No cookie plugin is registered on the Fastify
+   * adapter — @fastify/cookie is not a dependency of this project — and pulling
+   * one in to write a single header would be the larger change.
+   *
+   * SameSite=Lax, not Strict: the callback arrives as a top-level GET navigation
+   * from PM's origin. Lax sends the cookie on exactly that; Strict would drop it
+   * and every sign-in would be refused as a mismatch.
+   */
+  signInBindingCookie(state: string): string {
+    return this.buildSignInCookie(state, SIGNIN_STATE_COOKIE_MAX_AGE_SECS);
+  }
+
+  /** The same cookie, expired. Sent on every terminal outcome, success included. */
+  clearedSignInBindingCookie(): string {
+    return this.buildSignInCookie('', 0);
+  }
+
+  /**
+   * Did this browser start the sign-in it is coming back from?
+   *
+   * Constant-time, after a length check — timingSafeEqual throws on unequal
+   * lengths rather than returning false.
+   */
+  signInStateMatches(cookieHeader: string | undefined, state: string | undefined): boolean {
+    const bound = this.readCookie(cookieHeader, SIGNIN_STATE_COOKIE);
+    if (!bound || !state || bound.length !== state.length) return false;
+    return timingSafeEqual(Buffer.from(bound), Buffer.from(state));
+  }
+
+  /**
+   * The directory the callback lives in — the narrowest Path the cookie can
+   * carry and still be sent back to it. Scoping it here keeps the binding off
+   * every other request this api serves.
+   */
+  private get cookiePath(): string {
+    // Unparseable means PM is not configured, and redirectUri is '' — for which
+    // `new URL` throws rather than returning anything. The callback is @Public()
+    // and reachable on such a deployment, and its failure path clears this
+    // cookie before redirecting, so throwing here turns a tidy "that link was
+    // incomplete" bounce back to the console into a 500 on a blank api page.
+    // The value is immaterial in that state: there is no sign-in to bind, and
+    // clearing a cookie that was never set is a no-op at any Path.
+    try {
+      const dir = new URL(this.redirectUri).pathname.replace(/\/+$/, '').replace(/\/[^/]*$/, '');
+      return dir || '/';
+    } catch {
+      return '/';
+    }
+  }
+
+  private buildSignInCookie(value: string, maxAgeSecs: number): string {
+    const parts = [
+      `${SIGNIN_STATE_COOKIE}=${value}`,
+      `Path=${this.cookiePath}`,
+      'HttpOnly',
+      'SameSite=Lax',
+      `Max-Age=${maxAgeSecs}`,
+    ];
+    // Follows the scheme we actually redirect to rather than NODE_ENV: a Secure
+    // cookie is silently dropped over plain http, so a local deployment would
+    // refuse every sign-in as a mismatch and it would read as a bug in the check
+    // rather than as a missing cookie.
+    if (this.redirectUri.startsWith('https://')) parts.push('Secure');
+    return parts.join('; ');
+  }
+
+  private readCookie(header: string | undefined, name: string): string | null {
+    for (const pair of (header ?? '').split(';')) {
+      const eq = pair.indexOf('=');
+      if (eq < 0) continue;
+      if (pair.slice(0, eq).trim() !== name) continue;
+      return decodeURIComponent(pair.slice(eq + 1).trim());
+    }
+    return null;
   }
 
   /**
@@ -285,7 +411,8 @@ export class PmIdentityService {
 
   // ---- plumbing -------------------------------------------------------------
 
-  private assertEnabled(): void {
+  /** Public so a caller can refuse cheaply, without a state row or a round trip. */
+  assertEnabled(): void {
     if (!this.enabled) {
       throw new ServiceUnavailableException(
         'Plumo sign-in is not configured on this deployment (PM_ISSUER / PM_REDIRECT_URI)',

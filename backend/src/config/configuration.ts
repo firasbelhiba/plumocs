@@ -1,7 +1,23 @@
+/**
+ * Where the CONSOLE lives — the origin a browser is sent to, never this api.
+ *
+ * Resolved once and read from two places: the PM callback redirects the browser
+ * back here, and the password-reset email links here. It used to fall back to
+ * APP_URL, and in production APP_URL is the api (csapi.plumo.work) — so every
+ * emailed reset link pointed at a host that serves no pages and 404'd for every
+ * user who ever asked for one.
+ *
+ * The fallback is the console's development origin instead. There is no way to
+ * guess a production one, and a deployment that serves a console sets
+ * PM_CONSOLE_URL; guessing wrong loudly beats guessing wrong silently.
+ */
+const consoleUrl = (process.env.PM_CONSOLE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+
 export default () => ({
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3001', 10),
   appUrl: process.env.APP_URL ?? 'http://localhost:3001',
+  consoleUrl,
   databaseUrl: process.env.DATABASE_URL,
   redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6379',
   workspace: {
@@ -26,8 +42,9 @@ export default () => ({
     // Must be registered with PM and must point at THIS api, not the console:
     // the code-for-token exchange happens server-side.
     redirectUri: process.env.PM_REDIRECT_URI || undefined,
-    // Where to send the browser once the callback is done.
-    consoleUrl: process.env.PM_CONSOLE_URL || process.env.APP_URL || '',
+    // Where to send the browser once the callback is done. The same origin as
+    // the top-level `consoleUrl`, kept here so PM-facing code reads as one unit.
+    consoleUrl,
     // Create a desk on first sign-in for a PM owner/admin whose organisation
     // has none. On by default because it is the point of signing in with Plumo:
     // whoever runs a Plumo workspace runs its support desk, without waiting for

@@ -12,6 +12,10 @@ export const envValidationSchema = Joi.object({
   WORKSPACE_TX_MAX_WAIT_MS: Joi.number().default(5000),
   PM_ISSUER: Joi.string().uri().optional().allow(''),
   PM_REDIRECT_URI: Joi.string().uri().optional().allow(''),
+  // Not PM-specific any more despite the name: it is the console's origin, and
+  // the password-reset email links to it too. Unset, it falls back to the
+  // console's development origin — which is wrong on any real deployment, so
+  // this is optional in the schema and mandatory in practice.
   PM_CONSOLE_URL: Joi.string().uri().optional().allow(''),
   // Declared so the kill switch cannot be silently misspelled into being
   // ignored: 'PM_AUTO_PROVISION_DESK=false' would otherwise boot happily and

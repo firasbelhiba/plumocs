@@ -13,6 +13,13 @@ import { assertUnprivilegedConnection } from '../../src/prisma/prisma.service';
  * Written before the first policy exists, on purpose — a policy added to a
  * database where the runtime is exempt is worse than no policy, because it
  * looks like protection.
+ *
+ * Since Phase 3 it also asserts the policies themselves are PRESENT, table by
+ * table. workspace-isolation.integration.spec.ts proves the boundary holds for
+ * the tables its fixture touches; only a catalogue check can say anything about
+ * the table somebody adds next week. The migration derives its list from "has a
+ * workspace_id column" for that reason, and this is the assertion that the
+ * derivation still covers everything.
  */
 describe('database role separation', () => {
   const prisma = new PrismaClient();
@@ -71,6 +78,68 @@ describe('database role separation', () => {
     } finally {
       await owner.$disconnect();
     }
+  });
+
+  it('every table carrying workspace_id has row-level security ON and a policy', async () => {
+    // Two failures, one query. `relrowsecurity` false means the policy is there
+    // and inert; a missing policy on an RLS-enabled table means the table is
+    // unreadable rather than unprotected. Both are silent until a customer
+    // notices, and a new tenant table arriving without either is the likeliest
+    // way this regresses — nothing in the application would change.
+    const gaps = await prisma.$queryRaw<{ table: string; rlsEnabled: boolean; policies: bigint }[]>`
+      SELECT c.relname::text AS "table",
+             c.relrowsecurity AS "rlsEnabled",
+             (SELECT count(*) FROM pg_policy p
+               WHERE p.polrelid = c.oid AND p.polname = 'workspace_isolation') AS "policies"
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r'
+        AND EXISTS (SELECT 1 FROM information_schema.columns col
+                     WHERE col.table_schema = 'public'
+                       AND col.table_name = c.relname
+                       AND col.column_name = 'workspace_id')
+        AND (NOT c.relrowsecurity OR NOT EXISTS (
+              SELECT 1 FROM pg_policy p
+               WHERE p.polrelid = c.oid AND p.polname = 'workspace_isolation'))
+      ORDER BY c.relname
+    `;
+    expect(gaps).toEqual([]);
+
+    // ...and there are tenant tables at all. Without this the assertion above is
+    // satisfied by a database where the tenancy migration never ran.
+    const [{ n }] = await prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_policy WHERE polname = 'workspace_isolation'
+    `;
+    expect(Number(n)).toBeGreaterThanOrEqual(17);
+  });
+
+  it('users is deliberately NOT under a workspace policy', async () => {
+    // The exclusion is as load-bearing as the inclusions. Login has to find a
+    // user by email BEFORE any workspace is known, so a workspace predicate here
+    // would not leak anything — it would make logging in impossible, for
+    // everybody, at the next deploy. Same for the sessions hanging off a person.
+    const covered = await prisma.$queryRaw<{ table: string }[]>`
+      SELECT c.relname::text AS "table"
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relname IN ('users', 'refresh_tokens', 'password_resets', 'workspaces')
+        AND c.relrowsecurity
+    `;
+    expect(covered).toEqual([]);
+  });
+
+  it('the runtime cannot delete a workspace', async () => {
+    // REVOKE DELETE ON workspaces, belt and braces with the ON DELETE RESTRICT
+    // on every tenant foreign key: RESTRICT stops the delete while data exists,
+    // the revoke stops the statement being issuable at all — including after a
+    // purge job has emptied the desk. Asserted here because roles.sql's
+    // unconditional `GRANT ... ON ALL TABLES` silently undoes it on its next run,
+    // and nothing else would report that.
+    const [row] = await prisma.$queryRaw<{ mayDelete: boolean }[]>`
+      SELECT has_table_privilege(current_user, 'workspaces', 'DELETE') AS "mayDelete"
+    `;
+    expect(row.mayDelete).toBe(false);
   });
 
   it('future tables are readable by the runtime without a manual GRANT', async () => {
