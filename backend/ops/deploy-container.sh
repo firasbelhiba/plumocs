@@ -68,14 +68,72 @@ docker run --rm --entrypoint node "plumo-cs:${SHA}" \
   -e "require('fs').accessSync('/app/dist/main.js');require('fs').accessSync('/app/dist/worker.js')" \
   || die "The built image is missing dist/main.js or dist/worker.js"
 
+# ------------------------------------------------- compose is even usable? --
+# EVERYTHING BELOW DEPENDS ON THIS, AND IT IS WHY PRODUCTION WENT DOWN.
+#
+# `docker compose` interpolates ${MIGRATE_DATABASE_URL} from the SHELL. env_file
+# passes variables INTO a container; it does not define them for substitution
+# while the YAML is being parsed. The variable lives only in app/.env, so compose
+# refused to parse the file at all — and therefore `up api worker` failed too,
+# even though only the migrate service references it.
+#
+# Exported here, and `compose config -q` proves the whole file resolves BEFORE
+# anything irreversible happens. Cheap, and it turns the exact failure that
+# caused an outage into an abort with the service still running.
+export PLUMO_TAG="${SHA}"
+if [[ -z "${MIGRATE_DATABASE_URL:-}" ]]; then
+  # cut -d= -f2- so a password containing '=' survives; the sed strips optional
+  # surrounding quotes.
+  MIGRATE_DATABASE_URL="$(grep -E '^MIGRATE_DATABASE_URL=' "$APP_DIR/.env" | head -1 | cut -d= -f2- | sed 's/^"\(.*\)"$/\1/; s/^'"'"'\(.*\)'"'"'$/\1/')"
+  export MIGRATE_DATABASE_URL
+fi
+[[ -n "${MIGRATE_DATABASE_URL:-}" ]] || die "MIGRATE_DATABASE_URL is not in $APP_DIR/.env. compose cannot interpolate it and will not parse."
+
+log "Validating the compose file resolves"
+docker compose -f "$COMPOSE" config -q || die "compose config failed. Nothing has been stopped; the native stack is still serving."
+
+# ------------------------------------------------- does the image even run? --
+# PROVE THE BUILD SERVES BEFORE STOPPING WHAT CURRENTLY DOES.
+#
+# The containers use network_mode: host and bind 3002, which systemd is holding,
+# so they cannot be started alongside the running service to test them. The image
+# can — on a spare port, against the real database and the real env. That closes
+# the gap that made the last deploy dangerous: previously the first evidence the
+# new build worked arrived AFTER production had been stopped.
+#
+# This catches a missing DI provider, an unreadable Prisma engine, a bad env —
+# every failure mode that a `docker build` exit code cannot see.
+SMOKE_PORT=3099
+log "Smoke-testing ${SHA} on port ${SMOKE_PORT} while production keeps serving"
+smoke_id=$(docker run -d --network host --env-file "$APP_DIR/.env" -e "PORT=${SMOKE_PORT}" "plumo-cs:${SHA}")
+smoke_ok=0
+for _ in $(seq 1 30); do
+  if curl -fsS --max-time 3 "http://127.0.0.1:${SMOKE_PORT}/health" >/dev/null 2>&1; then smoke_ok=1; break; fi
+  sleep 2
+done
+if [[ "$smoke_ok" -ne 1 ]]; then
+  warn "Smoke test failed. Container logs:"
+  docker logs --tail 40 "$smoke_id" 2>&1 || true
+  docker rm -f "$smoke_id" >/dev/null 2>&1 || true
+  die "${SHA} does not serve. NOTHING WAS STOPPED — the native stack is still up."
+fi
+docker rm -f "$smoke_id" >/dev/null 2>&1 || true
+log "Smoke test passed"
+
 # ----------------------------------------------------------------- migrate ---
 # Explicit, gated, and backed up. A deploy that quietly migrates is a deploy that
 # can quietly destroy data, and this database has one irreversible migration in
 # its history for exactly that reason.
-export PLUMO_TAG="${SHA}"
-pending=$(docker compose -f "$COMPOSE" run --rm --entrypoint sh migrate -c \
-  'DATABASE_URL="$MIGRATE_DATABASE_URL" node_modules/.bin/prisma migrate status' 2>&1 \
-  | grep -ci 'not yet been applied\|following migration' || true)
+#
+# NO `|| true` ON THIS PIPELINE. The previous version swallowed a failing compose
+# invocation here, concluded there was nothing to migrate, and carried on to stop
+# production — the error it hid was the very one that then killed the deploy.
+migrate_status="$(docker compose -f "$COMPOSE" run --rm --entrypoint sh migrate -c \
+  'DATABASE_URL="$MIGRATE_DATABASE_URL" node_modules/.bin/prisma migrate status' 2>&1)" || {
+    echo "$migrate_status"
+    die "Could not read migration status. Nothing has been stopped."
+  }
+pending=$(printf '%s' "$migrate_status" | grep -ci 'not yet been applied\|following migration' || true)
 
 if [[ "$pending" -gt 0 ]]; then
   if [[ "${WITH_MIGRATIONS:-0}" == "1" ]]; then
