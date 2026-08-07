@@ -55,7 +55,12 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      - name: Unit tests
+      # Includes src/app.module.spec.ts, which resolves the entire Nest
+      # dependency graph. TypeScript cannot see DI wiring — a controller can
+      # inject a service its module never imports and the build stays green —
+      # so without this the failure first appears when the container starts.
+      # That has already put a 502 in production once.
+      - name: Unit tests (includes Nest DI resolution)
         run: npm test
 
       # `nest build` is not the same check as tsc --noEmit — this is the

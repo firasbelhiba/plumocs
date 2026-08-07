@@ -50,6 +50,31 @@ export class AuthService {
     return this.issueTokens(user, membership);
   }
 
+  /**
+   * Sign in with a Plumo PM identity.
+   *
+   * ONLY resolves an ALREADY-LINKED account. It never creates a CS user and
+   * never matches on email — both would turn "has a Plumo account" into "works
+   * on this support desk", and PM workspaces contain read-only members who do
+   * not. Someone must be invited to CS and link once from Settings; after that
+   * this is a one-click sign-in.
+   *
+   * Matching on email instead of `sub` would be worse than lax: PM emails are
+   * mutable and CS emails are user-supplied, so it would let anyone who can set
+   * their PM address to a CS admin's take that account.
+   */
+  async loginWithPm(pmUserId: string, workspaceSlug?: string) {
+    const user = await this.prisma.user.findFirst({ where: { pmUserId } });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException(
+        'No Plumo CS account is linked to that Plumo account. Ask an admin to invite you, then connect it from Settings.',
+      );
+    }
+    const membership = await this.workspaces.resolveForUser(user.id, workspaceSlug);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastActiveAt: new Date() } });
+    return this.issueTokens(user, membership);
+  }
+
   /** Refresh-token rotation: verify hash, revoke old, issue new pair. */
   async refresh(refreshToken: string, workspaceSlug?: string) {
     let payload: { sub: string; jti: string };

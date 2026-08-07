@@ -164,7 +164,8 @@ export class PmIdentityService {
    * it — see the schema comment on pm_oauth_states.
    */
   async beginAuthorization(input: {
-    userId: string;
+    /** Set to link this PM identity to that CS user; null to sign in with it. */
+    userId: string | null;
     workspaceId?: string | null;
     returnTo?: string | null;
   }): Promise<string> {
@@ -182,7 +183,7 @@ export class PmIdentityService {
       data: {
         state,
         codeVerifier,
-        userId: input.userId,
+        userId: input.userId ?? null,
         workspaceId: input.workspaceId ?? null,
         returnTo: input.returnTo ?? null,
         // Long enough to read a consent screen, short enough that an abandoned
@@ -215,7 +216,8 @@ export class PmIdentityService {
    */
   async completeAuthorization(input: { code: string; state: string }): Promise<{
     userInfo: PmUserInfo;
-    userId: string;
+    /** Null when this was a sign-in rather than a link. */
+    userId: string | null;
     workspaceId: string | null;
     returnTo: string | null;
   }> {
@@ -265,7 +267,9 @@ export class PmIdentityService {
 
     return {
       userInfo,
-      userId: row.userId,
+      // Null here means the flow began at the login screen, with nobody signed
+      // in — the caller resolves the user from the PM subject instead.
+      userId: row.userId ?? null,
       workspaceId: row.workspaceId,
       returnTo: row.returnTo,
     };

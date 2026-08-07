@@ -7,6 +7,12 @@ import { AuthController } from './auth.controller';
   imports: [JwtModule.register({})],
   providers: [AuthService],
   controllers: [AuthController],
-  exports: [JwtModule],
+  // AuthService is exported so other modules can issue a session without
+  // reimplementing token minting. PmIdentityModule needs it for sign-in with
+  // Plumo; a second copy of that logic would drift from this one.
+  // AuthService is exported so other modules can issue a session without
+  // reimplementing token minting. PmIdentityModule needs it for sign-in with
+  // Plumo; a second copy of that logic would drift from this one.
+  exports: [JwtModule, AuthService],
 })
 export class AuthModule {}

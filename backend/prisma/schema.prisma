@@ -616,8 +616,10 @@ model PmOAuthState {
   codeVerifier String    @map("code_verifier")
   /// Who began the flow. The link is applied to THIS user, so a stolen callback
   /// cannot attach a PM identity to an account the caller does not control.
-  userId       String    @map("user_id") @db.Uuid
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Set for a link (apply to this user); NULL for a sign-in (resolve the user
+  /// from the PM subject). The null is the distinction between the two flows.
+  userId       String?   @map("user_id") @db.Uuid
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspaceId  String?   @map("workspace_id") @db.Uuid
   returnTo     String?   @map("return_to")
   expiresAt    DateTime  @map("expires_at") @db.Timestamptz()

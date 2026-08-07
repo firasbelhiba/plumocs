@@ -114,10 +114,21 @@ export default function Login({ V }) {
               <Federated provider="google" icon={<GoogleMark />} onClick={V.federated}>
                 Continue with Google
               </Federated>
+              {V.pmSignInAvailable && (
+                <Federated provider="plumo" icon={<ShieldIcon />} onClick={V.signInWithPm}>
+                  {V.pmSignInBusy ? 'redirecting…' : 'Continue with Plumo'}
+                </Federated>
+              )}
               <Federated provider="sso" icon={<ShieldIcon />} onClick={V.federated} muted>
                 Continue with SSO
               </Federated>
             </div>
+
+            {V.pmSignInError && (
+              <div className="mb-4 rounded-[var(--r-sm)] bg-[color:var(--danger-soft,rgba(220,60,60,.08))] px-3 py-2 text-[12.5px] text-[color:var(--danger,#c0392b)]">
+                {V.pmSignInError}
+              </div>
+            )}
 
             <div className="flex items-center gap-3 mb-5">
               <span className="flex-1 h-px bg-[color:var(--border)]" />

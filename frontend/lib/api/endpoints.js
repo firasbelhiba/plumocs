@@ -24,6 +24,8 @@ export const auth = {
 // Linking this CS account and desk to a Plumo PM account.
 export const pm = {
   status: () => request('/auth/pm/status'),
+  // Public: there is no session yet — that is what this is for.
+  signinUrl: () => request('/auth/pm/signin', { auth: false }),
   // Returns a URL rather than redirecting: a 302 from fetch() is followed
   // opaquely by the browser instead of navigating the page, so the caller has
   // to do the navigation itself.

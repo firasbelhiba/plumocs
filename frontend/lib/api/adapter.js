@@ -109,6 +109,29 @@ class Adapter {
     setUnauthorizedHandler(fn);
   }
 
+  /**
+   * Adopt a session handed back by the plumo sign-in callback.
+   *
+   * The tokens arrive in the URL fragment rather than from a login call, so
+   * there is no response body carrying the user — store the tokens first, then
+   * ask /auth/me who this is. Storing before asking is deliberate: the request
+   * needs the token to succeed.
+   */
+  async adoptPmSession({ accessToken, refreshToken }, keepSignedIn = true) {
+    setSession({ accessToken, refreshToken, user: null, workspace: null }, { persist: keepSignedIn });
+    const me = await api.auth.me();
+    setSession(
+      {
+        accessToken,
+        refreshToken,
+        user: me.user ?? me,
+        workspace: me.workspace ?? null,
+      },
+      { persist: keepSignedIn },
+    );
+    return me.user ?? me;
+  }
+
   async login(email, password, keepSignedIn = true) {
     const data = await api.auth.login(email, password);
     setSession(

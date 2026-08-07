@@ -90,6 +90,46 @@ export default class Console extends React.Component {
   // Ask the server where to send the browser, then navigate. A 302 from fetch()
   // is followed opaquely instead of navigating the page, which is why the
   // endpoint returns a URL rather than redirecting.
+  // Sign in WITH plumo, from the login screen. Separate from connectPm: that
+  // links an identity to the account you are already in; this resolves which
+  // account you are.
+  signInWithPm = async () => {
+    this.setState({ pmSignInBusy: true, pmSignInError: '' });
+    try {
+      const { authorizationUrl } = await api.pm.signinUrl();
+      window.location.assign(authorizationUrl);
+    } catch (e) {
+      this.setState({ pmSignInBusy: false, pmSignInError: e?.message || 'could not reach plumo' });
+    }
+  };
+
+  // The callback returns tokens in the URL FRAGMENT, which never reaches a
+  // server, so they stay out of access logs and Referer headers. Consume and
+  // strip immediately.
+  readPmSignIn = () => {
+    if (!window.location.hash) return false;
+    const h = new URLSearchParams(window.location.hash.slice(1));
+    if (h.get('pmSignIn') !== 'ok') return false;
+    const accessToken = h.get('accessToken');
+    const refreshToken = h.get('refreshToken');
+    window.history.replaceState({}, '', window.location.pathname + window.location.search);
+    if (!accessToken || !refreshToken) return false;
+    // Adopt, then run the same bootstrap the password path runs — the session
+    // is identical once the tokens are stored, so nothing here should be a
+    // second, subtly different login.
+    adapter
+      .adoptPmSession({ accessToken, refreshToken })
+      .then(async () => {
+        const me = await adapter.bootstrap();
+        this.setState(
+          { booted: true, loggedIn: true, loginError: false, role: me.role, avail: me.availability ?? 'available', notifs: adapter.notifications, screen: 'queue' },
+          () => { this.loadQueue({ noFail: true }); this.loadCounts(); },
+        );
+      })
+      .catch((e) => this.setState({ booted: true, loggedIn: false, pmSignInError: e?.message || 'plumo sign-in failed' }));
+    return true;
+  };
+
   connectPm = async () => {
     this.setState({ pmBusy: true, pmNotice: '' });
     try {
@@ -126,6 +166,13 @@ export default class Console extends React.Component {
     q.delete('pmLink'); q.delete('workspace'); q.delete('reason');
     const rest = q.toString();
     window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''));
+  };
+
+  // Whether to offer plumo on the login screen at all. Unauthenticated, so it
+  // cannot use /auth/pm/status.
+  loadPmSignInAvailability = async () => {
+    try { await api.pm.signinUrl(); this.setState({ pmSignInAvailable: true }); }
+    catch { /* not configured, or unreachable — leave the button hidden */ }
   };
 
   loadPmStatus = async () => {
@@ -167,8 +214,12 @@ export default class Console extends React.Component {
     this.syncDoc(seed.theme || this.state.theme, seed.soft || this.state.soft);
     // Read the PM callback outcome before anything else can navigate away, then
     // ask whether this deployment offers the link at all.
+    // Before anything else: a returning plumo sign-in carries its tokens in the
+    // fragment and must be adopted before the app decides it is logged out.
+    const signedInWithPm = this.readPmSignIn();
     this.readPmCallback();
     this.loadPmStatus();
+    if (!signedInWithPm) this.loadPmSignInAvailability();
     window.addEventListener('keydown', this.onKey, true);
     this.timer = setInterval(() => this.setState({ now: Date.now() }), 1000);
 
@@ -1068,6 +1119,8 @@ export default class Console extends React.Component {
       // rendered at all rather than shown broken.
       pmAvailable: S.pm?.available === true, pmLinked: S.pm?.linked === true,
       pmBusy: !!S.pmBusy, pmNotice: S.pmNotice || '',
+      pmSignInAvailable: S.pmSignInAvailable === true, pmSignInBusy: !!S.pmSignInBusy,
+      pmSignInError: S.pmSignInError || '', signInWithPm: this.signInWithPm,
       connectPm: this.connectPm, disconnectPm: this.disconnectPm,
       drillOpen: !!S.drill, noDrill: !S.drill, setDrill: this.setDrill, clearDrill: this.clearDrill,
       drillTitle: dd ? dd.title : '', drillValue: dd ? dd.value : '', drillNote: dd ? dd.note : '', drillAxis: dd ? dd.axis : '',

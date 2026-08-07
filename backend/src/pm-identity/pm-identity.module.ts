@@ -6,6 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CurrentUser, Principal, Public, Roles } from '../common/decorators';
 import { PmIdentityService, PmUserInfo } from './pm-identity.service';
+import { AuthService } from '../auth/auth.service';
+import { AuthModule } from '../auth/auth.module';
 
 /**
  * Linking a Plumo CS account to a Plumo PM one.
@@ -114,6 +116,7 @@ export class PmIdentityController {
     private readonly link: PmLinkService,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly auth: AuthService,
   ) {}
 
   /** Whether this deployment can offer Plumo sign-in at all, for the console to decide what to render. */
@@ -139,6 +142,18 @@ export class PmIdentityController {
       workspaceId: principal.workspaceId,
       returnTo: returnTo ?? null,
     });
+    return { authorizationUrl: url };
+  }
+
+  /**
+   * Begin a SIGN-IN (as opposed to a link). Public: there is no session yet —
+   * that is what this is for. The state row carries a null user, which is what
+   * tells the callback to resolve one rather than apply one.
+   */
+  @Public()
+  @Get('signin')
+  async signin() {
+    const url = await this.pm.beginAuthorization({ userId: null, workspaceId: null, returnTo: null });
     return { authorizationUrl: url };
   }
 
@@ -173,6 +188,28 @@ export class PmIdentityController {
 
     try {
       const result = await this.pm.completeAuthorization({ code, state });
+
+      // SIGN-IN: the flow began with nobody logged in, so resolve the CS user
+      // from the PM subject. loginWithPm refuses unless that identity is
+      // already linked — it never creates an account and never matches on
+      // email, because "has a Plumo account" must not mean "works this desk".
+      if (!result.userId) {
+        const session = await this.auth.loginWithPm(result.userInfo.sub);
+        // The tokens go through the URL fragment, not the query string:
+        // fragments are not sent to servers and stay out of access logs,
+        // Referer headers and browser history entries the way a query does.
+        return reply.redirect(
+          `${consoleUrl}/#${new URLSearchParams({
+            pmSignIn: 'ok',
+            accessToken: session.accessToken,
+            refreshToken: session.refreshToken,
+          }).toString()}`,
+          302,
+        );
+      }
+
+      // LINK: apply the identity to the user who started the flow, and nobody
+      // else — the state row named them before the redirect.
       const linked = await this.link.apply({
         actor: { kind: 'user', id: result.userId, workspaceId: result.workspaceId ?? '' } as Principal,
         userId: result.userId,
@@ -199,6 +236,7 @@ export class PmIdentityController {
 }
 
 @Module({
+  imports: [AuthModule],
   controllers: [PmIdentityController],
   providers: [PmIdentityService, PmLinkService],
   exports: [PmIdentityService],
