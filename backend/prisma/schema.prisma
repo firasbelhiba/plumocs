@@ -162,6 +162,11 @@ model User {
   /// `role`, `teamId` and `availability` now live on WorkspaceMembership,
   /// because one human can be an admin of one desk and an agent on another.
   isPlatformAdmin Boolean          @default(false) @map("is_platform_admin")
+  /// The `sub` from PM /userinfo — stable for the life of the PM account.
+  /// Unique where present, so one PM identity can never resolve to two CS
+  /// users: that ambiguity is an account-takeover shape, not untidy data.
+  /// Nullable because CS accounts exist that have no PM account.
+  pmUserId        String?          @unique @map("pm_user_id")
   lastActiveAt    DateTime?        @map("last_active_at") @db.Timestamptz()
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
@@ -527,7 +532,10 @@ model Workspace {
   name         String
   status       WorkspaceStatus @default(active)
   /// Set when this desk was imported from a Plumo PM workspace (Phase 4).
-  pmWorkspaceId String?        @map("pm_workspace_id") @db.Uuid
+  /// The PM workspace this desk was linked to (Phase 4). TEXT, not uuid: PM is
+  /// MongoDB and its ids are ObjectIds — 24 hex characters, which a uuid column
+  /// rejects outright. Opaque to CS; never parsed.
+  pmWorkspaceId String?        @map("pm_workspace_id")
   /// Affordance for per-workspace inbound mail. The email channel is NOT
   /// multi-tenant yet: threading by "[Plumo #N]" or In-Reply-To is ambiguous
   /// across tenants until the receiving address resolves the workspace.
