@@ -28,6 +28,17 @@ export default () => ({
     redirectUri: process.env.PM_REDIRECT_URI || undefined,
     // Where to send the browser once the callback is done.
     consoleUrl: process.env.PM_CONSOLE_URL || process.env.APP_URL || '',
+    // Create a desk on first sign-in for a PM owner/admin whose organisation
+    // has none. On by default because it is the point of signing in with Plumo:
+    // whoever runs a Plumo workspace runs its support desk, without waiting for
+    // an invitation from inside a product they have never used.
+    //
+    // The kill switch exists because this makes an unauthenticated endpoint a
+    // tenant-creating one. If PM ever lets anyone self-serve a workspace and be
+    // its P0, one account can mint desks by signing in repeatedly, and each desk
+    // adds a sequential pass to every background sweep. Set it to `false` to fall
+    // back to refusing, without a deploy.
+    autoProvisionDesks: process.env.PM_AUTO_PROVISION_DESKS !== 'false',
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET,

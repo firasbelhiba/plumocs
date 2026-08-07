@@ -14,7 +14,10 @@ import { AuthService, PmSignInIdentity } from './auth.service';
  * legitimately, until someone reads the audit log.
  */
 describe('AuthService.loginWithPm', () => {
-  const DESK = { id: '11111111-1111-1111-1111-111111111111', slug: 'dar-blockchain' };
+  // `status` is part of the fixture because loginWithPm deliberately queries
+  // desks WITHOUT a status filter and classifies afterwards — filtering in SQL
+  // would hide a suspended desk and make provisioning try to re-create it.
+  const DESK = { id: '11111111-1111-1111-1111-111111111111', slug: 'dar-blockchain', status: 'active' };
 
   // Mirrors the real /userinfo payload: owner of one workspace, plain member of
   // another. The member one must never influence the outcome.
@@ -32,11 +35,19 @@ describe('AuthService.loginWithPm', () => {
   function build(opts: {
     linkedUser?: unknown;
     emailTaken?: unknown;
-    desks?: Array<{ id: string; slug: string }>;
+    desks?: Array<{ id: string; slug: string; status: string }>;
     existingMembership?: unknown;
+    autoProvision?: boolean;
   }) {
     const tx = {
       $executeRaw: jest.fn(),
+      // Present so a test that reaches provisioning fails on its assertion
+      // rather than on a missing mock. Provisioning itself is covered by
+      // auth.service.provisioning.spec.ts.
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'ws-new', slug: 'new-desk' }]),
+      team: { create: jest.fn().mockResolvedValue({ id: 'team-1' }) },
+      slaPolicy: { createMany: jest.fn().mockResolvedValue({ count: 4 }) },
+      auditLog: { create: jest.fn().mockResolvedValue({ id: 1n }) },
       workspaceMembership: {
         findUnique: jest.fn().mockResolvedValue(opts.existingMembership ?? null),
         create: jest.fn().mockResolvedValue({ id: 'm1' }),
@@ -71,7 +82,9 @@ describe('AuthService.loginWithPm', () => {
     const service = new AuthService(
       prisma as never,
       { signAsync: jest.fn().mockResolvedValue('signed.jwt.token') } as never,
-      { get: jest.fn().mockReturnValue('15m') } as never,
+      {
+        get: jest.fn((key: string) => (key === 'pm.autoProvisionDesks' ? opts.autoProvision === true : '15m')),
+      } as never,
       {} as never,
       workspaces as never,
     );
@@ -101,15 +114,22 @@ describe('AuthService.loginWithPm', () => {
 
     // 'pm-alulu' (P2) must not appear: the caller is a plain member there, and
     // a desk linked to it is none of their business.
-    expect(prisma.workspace.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ pmWorkspaceId: { in: ['pm-dar'] }, status: 'active' }),
-      }),
-    );
+    const where = prisma.workspace.findMany.mock.calls[0][0].where;
+    expect(where.pmWorkspaceId).toEqual({ in: ['pm-dar'] });
+
+    // And NO status filter, deliberately. Filtering here would hide a suspended
+    // desk, provisioning would conclude none exists and try to create one, and
+    // the insert would hit workspaces_pm_workspace_id_key — a 500 on sign-in and
+    // a route around the suspension. Status is classified after the query.
+    expect(where.status).toBeUndefined();
   });
 
-  it('refuses when the administered workspace has no desk connected', async () => {
-    const { service } = build({ desks: [] });
+  it('refuses when there is no desk and auto-provisioning is switched off', async () => {
+    // The kill switch. With it on — the default, and covered in
+    // auth.service.provisioning.spec.ts — this same input creates the desk
+    // instead. Sign-in is a tenant-creating path, so the ability to turn that
+    // off without a deploy is part of the contract, not a nicety.
+    const { service } = build({ desks: [], autoProvision: false });
     await expect(service.loginWithPm(identity())).rejects.toThrow(/No Plumo CS desk is connected/);
   });
 

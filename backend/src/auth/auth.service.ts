@@ -1,6 +1,7 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,6 +34,63 @@ function ttlToMs(ttl: string): number {
 const PM_DESK_ADMIN_ROLES: ReadonlySet<string> = new Set(['P0', 'P1']);
 
 /**
+ * Slugs the schema refuses, duplicated from the workspaces_slug_reserved CHECK.
+ *
+ * Kept in TypeScript on purpose rather than relying on the constraint: hitting a
+ * CHECK aborts the whole transaction, and provisioning needs to reject a
+ * candidate cheaply and try the next one. The constraint remains the backstop —
+ * this list is the control.
+ */
+const RESERVED_SLUGS: ReadonlySet<string> = new Set([
+  'api', 'app', 'www', 'admin', 'auth', 'health', 'static',
+  'assets', 'docs', 'status', 'webhooks', 'w', 'login', 'signup',
+]);
+
+/**
+ * Turn a PM workspace name or slug into something workspaces_slug_format will
+ * accept, or null when nothing usable survives.
+ *
+ * The trailing-hyphen strip happens TWICE by necessity: slicing to 32 can cut
+ * mid-word and re-introduce one, which is how "Acme, Inc." would otherwise
+ * become "acme-inc-" and violate the format CHECK.
+ */
+export function slugify(raw: string): string | null {
+  const s = raw
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '') // Café → Cafe
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) // 32, not the column's limit: leaves room for a "-2" suffix
+    .replace(/-+$/g, '');
+  return s.length >= 1 && !RESERVED_SLUGS.has(s) ? s : null;
+}
+
+/**
+ * Slug candidates for a new desk, best first.
+ *
+ * PM's own slug is preferred over its name so that a desk provisioned
+ * automatically is indistinguishable from one linked by hand, which matched on
+ * slug equality across the two products.
+ *
+ * The last entry cannot fail and is why this returns a non-empty list: a Mongo
+ * ObjectId tail is [0-9a-f]{8}, so `desk-a1b2c3d4` always satisfies the format
+ * CHECK, is never reserved and is never empty — the answer for an organisation
+ * whose name is entirely non-Latin.
+ */
+export function slugCandidates(pmSlug: string, pmName: string, pmWorkspaceId: string): string[] {
+  const bases = [slugify(pmSlug), slugify(pmName)].filter((s): s is string => s !== null);
+  const out: string[] = [];
+  for (const b of bases) if (!out.includes(b)) out.push(b);
+  // Suffixes only for the best base — a desk called "acme-2" is already an
+  // admission that "acme" was taken, and trying "acme-inc-2" as well adds noise
+  // without adding a meaningfully different name.
+  if (bases.length > 0) for (let n = 2; n <= 5; n++) out.push(`${bases[0]}-${n}`);
+  out.push(`desk-${pmWorkspaceId.slice(-8)}`);
+  return out;
+}
+
+/**
  * The subset of PM's /userinfo this service needs. Declared structurally rather
  * than imported from PmIdentityService so that auth does not depend on the PM
  * module — the dependency already runs the other way.
@@ -46,6 +104,8 @@ export interface PmSignInIdentity {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -101,31 +161,60 @@ export class AuthService {
       );
     }
 
-    // 2. WORKSPACE — of those, which have a desk connected? `status: active`
-    // deliberately: a suspended desk must not be reachable through a side door
-    // that the password login does not have.
-    const desks = await this.prisma.workspace.findMany({
-      where: { pmWorkspaceId: { in: administered.map((w) => w.id) }, status: 'active' },
-      select: { id: true, slug: true },
+    // 2. WORKSPACE — of those, which already have a desk?
+    //
+    // DELIBERATELY NO `status` FILTER IN THE QUERY. Filtering to active here
+    // would hide a suspended desk, the branch below would conclude "no desk
+    // exists" and try to create one, and the insert would hit
+    // workspaces_pm_workspace_id_key — a 23505 surfacing as a 500 on sign-in.
+    // Worse, it would be a way to route around a suspension. Suspension is
+    // enforced immediately after, on the fuller picture.
+    const linked = await this.prisma.workspace.findMany({
+      where: { pmWorkspaceId: { in: administered.map((w) => w.id) } },
+      select: { id: true, slug: true, status: true },
       orderBy: { slug: 'asc' },
     });
-    if (desks.length === 0) {
+    const desks = linked.filter((d) => d.status === 'active');
+
+    if (desks.length === 0 && linked.length > 0) {
       throw new UnauthorizedException(
-        `No Plumo CS desk is connected to ${administered.map((w) => w.name).join(', ')} yet.`,
+        'That workspace is not currently available. Contact your administrator.',
       );
     }
 
     // Honour the requested desk when there is one, but never silently redirect
     // to a different desk than the one asked for — that would show an admin a
     // neighbouring organisation's inbox and look like a bug in their favour.
-    const target = workspaceSlug ? desks.find((d) => d.slug === workspaceSlug) : desks[0];
-    if (!target) {
+    const matched = workspaceSlug ? desks.find((d) => d.slug === workspaceSlug) : desks[0];
+    if (!matched && workspaceSlug) {
       throw new UnauthorizedException('You do not administer that workspace in Plumo');
     }
 
-    // 3. ACCOUNT.
+    // 3. ACCOUNT — resolved here and not earlier on purpose. A refused sign-in
+    // must not leave a users row behind, or an unauthenticated endpoint becomes
+    // an account-creation primitive.
     const user = await this.resolvePmUser(info);
-    await this.ensureDeskMembership(user.id, target.id);
+
+    let target: { id: string; slug: string };
+    if (matched) {
+      await this.ensureDeskMembership(user.id, matched.id);
+      target = matched;
+    } else {
+      if (!this.config.get<boolean>('pm.autoProvisionDesks')) {
+        throw new UnauthorizedException(
+          `No Plumo CS desk is connected to ${administered.map((w) => w.name).join(', ')} yet.`,
+        );
+      }
+
+      // Sorted by name so the choice is deterministic rather than dependent on
+      // the order PM happened to return. Someone who administers several
+      // desk-less organisations gets a desk for one of them here; signing in
+      // again lands on that desk rather than provisioning the next, so the rest
+      // are created deliberately from Settings. That is the intended asymmetry —
+      // sign-in should open a desk, not spawn an estate of them.
+      const org = [...administered].sort((a, b) => a.name.localeCompare(b.name))[0];
+      target = await this.provisionDesk(org, user.id);
+    }
 
     // Re-resolved through the normal path rather than trusted from above, so a
     // desk-level suspension is enforced identically no matter how you signed in.
@@ -175,6 +264,151 @@ export class AuthService {
         pmUserId: info.sub,
       },
     });
+  }
+
+  /**
+   * Create a desk for a PM organisation that has none, and seat its owner.
+   *
+   * Tries slug candidates in order because `workspaces.slug` is unique and two
+   * unrelated PM organisations may both be called "Acme". The identity of a desk
+   * is `pm_workspace_id`, never the slug — the slug is only a label, and the
+   * last candidate is a deterministic `desk-<id tail>` that cannot collide with
+   * a human-chosen name and cannot fail the format CHECK.
+   */
+  private async provisionDesk(
+    org: { id: string; slug: string; name: string },
+    userId: string,
+  ): Promise<{ id: string; slug: string }> {
+    for (const slug of slugCandidates(org.slug, org.name, org.id)) {
+      try {
+        return await this.createDesk(slug, org, userId);
+      } catch (err) {
+        // Only a SLUG collision is retryable. A pm_workspace_id collision cannot
+        // reach here — it is absorbed by ON CONFLICT DO NOTHING below — so a
+        // duplicate key at this point means the name is taken by an unrelated
+        // desk and the next candidate is the correct response.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('23505') || msg.toLowerCase().includes('unique constraint')) continue;
+        throw err;
+      }
+    }
+    throw new ServiceUnavailableException('Could not create a workspace for your organisation. Please try again.');
+  }
+
+  /** One attempt at one slug. Everything or nothing. */
+  private async createDesk(
+    slug: string,
+    org: { id: string; name: string; slug: string },
+    userId: string,
+  ): Promise<{ id: string; slug: string }> {
+    return this.prisma.$transaction(async (tx) => {
+      // `workspaces` is the one table with NO row-level security — the Phase-3
+      // migration derives its list from "has a workspace_id column", and this
+      // table is keyed on `id`. So this insert needs no binding, and plumo_app
+      // holds an unfiltered INSERT on it. Everything after the bind does not.
+      //
+      // ON CONFLICT rather than read-then-write is what makes two browser tabs
+      // safe. The predicate is repeated in the inference clause because the index
+      // is PARTIAL and Postgres will not match it otherwise.
+      const created = (await tx.$queryRaw(Prisma.sql`
+        INSERT INTO workspaces (slug, name, pm_workspace_id)
+        VALUES (${slug}::citext, ${org.name}, ${org.id})
+        ON CONFLICT (pm_workspace_id) WHERE pm_workspace_id IS NOT NULL DO NOTHING
+        RETURNING id, slug
+      `)) as Array<{ id: string; slug: string }>;
+
+      // Lost the race: another request provisioned this organisation moments
+      // ago. Adopt theirs and seed nothing — their transaction already did, and
+      // duplicating the seed would give the desk two "Support" teams.
+      if (created.length === 0) {
+        const existing = (await tx.$queryRaw(Prisma.sql`
+          SELECT id, slug, status::text FROM workspaces WHERE pm_workspace_id = ${org.id}
+        `)) as Array<{ id: string; slug: string; status: string }>;
+        const row = existing[0];
+        if (!row) throw new ServiceUnavailableException('Could not create a workspace for your organisation.');
+        if (row.status !== 'active') {
+          throw new UnauthorizedException('That workspace is not currently available. Contact your administrator.');
+        }
+        await this.seatOn(tx, row.id, userId);
+        return { id: row.id, slug: row.slug };
+      }
+
+      const desk = created[0];
+
+      // The ticket-number sequence already exists: workspaces_number_sequence_trigger
+      // fired on the INSERT above. Nothing to do for it here.
+
+      // Everything below is workspace-scoped and under RLS, so bind first or the
+      // inserts are rejected. Each model defaults workspace_id to
+      // app_current_workspace(), which is why none of them pass it explicitly.
+      await tx.$executeRaw`SELECT app_set_workspace(${desk.id}::uuid)`;
+
+      // A desk with no team is not merely empty, it is broken on the second
+      // hire: routing leaves teamId null and TeamScopeService then refuses every
+      // lead and agent, while their inbox renders silently empty. The founding
+      // admin would never notice.
+      const team = await tx.team.create({
+        data: { name: 'Support', description: 'General support' },
+        select: { id: true },
+      });
+
+      // One policy per priority. A priority with no active policy yields a null
+      // due date, and everything downstream then fails as SILENCE — the breach
+      // sweep never matches, so no breach tags, no notifications, no webhooks,
+      // and a permanently empty "breaching" view that looks like good news.
+      //
+      // businessHoursId stays null: we do not know this organisation's timezone,
+      // and inventing one would make every clock subtly wrong.
+      await tx.slaPolicy.createMany({
+        data: [
+          { name: 'Standard', priority: 'low', firstResponseMins: 240, resolutionMins: 1440 },
+          { name: 'Standard', priority: 'normal', firstResponseMins: 240, resolutionMins: 1440 },
+          { name: 'Priority', priority: 'high', firstResponseMins: 60, resolutionMins: 480 },
+          { name: 'Urgent', priority: 'urgent', firstResponseMins: 15, resolutionMins: 240 },
+        ],
+      });
+
+      await this.seatOn(tx, desk.id, userId, team.id);
+
+      // Written after the bind because audit_log is itself workspace-scoped.
+      await tx.auditLog.create({
+        data: {
+          actorType: 'user',
+          actorId: userId,
+          entityType: 'workspace',
+          entityId: desk.id,
+          action: 'workspace.provisioned',
+          diffJson: { pmWorkspaceId: org.id, pmSlug: org.slug, slug: desk.slug, viaPmSignIn: true },
+        },
+      });
+
+      this.logger.log(`Provisioned desk "${desk.slug}" for PM workspace ${org.slug} (${org.id})`);
+      return { id: desk.id, slug: desk.slug };
+    });
+  }
+
+  /**
+   * Seat a user on a desk as admin, inside an already-bound transaction.
+   *
+   * `role` is passed explicitly because the column defaults to 'agent' — the
+   * person who brought this desk into existence must not land in it unable to
+   * configure it.
+   *
+   * With one member, round-robin assigns every ticket to them. That is correct
+   * for a one-person desk and should not be mistaken later for a routing bug.
+   */
+  private async seatOn(
+    tx: Pick<PrismaService, 'workspaceMembership'>,
+    workspaceId: string,
+    userId: string,
+    teamId?: string,
+  ) {
+    const existing = await tx.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { id: true },
+    });
+    if (existing) return;
+    await tx.workspaceMembership.create({ data: { workspaceId, userId, role: 'admin', teamId } });
   }
 
   /**

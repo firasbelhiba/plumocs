@@ -13,6 +13,10 @@ export const envValidationSchema = Joi.object({
   PM_ISSUER: Joi.string().uri().optional().allow(''),
   PM_REDIRECT_URI: Joi.string().uri().optional().allow(''),
   PM_CONSOLE_URL: Joi.string().uri().optional().allow(''),
+  // Declared so the kill switch cannot be silently misspelled into being
+  // ignored: 'PM_AUTO_PROVISION_DESK=false' would otherwise boot happily and
+  // keep provisioning. Only the exact string 'false' disables it.
+  PM_AUTO_PROVISION_DESKS: Joi.string().valid('true', 'false').optional(),
   JWT_ACCESS_SECRET: Joi.string().min(8).required(),
   JWT_REFRESH_SECRET: Joi.string().min(8).required(),
   JWT_ACCESS_TTL: Joi.string().default('15m'),
