@@ -137,3 +137,68 @@ jobs:
       # making every isolation test pass.
       - name: Integration tests
         run: npm run test:integration
+
+  # The container images.
+  #
+  # THESE HAVE NEVER BEEN BUILT. The Dockerfile and compose files were written
+  # for a cutover that was deferred, and an unbuilt Dockerfile is a guess: it
+  # drifts silently as the app changes and only fails on the day somebody needs
+  # it in a hurry. Docker is installed on neither the production host nor any
+  # development machine here, so CI is the only place this can be proven at all.
+  #
+  # Deliberately does NOT push anywhere. Its whole job is to answer "would this
+  # build if we needed it", every time the backend changes, for free.
+  image:
+    name: container images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The runtime image the api and worker would both run from.
+      - name: Build runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          target: runtime
+          tags: plumo-cs:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # A separate target because `prisma` is a devDependency: the runtime image
+      # is installed with --omit=dev and physically cannot run migrate deploy.
+      # If this target ever breaks, migrations silently become a manual host step
+      # again — which is the thing containerising was meant to remove.
+      - name: Build migrate image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          target: migrate
+          tags: plumo-cs-migrate:ci
+          load: true
+          cache-from: type=gha
+
+      # `docker build` succeeding proves the layers assemble, not that the thing
+      # inside is runnable. Both entrypoints are checked because the api and the
+      # worker share one image and differ only in which file they start — a build
+      # that produced main.js but not worker.js would look completely healthy
+      # until the worker container crash-looped in production.
+      - name: The artifacts the compose services actually start exist
+        run: |
+          docker run --rm --entrypoint node plumo-cs:ci -e "require('fs').accessSync('/app/dist/main.js')"
+          docker run --rm --entrypoint node plumo-cs:ci -e "require('fs').accessSync('/app/dist/worker.js')"
+
+      # Runs as `node`, never root. This container holds the schema-owner
+      # credential and is the most dangerous one in the stack.
+      - name: Images run unprivileged
+        run: |
+          test "$(docker run --rm --entrypoint id plumo-cs:ci -un)" = node
+          test "$(docker run --rm --entrypoint id plumo-cs-migrate:ci -un)" = node
+
+      # Proves the prisma CLI and the generated client both survived into the
+      # migrate image. It touches no database — `migrate deploy --help` exits 0
+      # without a connection, and a missing CLI exits non-zero.
+      - name: Migrate image can run prisma
+        run: docker run --rm plumo-cs-migrate:ci npx prisma migrate deploy --help
