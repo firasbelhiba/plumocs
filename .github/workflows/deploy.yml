@@ -16,9 +16,31 @@
 name: deploy
 
 on:
-  push:
-    branches: [main]
-    paths: ['backend/**', '.github/workflows/deploy.yml']
+  # THE PUSH TRIGGER IS DELIBERATELY DISABLED. Re-enable it by uncommenting,
+  # once the two defects below are fixed and a manual run has proven green.
+  #
+  # This workflow took production down on 2026-08-07. Two faults compounding:
+  #
+  #   1. `docker compose` interpolates ${MIGRATE_DATABASE_URL} from the SHELL,
+  #      not from env_file — env_file only passes variables INTO a container, it
+  #      does not define them for YAML substitution. So compose refused to parse
+  #      the file at all, and even `up api worker` failed although only the
+  #      migrate service references that variable.
+  #
+  #   2. deploy-container.sh stops the systemd units BEFORE proving the
+  #      containers can start. The pre-flight migrate check hit fault 1 too, but
+  #      its failure was swallowed by a `|| true` in the grep pipeline, so the
+  #      script sailed past it, disabled production, and only then discovered
+  #      compose was unusable. Nothing was left serving.
+  #
+  # Leaving this armed would mean the next backend push repeats it. A pipeline
+  # that can take the site down on a green test suite is worse than no pipeline,
+  # because it looks like a safety net.
+  #
+  # push:
+  #   branches: [main]
+  #   paths: ['backend/**', '.github/workflows/deploy.yml']
+
   # Ship a known-good commit by hand — rollbacks, and re-running a deploy whose
   # SSH step flaked without pushing an empty commit to trigger it.
   workflow_dispatch:
