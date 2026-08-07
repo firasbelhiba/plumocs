@@ -177,6 +177,7 @@ model User {
   notifications   Notification[]
   passwordResets  PasswordReset[]
   memberships     WorkspaceMembership[]
+  pmOAuthStates   PmOAuthState[]
 
   @@map("users")
 }
@@ -585,4 +586,44 @@ model IdentityAuditLog {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   @@map("identity_audit_log")
+}
+
+/// This CS deployment's OAuth client registration with a Plumo PM issuer.
+///
+/// Global, not per-workspace: it identifies this deployment to PM, not any one
+/// desk. Consulted before a workspace is known, so like `users` it carries no
+/// workspace_id and no RLS policy.
+model PmOAuthClient {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  issuer      String
+  redirectUri String   @map("redirect_uri")
+  clientId    String   @map("client_id")
+  scopes      String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@unique([issuer, redirectUri])
+  @@map("pm_oauth_clients")
+}
+
+/// An in-flight PKCE authorization.
+///
+/// The code_verifier is kept server-side deliberately — putting it in a cookie
+/// would hand the browser the one secret PKCE exists to keep out of it.
+model PmOAuthState {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state        String    @unique
+  codeVerifier String    @map("code_verifier")
+  /// Who began the flow. The link is applied to THIS user, so a stolen callback
+  /// cannot attach a PM identity to an account the caller does not control.
+  userId       String    @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId  String?   @map("workspace_id") @db.Uuid
+  returnTo     String?   @map("return_to")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz()
+  consumedAt   DateTime? @map("consumed_at") @db.Timestamptz()
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([expiresAt])
+  @@map("pm_oauth_states")
 }

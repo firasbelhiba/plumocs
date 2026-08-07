@@ -18,6 +18,17 @@ export default () => ({
     txTimeoutMs: parseInt(process.env.WORKSPACE_TX_TIMEOUT_MS ?? '15000', 10),
     txMaxWaitMs: parseInt(process.env.WORKSPACE_TX_MAX_WAIT_MS ?? '5000', 10),
   },
+  // Linking CS accounts and desks to Plumo PM ones. Unset on a deployment that
+  // does not offer it; the module reports itself unavailable rather than
+  // half-working.
+  pm: {
+    issuer: process.env.PM_ISSUER || undefined,
+    // Must be registered with PM and must point at THIS api, not the console:
+    // the code-for-token exchange happens server-side.
+    redirectUri: process.env.PM_REDIRECT_URI || undefined,
+    // Where to send the browser once the callback is done.
+    consoleUrl: process.env.PM_CONSOLE_URL || process.env.APP_URL || '',
+  },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET,
     refreshSecret: process.env.JWT_REFRESH_SECRET,

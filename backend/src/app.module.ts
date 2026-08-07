@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
+import { PmIdentityModule } from './pm-identity/pm-identity.module';
 import { WorkspaceModule } from './common/workspace/workspace.module';
 import { WorkspaceBindingInterceptor } from './common/workspace/workspace-binding.interceptor';
 import { QueueModule } from './queue/queue.module';
@@ -37,6 +38,7 @@ import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
+    PmIdentityModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
