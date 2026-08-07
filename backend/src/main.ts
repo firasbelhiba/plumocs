@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+import { resolveTrustedProxies } from './common/guards/principal-throttler.guard';
 
 // Postgres bigint columns (ticket numbers, audit ids) reach the serializer as
 // BigInt, which JSON.stringify throws on. Teach it a representation once here
@@ -16,9 +17,26 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 
 /** API bootstrap (HTTP + WS). The worker has its own entrypoint (worker.ts). */
 async function bootstrap() {
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
-    bufferLogs: true,
-  });
+  // Client addresses reach us through nginx, which sets X-Forwarded-For from
+  // $proxy_add_x_forwarded_for — that APPENDS the real peer to whatever the
+  // caller sent, so only the RIGHTMOST entry is ours and everything left of it
+  // is attacker input. Without trustProxy, Fastify ignored the header entirely
+  // and req.ip was always the proxy, which is why the throttler had grown its
+  // own header parsing and read the one entry an attacker fully controls.
+  //
+  // A trusted-address list rather than a hop COUNT: `trustProxy: 1` would trust
+  // whatever sits one hop away no matter who that is, so the same build exposed
+  // without nginx in front — no sanitiser anywhere — would take a client's own
+  // X-Forwarded-For at face value and every rate limit would be forgeable again.
+  // Given addresses, Fastify walks the chain from the right and stops at the
+  // first hop that is not a trusted proxy, so a direct connection resolves to
+  // the socket address and the headers are ignored. Safe either way.
+  const trustedProxies = resolveTrustedProxies();
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({ trustProxy: trustedProxies }),
+    { bufferLogs: true },
+  );
 
   app.useLogger(app.get(Logger));
   app.setGlobalPrefix('api/v1', { exclude: ['health', 'ready'] });
@@ -75,6 +93,10 @@ async function bootstrap() {
   const bindAddress = process.env.BIND_ADDRESS ?? '0.0.0.0';
   await app.listen(port, bindAddress);
   app.get(Logger).log(`API up on :${port} — docs at /api/docs`, 'Bootstrap');
+  // Worth a line at boot: if the proxy is not in this list its own address
+  // becomes every anonymous caller's rate-limit bucket, and the first symptom
+  // is agents getting 429s for traffic that was never theirs.
+  app.get(Logger).log(`Client IPs resolved behind: ${trustedProxies.join(', ')}`, 'Bootstrap');
 }
 
 bootstrap();

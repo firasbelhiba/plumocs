@@ -72,22 +72,21 @@ export class EmailInboundProcessor extends WorkerHost {
   }
 
   /**
-   * NOTE: this queue has no tenant routing yet, so every job here currently
-   * fails. That is pre-existing and deliberate, not a regression from stamping
-   * the realtime event.
+   * The tenant is decided BEFORE the job exists, not here.
    *
-   * `parseInboundEmail` enqueues unscoped (see the comment on it): an email
-   * arrives from the outside world and belongs to no desk until its recipient
-   * address has been mapped to one, and no such mapping exists. Until it does,
-   * requireWorkspace throws and the job lands in the dead-letter set.
+   * The inbound webhook resolves the recipient address against
+   * workspaces.inbound_email and stamps the workspace on the job
+   * (EmailService.routeInbound); a message that matches no desk is refused at the
+   * door and never reaches this queue. So requireWorkspace below is a backstop,
+   * not the routing: it catches jobs enqueued before that landed, and any future
+   * producer that forgets.
    *
-   * The alternative — inventing a tenant here — is the one thing that must not
-   * happen. Guessing the sole workspace worked while there was only one; there
-   * are two now, and the wrong guess files a stranger's email into another
-   * customer's desk and threads their reply into that desk's conversation.
-   * Failing is the correct behaviour until routing exists.
+   * Inventing a tenant here remains the one thing that must not happen. Guessing
+   * the sole workspace worked while there was only one; there are two, and the
+   * wrong guess files a stranger's email into another customer's desk and threads
+   * their reply into that desk's conversation.
    *
-   * The binding also has to wrap the whole body, not just processInbound: the
+   * The binding has to wrap the whole body, not just processInbound: the
    * findUnique below reads `tickets`, and unbound it returns null under RLS —
    * which would ship teamId/assigneeId as null and route the event to the
    * admin+lead room instead of the team that owns the ticket.

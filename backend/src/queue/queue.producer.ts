@@ -76,13 +76,26 @@ export class QueueProducer {
   }
 
   /**
-   * Unscoped deliberately: an inbound email arrives from the outside world and
-   * belongs to no workspace until it has been routed to one by its recipient
-   * address. Binding cannot happen here — it is the processor's job, and until
-   * that routing exists this queue is single-tenant.
+   * The workspace is passed in, not read from the connection.
+   *
+   * Every other producer here reads app_current_workspace() because it is called
+   * inside the request transaction that just wrote the row the job is about. The
+   * inbound webhook is @Public and therefore runs UNBOUND — safeAdd would stamp
+   * null over a perfectly good workspace id and every inbound job would fail the
+   * processor's requireWorkspace check. The caller has already resolved the desk
+   * from the recipient address (EmailService.routeInbound); this just carries it.
+   *
+   * Errors are NOT swallowed here, unlike safeAdd. That helper protects requests
+   * whose transaction has already committed — losing the job is then better than
+   * a 500 over work that is already done. Nothing has been written yet on this
+   * path: a swallowed enqueue failure silently destroys a customer's email, while
+   * letting it through means a 5xx and the mail provider retries.
    */
-  parseInboundEmail(data: { raw?: string; parsed?: Record<string, unknown> }) {
-    return this.safeAddUnscoped(this.emailInbound, 'parse', data);
+  async parseInboundEmail(
+    data: { raw?: string; parsed?: Record<string, unknown> },
+    workspaceId: string,
+  ) {
+    await this.emailInbound.add('parse', { ...data, workspaceId });
   }
 
   deliverWebhooks(event: string, payload: Record<string, unknown>) {

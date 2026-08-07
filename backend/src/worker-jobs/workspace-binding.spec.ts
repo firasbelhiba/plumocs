@@ -57,15 +57,17 @@ describe('worker jobs bind a workspace', () => {
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 
-  // Inbound email is the one queue with no routing yet — parseInboundEmail
-  // enqueues unscoped because an email belongs to no desk until its recipient
-  // address has been mapped to one, and nothing does that mapping. So this case
-  // pins the CURRENT, deliberate state: every inbound email fails.
+  // Inbound email now IS routed: the webhook matches the recipient against
+  // workspaces.inbound_email and stamps the desk on the job, so a normal message
+  // reaches this processor already bound and a message matching no desk is
+  // refused at the door instead of enqueued.
   //
-  // It is here to make the day routing arrives a deliberate one. Whoever adds it
-  // has to change this test, and changing it means reading why guessing the
-  // tenant is not an option: with two desks live, the wrong guess files a
-  // stranger's email into another customer's inbox.
+  // This case therefore no longer pins "every inbound email fails" — it pins the
+  // backstop. Jobs enqueued before routing landed carry no workspaceId, and so
+  // would anything a future producer forgets to stamp. Either way the answer
+  // must stay refusal: with two desks live, guessing the sole workspace files a
+  // stranger's email into another customer's inbox and threads their reply into
+  // that desk's conversation.
   it('refuses an inbound email that names no workspace, rather than guessing one', async () => {
     const email = { processInbound: jest.fn() };
     const workspaces = { runInWorkspace: jest.fn() };
