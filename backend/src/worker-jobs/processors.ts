@@ -1,15 +1,16 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Job } from 'bullmq';
-import { createHmac } from 'crypto';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { QUEUES, DEFAULT_JOB_OPTS } from '../queue/queue.constants';
-import { QueueProducer } from '../queue/queue.producer';
-import { EmailService } from '../email/email.service';
-import { RealtimeService } from '../realtime/realtime.service';
-import { EVENT_API_TO_DB, EVENT_DB_TO_API } from '../webhooks/webhooks.module';
+import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Job } from "bullmq";
+import { createHmac } from "crypto";
+import { Prisma } from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { WorkspaceContextService } from "../common/workspace/workspace-context.service";
+import { QUEUES, DEFAULT_JOB_OPTS } from "../queue/queue.constants";
+import { QueueProducer } from "../queue/queue.producer";
+import { EmailService } from "../email/email.service";
+import { RealtimeService } from "../realtime/realtime.service";
+import { EVENT_API_TO_DB, EVENT_DB_TO_API } from "../webhooks/webhooks.module";
 
 // ---- email.outbound ----------------------------------------------------------
 
@@ -46,9 +47,9 @@ export class EmailInboundProcessor extends WorkerHost {
         where: { id: ticketId },
         select: { teamId: true, assigneeId: true },
       });
-      this.realtime.publish('message.added', {
+      this.realtime.publish("message.added", {
         ticketId,
-        source: 'email',
+        source: "email",
         teamId: t?.teamId ?? null,
         assigneeId: t?.assigneeId ?? null,
       });
@@ -72,11 +73,18 @@ export class WebhookDeliverProcessor extends WorkerHost {
    * each; 'deliver' retries a single delivery row (self-scheduled backoff).
    */
   async process(job: Job) {
-    if (job.name === 'fanout') return this.fanout(job.data as { event: string; payload: Record<string, unknown> });
-    if (job.name === 'deliver') return this.deliver((job.data as { deliveryId: string }).deliveryId, job);
+    if (job.name === "fanout")
+      return this.fanout(
+        job.data as { event: string; payload: Record<string, unknown> },
+      );
+    if (job.name === "deliver")
+      return this.deliver((job.data as { deliveryId: string }).deliveryId, job);
   }
 
-  private async fanout(data: { event: string; payload: Record<string, unknown> }) {
+  private async fanout(data: {
+    event: string;
+    payload: Record<string, unknown>;
+  }) {
     const dbEvent = EVENT_API_TO_DB[data.event];
     if (!dbEvent) return;
     const hooks = await this.prisma.webhook.findMany({
@@ -84,7 +92,11 @@ export class WebhookDeliverProcessor extends WorkerHost {
     });
     for (const hook of hooks) {
       const delivery = await this.prisma.webhookDelivery.create({
-        data: { webhookId: hook.id, event: dbEvent as never, payloadJson: data.payload as object },
+        data: {
+          webhookId: hook.id,
+          event: dbEvent as never,
+          payloadJson: data.payload as object,
+        },
       });
       await this.deliverOnce(delivery.id);
     }
@@ -100,7 +112,7 @@ export class WebhookDeliverProcessor extends WorkerHost {
       where: { id: deliveryId },
       include: { webhook: true },
     });
-    if (!delivery || delivery.status === 'delivered') return;
+    if (!delivery || delivery.status === "delivered") return;
 
     const timestamp = Math.floor(Date.now() / 1000);
     const body = JSON.stringify({
@@ -110,14 +122,16 @@ export class WebhookDeliverProcessor extends WorkerHost {
       payload: delivery.payloadJson,
       timestamp,
     });
-    const signature = createHmac('sha256', delivery.webhook.secret).update(body).digest('hex');
+    const signature = createHmac("sha256", delivery.webhook.secret)
+      .update(body)
+      .digest("hex");
 
     try {
       const res = await fetch(delivery.webhook.url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'content-type': 'application/json',
-          'x-plumo-signature': `t=${timestamp},v1=${signature}`,
+          "content-type": "application/json",
+          "x-plumo-signature": `t=${timestamp},v1=${signature}`,
         },
         body,
         signal: AbortSignal.timeout(10_000),
@@ -125,7 +139,12 @@ export class WebhookDeliverProcessor extends WorkerHost {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await this.prisma.webhookDelivery.update({
         where: { id: deliveryId },
-        data: { status: 'delivered', attempts: { increment: 1 }, deliveredAt: new Date(), lastError: null },
+        data: {
+          status: "delivered",
+          attempts: { increment: 1 },
+          deliveredAt: new Date(),
+          lastError: null,
+        },
       });
     } catch (err) {
       const attempts = delivery.attempts + 1;
@@ -133,24 +152,27 @@ export class WebhookDeliverProcessor extends WorkerHost {
       await this.prisma.webhookDelivery.update({
         where: { id: deliveryId },
         data: {
-          status: failedForGood ? 'failed' : 'pending',
+          status: failedForGood ? "failed" : "pending",
           attempts,
           lastError: (err as Error).message,
         },
       });
       if (failedForGood) {
-        this.logger.warn(`Webhook delivery ${deliveryId} failed after ${attempts} attempts`);
+        this.logger.warn(
+          `Webhook delivery ${deliveryId} failed after ${attempts} attempts`,
+        );
       } else {
         // exponential backoff via a delayed re-enqueue of this one delivery.
         // Carry the root defaultJobOptions so retries are still reaped from
         // Redis; without them a flapping endpoint grows keys without bound.
         const delay = Math.min(2 ** attempts * 5_000, 3_600_000);
-        const { Queue } = await import('bullmq');
+        const { Queue } = await import("bullmq");
         const queue = new Queue(QUEUES.WEBHOOK_DELIVER, {
-          connection: (this.worker as never as { opts: { connection: object } }).opts.connection as never,
+          connection: (this.worker as never as { opts: { connection: object } })
+            .opts.connection as never,
           defaultJobOptions: DEFAULT_JOB_OPTS,
         });
-        await queue.add('deliver', { deliveryId }, { delay, attempts: 1 });
+        await queue.add("deliver", { deliveryId }, { delay, attempts: 1 });
         await queue.close();
       }
     }
@@ -167,6 +189,7 @@ export class SlaSweepProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly queue: QueueProducer,
     private readonly realtime: RealtimeService,
+    private readonly workspaces: WorkspaceContextService,
   ) {
     super();
   }
@@ -179,27 +202,41 @@ export class SlaSweepProcessor extends WorkerHost {
   private static readonly BATCH = 500;
 
   async process(_job: Job) {
+    // Bound per workspace, for the same reason as the export: an unbound query
+    // returns zero rows under RLS, so an unbound sweep finds no candidates and
+    // silently does nothing — no breach tags, no lead notifications, no error.
+    await this.workspaces.forEachWorkspace(() => this.sweepWorkspace());
+  }
+
+  private async sweepWorkspace() {
     const now = new Date();
     const soon = new Date(now.getTime() + 30 * 60_000);
 
     const candidates = await this.prisma.ticket.findMany({
       where: {
-        status: { in: ['new', 'open'] },
+        status: { in: ["new", "open"] },
         slaPausedAt: null,
         firstRespondedAt: null,
         firstResponseDueAt: { lte: soon },
       },
       select: {
-        id: true, number: true, subject: true, assigneeId: true, teamId: true,
-        firstResponseDueAt: true, tags: true,
+        id: true,
+        number: true,
+        subject: true,
+        assigneeId: true,
+        teamId: true,
+        firstResponseDueAt: true,
+        tags: true,
       } as const,
-      orderBy: { firstResponseDueAt: 'asc' }, // most overdue first
+      orderBy: { firstResponseDueAt: "asc" }, // most overdue first
       take: SlaSweepProcessor.BATCH,
     });
     if (candidates.length === 0) return;
 
     // One query for every team's leads instead of one per ticket (was an N+1).
-    const teamIds = [...new Set(candidates.map((t) => t.teamId).filter(Boolean))] as string[];
+    const teamIds = [
+      ...new Set(candidates.map((t) => t.teamId).filter(Boolean)),
+    ] as string[];
     const leadsByTeam = new Map<string, string[]>();
     if (teamIds.length) {
       // Memberships, not users — role and team both live there now.
@@ -213,7 +250,12 @@ export class SlaSweepProcessor extends WorkerHost {
       // `user: { isActive: true }` as well as the membership's own flag: a
       // disabled account should not be paged by any desk.
       const leads = await this.prisma.workspaceMembership.findMany({
-        where: { teamId: { in: teamIds }, role: 'lead', isActive: true, user: { isActive: true } },
+        where: {
+          teamId: { in: teamIds },
+          role: "lead",
+          isActive: true,
+          user: { isActive: true },
+        },
         select: { userId: true, teamId: true },
       });
       for (const l of leads) {
@@ -226,7 +268,7 @@ export class SlaSweepProcessor extends WorkerHost {
 
     for (const t of candidates) {
       const breached = t.firstResponseDueAt! <= now;
-      const marker = breached ? 'sla:breached' : 'sla:due-soon';
+      const marker = breached ? "sla:breached" : "sla:due-soon";
       if (t.tags.includes(marker)) continue; // cheap pre-filter; SQL below is authoritative
 
       // Raw SQL on purpose, for two reasons:
@@ -248,10 +290,11 @@ export class SlaSweepProcessor extends WorkerHost {
       // notify the assignee and their team lead
       const notifyIds = new Set<string>();
       if (t.assigneeId) notifyIds.add(t.assigneeId);
-      if (t.teamId) (leadsByTeam.get(t.teamId) ?? []).forEach((id) => notifyIds.add(id));
+      if (t.teamId)
+        (leadsByTeam.get(t.teamId) ?? []).forEach((id) => notifyIds.add(id));
       if (notifyIds.size) {
         this.queue.notify({
-          kind: breached ? 'sla_breach' : 'sla_warning',
+          kind: breached ? "sla_breach" : "sla_warning",
           userIds: [...notifyIds],
           text: breached
             ? `#${t.number} first response is overdue`
@@ -261,21 +304,22 @@ export class SlaSweepProcessor extends WorkerHost {
         });
       }
       if (breached) {
-        this.queue.deliverWebhooks('sla.breached', {
+        this.queue.deliverWebhooks("sla.breached", {
           ticketId: t.id,
           number: Number(t.number),
           subject: t.subject,
           firstResponseDueAt: t.firstResponseDueAt,
         });
       }
-      this.realtime.publish('sla.warning', {
+      this.realtime.publish("sla.warning", {
         ticketId: t.id,
         breached,
         teamId: t.teamId,
         assigneeId: t.assigneeId,
       });
     }
-    if (candidates.length) this.logger.log(`SLA sweep touched ${candidates.length} ticket(s)`);
+    if (candidates.length)
+      this.logger.log(`SLA sweep touched ${candidates.length} ticket(s)`);
   }
 }
 
@@ -289,7 +333,9 @@ export class SearchIndexProcessor extends WorkerHost {
 
   async process(job: Job<{ ticketId: string }>) {
     try {
-      await this.prisma.$executeRaw(Prisma.sql`SELECT refresh_ticket_tsv(${job.data.ticketId}::uuid)`);
+      await this.prisma.$executeRaw(
+        Prisma.sql`SELECT refresh_ticket_tsv(${job.data.ticketId}::uuid)`,
+      );
     } catch {
       // search_tsv extras not installed — harmless in dev
     }
@@ -308,25 +354,56 @@ export class NotificationsFanoutProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<{ kind: string; userIds: string[]; text: string; ticketId?: string; email?: boolean }>) {
+  async process(
+    job: Job<{
+      kind: string;
+      userIds: string[];
+      text: string;
+      ticketId?: string;
+      email?: boolean;
+    }>,
+  ) {
     const { kind, userIds, text, ticketId, email } = job.data;
 
-    if (kind === 'password_reset') {
+    if (kind === "password_reset") {
       // no in-app row; just the email (text carries the link)
-      const users = await this.prisma.user.findMany({ where: { id: { in: userIds } } });
-      for (const u of users) await this.email.sendNotification(u.email, 'reset your plumo password', text);
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+      });
+      for (const u of users)
+        await this.email.sendNotification(
+          u.email,
+          "reset your plumo password",
+          text,
+        );
       return;
     }
 
     await this.prisma.notification.createMany({
-      data: userIds.map((userId) => ({ userId, kind, text, ticketId: ticketId ?? null })),
+      data: userIds.map((userId) => ({
+        userId,
+        kind,
+        text,
+        ticketId: ticketId ?? null,
+      })),
     });
-    this.realtime.publish('notification.created', { userIds, kind, text, ticketId: ticketId ?? null });
+    this.realtime.publish("notification.created", {
+      userIds,
+      kind,
+      text,
+      ticketId: ticketId ?? null,
+    });
 
     if (email) {
-      const users = await this.prisma.user.findMany({ where: { id: { in: userIds }, isActive: true } });
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: userIds }, isActive: true },
+      });
       for (const u of users) {
-        await this.email.sendNotification(u.email, `plumo — ${kind.replace('_', ' ')}`, text);
+        await this.email.sendNotification(
+          u.email,
+          `plumo — ${kind.replace("_", " ")}`,
+          text,
+        );
       }
     }
   }
@@ -341,6 +418,7 @@ export class ExportDailyProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly workspaces: WorkspaceContextService,
   ) {
     super();
   }
@@ -358,43 +436,54 @@ export class ExportDailyProcessor extends WorkerHost {
    * to the log in dev — swap `emit` for the partner call in production.
    */
   async process(_job: Job) {
-    // One export run per workspace.
+    // ONE BOUND TRANSACTION PER WORKSPACE.
     //
-    // The watermark is per-workspace now (export_states is keyed on
-    // (workspace_id, id)), and it has to be: a single shared watermark would
-    // let a busy desk drag every other desk's cursor past rows they had never
-    // exported, silently skipping them for good.
+    // The previous version enumerated workspaces correctly and then queried
+    // without binding one — so every query ran on an unbound connection, RLS
+    // filtered it to zero rows, and the job logged "nothing new since
+    // watermark" every night while exporting nothing. It never errored; a
+    // fail-closed policy produces silence, not a stack trace.
     //
-    // app_active_workspaces() is the supported enumeration for unattended work
-    // — a SECURITY DEFINER function, because the worker has no request and
-    // therefore no bound workspace, and once RLS is on a plain SELECT from
-    // here returns nothing.
-    const rows = await this.prisma.$queryRaw<{ app_active_workspaces: string }[]>`
-      SELECT app_active_workspaces()`;
-    const workspaceIds = rows.map((r) => r.app_active_workspaces);
-    for (const workspaceId of workspaceIds) {
-      await this.exportWorkspace(workspaceId);
-    }
+    // forEachWorkspace opens a transaction, calls app_set_workspace, and runs
+    // the body inside it — sequentially, so a nightly sweep cannot starve the
+    // API of connections, and isolating failures so one desk cannot skip the
+    // rest.
+    await this.workspaces.forEachWorkspace(
+      (workspaceId) => this.exportWorkspace(workspaceId),
+      (workspaceId, err) =>
+        this.logger.error(
+          `Export failed for workspace ${workspaceId}: ${(err as Error).message}`,
+        ),
+    );
   }
 
   private async exportWorkspace(workspaceId: string) {
     const state = await this.prisma.exportState.findUnique({
-      where: { workspaceId_id: { workspaceId, id: 'daily' } },
+      where: { workspaceId_id: { workspaceId, id: "daily" } },
     });
     const since = state?.watermark ?? new Date(0);
 
     const tickets = await this.prisma.ticket.findMany({
       where: { workspaceId, updatedAt: { gte: since } },
       select: {
-        id: true, number: true, subject: true, status: true, priority: true,
-        channel: true, outcome: true, createdAt: true, updatedAt: true,
-        resolvedAt: true, firstRespondedAt: true, tags: true,
+        id: true,
+        number: true,
+        subject: true,
+        status: true,
+        priority: true,
+        channel: true,
+        outcome: true,
+        createdAt: true,
+        updatedAt: true,
+        resolvedAt: true,
+        firstRespondedAt: true,
+        tags: true,
       },
-      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
       take: 5_000,
     });
     if (tickets.length === 0) {
-      this.logger.log('Export: nothing new since watermark');
+      this.logger.log("Export: nothing new since watermark");
       return;
     }
 
@@ -402,9 +491,18 @@ export class ExportDailyProcessor extends WorkerHost {
     this.emit(tickets);
 
     await this.prisma.exportState.upsert({
-      where: { workspaceId_id: { workspaceId, id: 'daily' } },
-      create: { workspaceId, id: 'daily', watermark: newWatermark, lastCount: tickets.length },
-      update: { watermark: newWatermark, lastCount: tickets.length, lastRunAt: new Date() },
+      where: { workspaceId_id: { workspaceId, id: "daily" } },
+      create: {
+        workspaceId,
+        id: "daily",
+        watermark: newWatermark,
+        lastCount: tickets.length,
+      },
+      update: {
+        watermark: newWatermark,
+        lastCount: tickets.length,
+        lastRunAt: new Date(),
+      },
     });
     this.logger.log(
       `Exported ${tickets.length} ticket(s); watermark → ${newWatermark.toISOString()}`,
