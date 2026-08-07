@@ -146,14 +146,37 @@ describe('transaction routing', () => {
     expect(await prisma.user.findUnique({ where: { id: user.id } })).not.toBeNull();
   });
 
-  it('a tenant write outside a transaction fails closed rather than landing nowhere', async () => {
-    // The other half of the bargain the tenancy migration struck: workspace_id
-    // defaults to app_current_workspace(), which is NULL when nothing is bound,
-    // so a forgotten binding refuses the write instead of filing it under an
-    // arbitrary desk. Asserted here because this is the file that owns the
-    // question "what happens off the transaction".
+  it('a tenant write outside a transaction is refused rather than filed under an arbitrary desk', async () => {
+    // The other half of the bargain the tenancy migration struck: a write with
+    // no workspace bound must be REFUSED. Not defaulted, not silently attributed
+    // to whichever desk happened to be bound last on this pooled connection —
+    // refused. Asserted here because this is the file that owns the question
+    // "what happens off the transaction".
+    //
+    // TWO SHAPES ARE CORRECT, and which one you get depends only on the order
+    // Postgres evaluates things in:
+    //
+    //   23502 — workspace_id defaults to app_current_workspace(), which is NULL
+    //           unbound, so the column's NOT NULL rejects the row.
+    //   42501 — the RLS WITH CHECK `workspace_id = app_current_workspace()` is
+    //           NULL rather than true unbound, so the policy rejects the row
+    //           BEFORE the default is ever evaluated.
+    //
+    // Since Phase 3 it is the second one. Both are the same outcome — nothing is
+    // written and the caller is told — so the assertion accepts either, and
+    // accepts ONLY those two: a bare "it throws" would also pass on a unique
+    // violation, a syntax error, or a dropped connection, none of which say
+    // anything about tenancy.
+    const FAILS_CLOSED =
+      /(null constraint|null value in column)[\s\S]*workspace_id|violates row-level security policy/i;
+
     await expect(prisma.team.create({ data: { name: `${TAG}-unbound` } })).rejects.toThrow(
-      /null constraint|workspace/i,
+      FAILS_CLOSED,
     );
+    // No "and the row is gone" check follows, unlike every other test here: a
+    // leaked row would carry workspace_id NULL or some other desk's id, so a
+    // read bound to THIS workspace could not see it either way and would pass
+    // for the leak just as happily. The refusal is the whole assertion, which is
+    // why it has to name the two shapes a refusal can take.
   });
 });

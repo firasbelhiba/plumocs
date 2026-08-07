@@ -82,17 +82,37 @@ describe('cursor pagination (integration)', () => {
     // Unbound deliberately: EXPLAIN without ANALYZE does not execute the query,
     // and pg_indexes is a catalog view no policy touches. Binding here would
     // suggest the assertion depends on tenant state, and it does not.
+    // The zero uuid is a literal, not a binding: it only has to make the
+    // explained statement the same SHAPE as the one the service issues now that
+    // every ticket read is tenant-filtered.
     const plan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': string }>>(
-      Prisma.sql`EXPLAIN SELECT id FROM tickets ORDER BY updated_at DESC, id DESC LIMIT 25`,
+      Prisma.sql`EXPLAIN SELECT id FROM tickets
+                 WHERE workspace_id = '00000000-0000-0000-0000-000000000000'::uuid
+                 ORDER BY updated_at DESC, id DESC LIMIT 25`,
     );
     const text = plan.map((r) => r['QUERY PLAN']).join('\n');
     // Postgres may still choose a seq scan on a tiny table; assert the index
     // exists rather than that the planner picked it at this size.
-    const idx = await prisma.$queryRaw<Array<{ indexname: string }>>(
-      Prisma.sql`SELECT indexname FROM pg_indexes
-                 WHERE tablename = 'tickets' AND indexname = 'tickets_updated_at_id_idx'`,
+    //
+    // WHY NOT `tickets_updated_at_id_idx`. That was the original name
+    // (20260801141609) and it is gone on purpose: the tenancy migration dropped
+    // it and created this one instead (20260802000000_workspace_tenancy:1093-1095),
+    // prefixed with workspace_id. Now that every query carries a tenant
+    // predicate, an index that does not lead with workspace_id cannot serve the
+    // keyset walk — the planner would have to filter after sorting the whole
+    // table. Asserting the old name here would demand an index whose absence is
+    // the correct state.
+    const idx = await prisma.$queryRaw<Array<{ indexname: string; indexdef: string }>>(
+      Prisma.sql`SELECT indexname, indexdef FROM pg_indexes
+                 WHERE tablename = 'tickets'
+                   AND indexname = 'tickets_workspace_id_updated_at_id_idx'`,
     );
     expect({ indexExists: idx.length, planned: typeof text }).toEqual({ indexExists: 1, planned: 'string' });
+    // The name alone proves nothing — an index recreated as
+    // (updated_at, id, workspace_id) would keep it and serve neither the tenant
+    // predicate nor the tiebreaker. The column ORDER is the assertion, both DESC
+    // directions included, because that is what the walk above depends on.
+    expect(idx[0].indexdef).toMatch(/\(workspace_id,\s*updated_at DESC,\s*id DESC\)/);
   });
 
   it('a stale cursor yields an empty page rather than restarting from the top', async () => {

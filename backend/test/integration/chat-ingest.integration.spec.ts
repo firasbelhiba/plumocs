@@ -3,6 +3,7 @@ import { CustomersService } from '../../src/customers/customers.module';
 import { TicketsService } from '../../src/tickets/tickets.service';
 import { SlaService } from '../../src/sla/sla.service';
 import { TeamScopeService } from '../../src/common/guards/team-scope.service';
+import { CURSOR_SAFETY_LAG_MS } from '../../src/chat/updates-cursor';
 import { prisma, seedFixture, cleanup, inWorkspace, TAG, type Fixture } from './harness';
 import type { Principal } from '../../src/common/decorators';
 
@@ -258,7 +259,7 @@ describe('chatbot ingest', () => {
       expect(res.updates.find((u) => u.body === 'agent says hi')?.sessionRef).toBe(ref);
     });
 
-    it('delivers a fresh reply but holds the cursor behind the present', async () => {
+    it('delivers a fresh reply and still re-delivers it on the next poll', async () => {
       const ref = `${TAG}-watermark`;
       const { ticketId } = await open(ref);
       const t0 = new Date();
@@ -271,14 +272,62 @@ describe('chatbot ingest', () => {
 
       // Delivered immediately — the safety margin must not add latency.
       expect(res.updates.map((u) => u.body)).toContain('just now');
-      // ...but the cursor stays behind, so a transaction that started before
-      // this poll and commits after it is still inside the next window. This
-      // is the invariant that stops an agent reply vanishing for good.
-      expect(new Date(res.cursor).getTime()).toBeLessThan(Date.now() - 1_000);
-      // The row is therefore re-delivered next poll. That is intended: the
-      // contract mandates dedupe on messageId.
+
+      // WHAT THE CURSOR ACTUALLY GUARANTEES (see src/chat/updates-cursor.ts):
+      //
+      //   cursor = max(since, min(lastRow, now - CURSOR_SAFETY_LAG_MS))
+      //
+      // Two bounds, and this test used to assert only half of one of them —
+      // "the cursor is at least a second behind now" — which is not a property
+      // the function has. `since` here is a poll from a moment ago, so the FLOOR
+      // wins: max() holds the cursor at `since`, roughly at the present, and it
+      // is supposed to. The floor is what stops the cursor moving BACKWARDS,
+      // which would walk a fast poller into re-reading an ever-growing window —
+      // the whole history, every poll. The watermark clamp is asserted below,
+      // where `since` is old enough for it to bite.
+      const cursor = new Date(res.cursor).getTime();
+      const watermark = Date.now() - CURSOR_SAFETY_LAG_MS;
+      expect(cursor).toBeGreaterThanOrEqual(t0.getTime());
+      expect(cursor).toBeLessThanOrEqual(Math.max(t0.getTime(), watermark));
+
+      // The invariant this test exists for, and it holds either way: a row this
+      // poll just saw is still inside the next window, so a transaction that
+      // stamped before the poll and commits after it cannot fall through the
+      // gap. Re-delivery is intended — the contract mandates dedupe on
+      // messageId, and a duplicate is free where a loss is unrecoverable.
       const again = await request(() => chat.updates({ since: res.cursor } as never, botA));
       expect(again.updates.map((u) => u.body)).toContain('just now');
+    });
+
+    it('holds the cursor behind the present once since is older than the safety lag', async () => {
+      // The other half: with `since` well behind the watermark the floor is
+      // irrelevant and the clamp is the only thing deciding where the cursor
+      // lands. Without this case "never exceeds the watermark" is never actually
+      // exercised by an integration test — a function that ignored the clamp
+      // entirely and returned `lastRow` would still pass the test above.
+      const ref = `${TAG}-watermark-lag`;
+      const { ticketId } = await open(ref);
+      const since = new Date(Date.now() - 3600_000);
+      await request(() =>
+        prisma.ticketMessage.create({
+          data: { ticketId, authorType: 'agent', body: 'moments ago', isInternalNote: false, channel: 'chatbot' },
+        }));
+
+      const res = await request(() => chat.updates({ since: since.toISOString() } as never, botA));
+      expect(res.updates.map((u) => u.body)).toContain('moments ago');
+
+      const cursor = new Date(res.cursor).getTime();
+      // Strictly behind the present by the full lag, even though the newest row
+      // is newer than that: the cursor follows the watermark, not the page.
+      expect(cursor).toBeLessThanOrEqual(Date.now() - CURSOR_SAFETY_LAG_MS);
+      // ...and it still advanced. A clamp that simply never moved would satisfy
+      // the line above and stall the feed forever.
+      expect(cursor).toBeGreaterThan(since.getTime());
+      // The just-written row is newer than the watermark, so it is inside the
+      // next window too — the same no-loss property, arrived at by the clamp
+      // rather than by the floor.
+      const again = await request(() => chat.updates({ since: res.cursor } as never, botA));
+      expect(again.updates.map((u) => u.body)).toContain('moments ago');
     });
 
     it('never reports hasMore when the cursor did not move', async () => {

@@ -80,13 +80,52 @@ describe('database role separation', () => {
     }
   });
 
+  /**
+   * Tables that carry a workspace_id and are deliberately NOT under the
+   * workspace_isolation policy. Exactly one, and it has to be argued for.
+   *
+   * pm_oauth_states — the in-flight half of the "sign in with Plumo" handshake:
+   * one row per authorization attempt, holding a PKCE code_verifier, addressed
+   * by `state` (32 random bytes, UNIQUE, consumed on use) and deleted after a
+   * ten-minute expiry. Its workspace_id is live, not vestigial — written by
+   * pm-identity.service.ts and read back by the link flow in
+   * pm-identity.module.ts to decide which desk to map — but it is a routing hint
+   * for a handshake, not tenant data, and it is nullable by design: a SIGN-IN
+   * starts at the login screen where no workspace is known yet, so it passes
+   * null.
+   *
+   * The standard predicate CANNOT be applied here. `workspace_id =
+   * app_current_workspace()` is NULL, not true, for a NULL workspace_id, and the
+   * OAuth callback necessarily runs unbound — there is no session yet, that is
+   * what the handshake is for. Enabling RLS would not tighten anything; it would
+   * refuse every PM sign-in.
+   *
+   * (Mechanically it was missed because the tenancy migration derives its table
+   * list at run time from "has a workspace_id column", and this table was
+   * created a day after that migration ran. The derivation is right; this table
+   * is the exception to it.)
+   *
+   * What protects a row here is not tenancy: it is the unguessable single-use
+   * secret, the expiry, and consumed_at. Adding this table to the list below is
+   * a decision somebody has to make in a diff — which is the point.
+   *
+   * Keep sorted; the assertion below compares it against a catalogue query
+   * ordered by table name.
+   */
+  const RLS_EXEMPT_TABLES = ['pm_oauth_states'];
+
   it('every table carrying workspace_id has row-level security ON and a policy', async () => {
     // Two failures, one query. `relrowsecurity` false means the policy is there
     // and inert; a missing policy on an RLS-enabled table means the table is
     // unreadable rather than unprotected. Both are silent until a customer
     // notices, and a new tenant table arriving without either is the likeliest
     // way this regresses — nothing in the application would change.
-    const gaps = await prisma.$queryRaw<{ table: string; rlsEnabled: boolean; policies: bigint }[]>`
+    //
+    // The invariant is "every table holding TENANT DATA is isolated", which is
+    // not quite the same as "every table with a workspace_id column" — see
+    // RLS_EXEMPT_TABLES. Stating it precisely is the fix; the alternative was to
+    // relax it to something that no longer catches the regression it exists for.
+    const unprotected = await prisma.$queryRaw<{ table: string; rlsEnabled: boolean; policies: bigint }[]>`
       SELECT c.relname::text AS "table",
              c.relrowsecurity AS "rlsEnabled",
              (SELECT count(*) FROM pg_policy p
@@ -103,7 +142,30 @@ describe('database role separation', () => {
                WHERE p.polrelid = c.oid AND p.polname = 'workspace_isolation'))
       ORDER BY c.relname
     `;
+    // The exemptions are subtracted in TypeScript rather than in the WHERE
+    // clause on purpose: the query stays the plain catalogue question, and the
+    // full row — table, rlsEnabled, policies — is still in hand for the second
+    // assertion when this fails.
+    const gaps = unprotected.filter((g) => !RLS_EXEMPT_TABLES.includes(g.table));
     expect(gaps).toEqual([]);
+
+    // THE EXEMPTION LIST MUST NOT GROW SILENTLY. The line above passes for a
+    // list of any length; this one pins the list to exactly what has been argued
+    // for, in both directions:
+    //
+    //   - a new tenant table shipped without a policy lands in `unprotected`,
+    //     fails the line above, and cannot be waved through by editing one
+    //     array — the literal here has to change too, in the same diff, where a
+    //     reviewer sees it next to the reasoning;
+    //   - an exemption that has stopped being true — the table got a policy, or
+    //     was dropped — falls out of `unprotected` and fails here, so a stale
+    //     entry cannot sit around waiting to cover some future table that
+    //     happens to take the name.
+    //
+    // A skipped test would have been the cheap way out of pm_oauth_states. This
+    // is the expensive way, and it is the one that still fails on the next gap.
+    expect(unprotected.map((g) => g.table)).toEqual(RLS_EXEMPT_TABLES);
+    expect(RLS_EXEMPT_TABLES).toEqual(['pm_oauth_states']);
 
     // ...and there are tenant tables at all. Without this the assertion above is
     // satisfied by a database where the tenancy migration never ran.
