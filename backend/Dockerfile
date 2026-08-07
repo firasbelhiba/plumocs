@@ -56,6 +56,24 @@ WORKDIR /app
 # failing — the one moment with the least appetite for a surprise.
 ENV HOME=/home/node
 
+# Two things Prisma needs that alpine does not give it, both found by running
+# this image rather than by reading it:
+#
+#   openssl — the engines are dynamically linked against libssl. Without it the
+#   CLI warns "failed to detect the libssl/openssl version, defaulting to
+#   openssl-1.1.x" and loads an engine that may not match the image at all.
+#
+#   ownership — the engines directory is written to at startup, and every layer
+#   in `build` ran as root, so /app/node_modules/@prisma is root-owned while this
+#   stage runs as uid 1000. The exact failure was
+#   "Can't write to /app/node_modules/@prisma/engines".
+#
+# Scoped to @prisma and .prisma rather than chown -R /app: recursively chowning
+# the whole dependency tree copies several hundred megabytes into a new layer for
+# no benefit.
+RUN apk add --no-cache openssl \
+ && chown -R node:node /app/node_modules/@prisma /app/node_modules/.prisma
+
 # Non-root here too. This container holds the schema-owner credential, so it is
 # the most dangerous one in the stack — root inside it was the weakest link.
 USER node
@@ -76,7 +94,14 @@ ENV NODE_ENV=production
 
 # tini gives a real PID 1, so SIGTERM reaches node and in-flight requests drain
 # instead of the container being SIGKILLed when the stop grace period expires.
-RUN apk add --no-cache tini
+#
+# openssl is NOT optional and is not about the CLI. The Prisma QUERY ENGINE this
+# image loads on the first database call is dynamically linked against libssl,
+# and alpine ships without it — the same missing package that made the migrate
+# stage warn "failed to detect the libssl/openssl version". Absent here, the API
+# builds, starts, passes a health check that touches no database, and then fails
+# on the first real query. That is a cutover discovering it in production.
+RUN apk add --no-cache tini openssl
 
 COPY --from=deps  /app/node_modules ./node_modules
 # The generated Prisma client lives in node_modules/.prisma and is NOT produced
