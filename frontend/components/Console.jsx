@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { adapter } from '@/lib/api/adapter';
+import * as api from '@/lib/api/endpoints';
 import Login from './screens/Login';
 import Header from './screens/Header';
 import Sidebar from './screens/Sidebar';
@@ -187,12 +188,24 @@ export default class Console extends React.Component {
   // Whether to offer plumo on the login screen at all. Unauthenticated, so it
   // cannot use /auth/pm/status.
   loadPmSignInAvailability = async () => {
-    try { await api.pm.signinUrl(); this.setState({ pmSignInAvailable: true }); }
-    catch { /* not configured, or unreachable — leave the button hidden */ }
+    try {
+      await api.pm.signinUrl();
+      this.setState({ pmSignInAvailable: true });
+    } catch (e) {
+      // Hidden is the right outcome when plumo is not configured — but say why.
+      // A bare `catch {}` here swallowed a ReferenceError for a missing import
+      // and the button was silently absent in production with nothing to show
+      // for it: no failed request, no console error, nothing to search for.
+      console.warn('[pm] sign-in unavailable:', e?.message || e);
+    }
   };
 
   loadPmStatus = async () => {
-    try { this.setState({ pm: await api.pm.status() }); } catch { /* panel stays hidden */ }
+    try {
+      this.setState({ pm: await api.pm.status() });
+    } catch (e) {
+      console.warn('[pm] status unavailable:', e?.message || e);
+    }
   };
 
   setDrill = (e) => this.setState({ drill: e.currentTarget.dataset.k });
