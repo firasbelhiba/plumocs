@@ -206,12 +206,13 @@ export class PmIdentityController {
     try {
       const result = await this.pm.completeAuthorization({ code, state });
 
-      // SIGN-IN: the flow began with nobody logged in, so resolve the CS user
-      // from the PM subject. loginWithPm refuses unless that identity is
-      // already linked — it never creates an account and never matches on
-      // email, because "has a Plumo account" must not mean "works this desk".
+      // SIGN-IN: the flow began with nobody logged in, so the CS user is
+      // resolved from the PM identity. The WHOLE userinfo is handed over, not
+      // just `sub`: loginWithPm decides access from the caller's role in each
+      // PM workspace, so it needs the workspace list. Owners and admins get in
+      // and are provisioned on first sign-in; members and viewers do not.
       if (!result.userId) {
-        const session = await this.auth.loginWithPm(result.userInfo.sub);
+        const session = await this.auth.loginWithPm(result.userInfo);
         // The tokens go through the URL fragment, not the query string:
         // fragments are not sent to servers and stay out of access logs,
         // Referer headers and browser history entries the way a query does.

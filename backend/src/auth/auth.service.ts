@@ -17,6 +17,33 @@ function ttlToMs(ttl: string): number {
   return n * { s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'];
 }
 
+/**
+ * The PM roles that carry a support desk.
+ *
+ * Taken from PM's own role catalog (workspace-role-catalog.contract.ts), where
+ * P0 "owner" and P1 "admin" are BOTH defined as `allPermissions(true, true)`.
+ * They run the workspace, so they run its desk. P2 "member" and P3 "viewer"
+ * hold only `scopedPermissions(...)` and must not reach a desk this way.
+ *
+ * An explicit allow-list rather than PM's `canWrite` flag: canWrite means "can
+ * edit something in this workspace", and a member who can move a task has no
+ * business reading every customer conversation the organisation has ever had.
+ * If PM adds a role, the safe default is that it lands OUTSIDE this set.
+ */
+const PM_DESK_ADMIN_ROLES: ReadonlySet<string> = new Set(['P0', 'P1']);
+
+/**
+ * The subset of PM's /userinfo this service needs. Declared structurally rather
+ * than imported from PmIdentityService so that auth does not depend on the PM
+ * module — the dependency already runs the other way.
+ */
+export interface PmSignInIdentity {
+  sub: string;
+  email: string;
+  name: string;
+  workspaces: Array<{ id: string; slug: string; name: string; roleId: string }>;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -53,26 +80,131 @@ export class AuthService {
   /**
    * Sign in with a Plumo PM identity.
    *
-   * ONLY resolves an ALREADY-LINKED account. It never creates a CS user and
-   * never matches on email — both would turn "has a Plumo account" into "works
-   * on this support desk", and PM workspaces contain read-only members who do
-   * not. Someone must be invited to CS and link once from Settings; after that
-   * this is a one-click sign-in.
+   * ACCESS IS DECIDED BY THE PM ROLE, not by a pre-existing CS invite. Whoever
+   * owns or administers a Plumo workspace owns its support desk, so they can
+   * sign in and manage it without anybody provisioning them first. That is the
+   * whole point of a shared identity: PM already knows who runs this org.
    *
-   * Matching on email instead of `sub` would be worse than lax: PM emails are
-   * mutable and CS emails are user-supplied, so it would let anyone who can set
-   * their PM address to a CS admin's take that account.
+   * Three gates, in order — each narrows the one before it:
+   *
+   *   1. ROLE.      P0/P1 in at least one PM workspace. See PM_DESK_ADMIN_ROLES.
+   *   2. WORKSPACE. That PM workspace must be linked to a CS desk. A desk opts
+   *                 in by carrying the PM workspace id; nothing is implicit.
+   *   3. ACCOUNT.   Resolved by PM `sub` alone — see resolvePmUser.
    */
-  async loginWithPm(pmUserId: string, workspaceSlug?: string) {
-    const user = await this.prisma.user.findFirst({ where: { pmUserId } });
-    if (!user || !user.isActive) {
+  async loginWithPm(info: PmSignInIdentity, workspaceSlug?: string) {
+    // 1. ROLE — which PM workspaces does this human actually run?
+    const administered = info.workspaces.filter((w) => PM_DESK_ADMIN_ROLES.has(w.roleId));
+    if (administered.length === 0) {
       throw new UnauthorizedException(
-        'No Plumo CS account is linked to that Plumo account. Ask an admin to invite you, then connect it from Settings.',
+        'You are not an owner or admin of any Plumo workspace. Ask an owner to promote you, or sign in with your Plumo CS password.',
       );
     }
-    const membership = await this.workspaces.resolveForUser(user.id, workspaceSlug);
+
+    // 2. WORKSPACE — of those, which have a desk connected? `status: active`
+    // deliberately: a suspended desk must not be reachable through a side door
+    // that the password login does not have.
+    const desks = await this.prisma.workspace.findMany({
+      where: { pmWorkspaceId: { in: administered.map((w) => w.id) }, status: 'active' },
+      select: { id: true, slug: true },
+      orderBy: { slug: 'asc' },
+    });
+    if (desks.length === 0) {
+      throw new UnauthorizedException(
+        `No Plumo CS desk is connected to ${administered.map((w) => w.name).join(', ')} yet.`,
+      );
+    }
+
+    // Honour the requested desk when there is one, but never silently redirect
+    // to a different desk than the one asked for — that would show an admin a
+    // neighbouring organisation's inbox and look like a bug in their favour.
+    const target = workspaceSlug ? desks.find((d) => d.slug === workspaceSlug) : desks[0];
+    if (!target) {
+      throw new UnauthorizedException('You do not administer that workspace in Plumo');
+    }
+
+    // 3. ACCOUNT.
+    const user = await this.resolvePmUser(info);
+    await this.ensureDeskMembership(user.id, target.id);
+
+    // Re-resolved through the normal path rather than trusted from above, so a
+    // desk-level suspension is enforced identically no matter how you signed in.
+    const membership = await this.workspaces.resolveForUser(user.id, target.slug);
     await this.prisma.user.update({ where: { id: user.id }, data: { lastActiveAt: new Date() } });
     return this.issueTokens(user, membership);
+  }
+
+  /**
+   * Find the CS account for a PM identity, or provision one.
+   *
+   * MATCHED ON `sub` AND NEVER ON EMAIL. PM emails are mutable and CS emails
+   * are user-supplied, so adopting an account by email would let anyone who can
+   * set their PM address to a CS admin's — and who owns any linked workspace of
+   * their own — sign in AS that admin and inherit every desk they belong to.
+   * The `@unique` on users.pm_user_id is the same rule at the database level.
+   *
+   * So a colliding email is refused rather than merged. The refusal is
+   * actionable: signing in with the password once and linking from Settings
+   * proves possession of both accounts, which is exactly what is missing here.
+   */
+  private async resolvePmUser(info: PmSignInIdentity) {
+    const linked = await this.prisma.user.findFirst({ where: { pmUserId: info.sub } });
+    if (linked) {
+      if (!linked.isActive) throw new UnauthorizedException('This Plumo CS account has been disabled');
+      return linked;
+    }
+
+    const emailTaken = await this.prisma.user.findUnique({
+      where: { email: info.email },
+      select: { id: true },
+    });
+    if (emailTaken) {
+      throw new UnauthorizedException(
+        'A Plumo CS account already uses this email address. Sign in with your password once and connect Plumo from Settings — that links the two accounts safely.',
+      );
+    }
+
+    return this.prisma.user.create({
+      data: {
+        email: info.email,
+        name: info.name || info.email,
+        // This account signs in through Plumo and has no password. A real argon2
+        // hash of 32 random bytes rather than a sentinel string, so the ordinary
+        // argon2.verify path stays valid and simply can never match.
+        passwordHash: await argon2.hash(randomBytes(32).toString('hex')),
+        pmUserId: info.sub,
+      },
+    });
+  }
+
+  /**
+   * Give a PM owner/admin a seat on the desk, if they do not already have one.
+   *
+   * CREATE-IF-MISSING, NEVER UPDATE. If a membership already exists it is left
+   * exactly as CS set it: an admin who deliberately demoted somebody to `agent`,
+   * or deactivated them on this desk, must not have that quietly undone by the
+   * next Plumo sign-in. PM decides who may enter; CS keeps deciding what they
+   * can do once inside.
+   */
+  private async ensureDeskMembership(userId: string, workspaceId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      // workspace_memberships is RLS-protected and its policy demands
+      // `workspace_id = app_current_workspace()`, which nothing has bound this
+      // early in a login — so bind it here. Both the read and the write below
+      // would otherwise be invisible/rejected. set_config is transaction-local,
+      // so this cannot leak onto the next request sharing the connection.
+      await tx.$executeRaw`SELECT app_set_workspace(${workspaceId}::uuid)`;
+
+      const existing = await tx.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+        select: { id: true },
+      });
+      if (existing) return;
+
+      await tx.workspaceMembership.create({
+        data: { workspaceId, userId, role: 'admin' },
+      });
+    });
   }
 
   /** Refresh-token rotation: verify hash, revoke old, issue new pair. */
