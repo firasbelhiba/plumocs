@@ -22,6 +22,25 @@ RUN npm ci --omit=dev
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS build
 WORKDIR /app
+
+# openssl BEFORE `prisma generate`, and that ordering is the whole point.
+#
+# `prisma generate` picks its engine from the openssl it can detect AT GENERATE
+# TIME. On a bare alpine it detects none, falls back to the "linux-musl" engine,
+# and bakes that choice into node_modules/.prisma. The runtime and migrate stages
+# then install openssl — so they ask for "linux-musl-openssl-3.0.x", the engine
+# that was never generated, and every query dies with:
+#
+#   Prisma Client could not locate the Query Engine for runtime
+#   "linux-musl-openssl-3.0.x" ... generated for "linux-musl"
+#
+# Installing it here makes generate and runtime agree, which is why this is the
+# fix rather than pinning binaryTargets in schema.prisma: the schema is shared
+# with CI and with development machines that are neither alpine nor musl, and
+# hard-coding one deployment's target there would be a footgun aimed at everyone
+# else. Nothing about the image is special once the environments simply match.
+RUN apk add --no-cache openssl
+
 COPY package*.json ./
 RUN npm ci
 COPY prisma ./prisma
