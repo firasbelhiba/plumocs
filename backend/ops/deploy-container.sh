@@ -128,11 +128,22 @@ log "Smoke test passed"
 # NO `|| true` ON THIS PIPELINE. The previous version swallowed a failing compose
 # invocation here, concluded there was nothing to migrate, and carried on to stop
 # production — the error it hid was the very one that then killed the deploy.
+# `prisma migrate status` EXITS NON-ZERO WHEN MIGRATIONS ARE PENDING. That is its
+# documented way of reporting precisely the thing being asked, not a failure — so
+# neither `|| true` (which hid a real compose error and cost an outage) nor
+# `|| die` (which aborts every deploy that actually has work to do) is right.
+#
+# Discriminate on the OUTPUT instead: a run that reached the database always says
+# so. Anything else — compose refusing to interpolate, no route to postgres, a
+# missing image — produces none of these phrases and is a genuine failure.
 migrate_status="$(docker compose -f "$COMPOSE" run --rm --entrypoint sh migrate -c \
-  'DATABASE_URL="$MIGRATE_DATABASE_URL" node_modules/.bin/prisma migrate status' 2>&1)" || {
-    echo "$migrate_status"
-    die "Could not read migration status. Nothing has been stopped."
-  }
+  'DATABASE_URL="$MIGRATE_DATABASE_URL" node_modules/.bin/prisma migrate status' 2>&1)" || true
+
+if ! printf '%s' "$migrate_status" | grep -qiE 'migrations found|schema is up to date|Prisma schema loaded'; then
+  echo "$migrate_status"
+  die "Could not read migration status — the command itself failed. Nothing has been stopped."
+fi
+
 pending=$(printf '%s' "$migrate_status" | grep -ci 'not yet been applied\|following migration' || true)
 
 if [[ "$pending" -gt 0 ]]; then
