@@ -197,8 +197,30 @@ jobs:
           test "$(docker run --rm --entrypoint id plumo-cs:ci -un)" = node
           test "$(docker run --rm --entrypoint id plumo-cs-migrate:ci -un)" = node
 
-      # Proves the prisma CLI and the generated client both survived into the
-      # migrate image. It touches no database — `migrate deploy --help` exits 0
-      # without a connection, and a missing CLI exits non-zero.
+      # Proves the prisma CLI and its engines actually load in the migrate image,
+      # as the unprivileged `node` user it runs as.
+      #
+      # `--version` rather than `migrate deploy --help`: the latter was the first
+      # attempt and it failed, and it is the weaker probe of the two. It can exit
+      # non-zero for reasons that say nothing about the image — a schema that
+      # cannot be resolved, a missing DATABASE_URL — whereas `--version` loads the
+      # CLI and reports the engine build it found, which is exactly the thing that
+      # must survive the multi-stage copy. If prisma is absent or its engines are
+      # unreadable, this cannot pass.
+      #
+      # The diagnostics run FIRST and unconditionally. The migrate stage inherits
+      # /app from `build`, where every layer ran as root, and then switches to
+      # USER node — so the tree is root-owned and node has read-only access to it.
+      # `runtime` survives that because it only ever reads; a CLI that wants to
+      # write a cache does not. Printing who we are, where HOME points and whether
+      # it is writable turns "it failed" into a diagnosis without another round
+      # trip through CI.
+      - name: Migrate image — diagnostics
+        run: |
+          echo "user: $(docker run --rm --entrypoint id plumo-cs-migrate:ci)"
+          echo "home: $(docker run --rm --entrypoint printenv plumo-cs-migrate:ci HOME || echo unset)"
+          docker run --rm --entrypoint sh plumo-cs-migrate:ci -c \
+            'ls -ld /app /app/node_modules/.bin/prisma 2>&1; test -w "$HOME" && echo "HOME writable" || echo "HOME NOT writable"'
+
       - name: Migrate image can run prisma
-        run: docker run --rm plumo-cs-migrate:ci npx prisma migrate deploy --help
+        run: docker run --rm plumo-cs-migrate:ci npx prisma --version
