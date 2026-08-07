@@ -136,7 +136,14 @@ async function refreshTokens() {
       auth: false,
     })
       .then((data) => {
-        setSession({ accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user });
+        // Spread the existing session, do NOT rebuild it. setSession assigns
+        // wholesale, so listing only the three fields the refresh returns drops
+        // everything else on it — in particular `workspace`, which is what puts
+        // the X-Workspace-Slug header on every authenticated request. Losing it
+        // silently un-names this client every 15 minutes until the next full
+        // page load restores it from /auth/me, and on a multi-workspace
+        // instance an un-named request is a 403.
+        setSession({ ...session, accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user });
         return data;
       })
       .finally(() => {

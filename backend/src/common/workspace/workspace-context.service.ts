@@ -92,6 +92,24 @@ export class WorkspaceContextService {
    *             to the single-tenant default (see soleSlug).
    */
   async resolveForUser(userId: string, slug?: string): Promise<ResolvedMembership> {
+    // Nothing named a workspace. Before reaching for any instance-wide default,
+    // ask the narrower question: does THIS human belong to exactly one desk?
+    //
+    // /auth/login and /auth/refresh cannot send the header — the console marks
+    // them `auth: false` and the header is attached only to authenticated
+    // requests — so on a multi-workspace instance both would fall through to
+    // soleSlug(), get null, and answer 403 to every user alive. That is not a
+    // hypothetical: it is what makes creating a second workspace an outage
+    // rather than a data change, and it detonates at the next restart because a
+    // successful probe is memoised.
+    //
+    // A login already knows who is asking. One active membership means there
+    // was never anything to disambiguate.
+    if (!slug) {
+      const sole = await this.soleMembership(userId);
+      if (sole) return sole;
+    }
+
     const target = slug ?? (await this.soleSlug());
     if (!target) {
       throw new ForbiddenException(
@@ -124,6 +142,33 @@ export class WorkspaceContextService {
       throw new ForbiddenException('Your access to this workspace has been disabled');
     }
 
+    return { workspaceId: row.workspaceId, workspaceSlug: row.workspaceSlug, role: row.role, teamId: row.teamId };
+  }
+
+  /**
+   * The caller's single active desk, or null when they have none or several.
+   *
+   * Deliberately returns null rather than picking one when there are several:
+   * choosing would drop somebody into whichever desk the query planner happened
+   * to return first, which is a cross-tenant answer arrived at by coin flip. The
+   * caller then falls through to the instance default and, failing that, to a
+   * 403 telling them to name the workspace — which is the honest reply.
+   */
+  private async soleMembership(userId: string): Promise<ResolvedMembership | null> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ workspaceId: string; role: Role; teamId: string | null; workspaceSlug: string }>
+    >(Prisma.sql`
+      SELECT workspace_id   AS "workspaceId",
+             role           AS "role",
+             team_id        AS "teamId",
+             workspace_slug AS "workspaceSlug"
+      FROM app_resolve_sole_membership(${userId}::uuid)
+    `);
+
+    // The function returns up to 2 rows precisely so this check can be made.
+    if (rows.length !== 1) return null;
+
+    const row = rows[0];
     return { workspaceId: row.workspaceId, workspaceSlug: row.workspaceSlug, role: row.role, teamId: row.teamId };
   }
 
