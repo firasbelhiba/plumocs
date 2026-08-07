@@ -1,0 +1,86 @@
+# Continuous deployment for the backend.
+#
+# Push to main touching backend/ -> the server builds the image, runs pending
+# migrations, restarts the containers, and rolls back if the result does not
+# actually serve.
+#
+# WHY THE SERVER BUILDS RATHER THAN A REGISTRY. Building in CI and pulling an
+# image is the better end state, but it needs registry credentials on the host
+# and a token nobody rotates. The server has Docker, 53G free and the source it
+# already checks out for deploy-native.sh. One less secret, one less thing to
+# expire at 3am. Move to a registry when there is a second host to serve.
+#
+# Deliberately gated on the test job. A deploy that ships whatever was pushed is
+# not automation, it is a faster way to break production.
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/deploy.yml']
+  # Ship a known-good commit by hand — rollbacks, and re-running a deploy whose
+  # SSH step flaked without pushing an empty commit to trigger it.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit or tag to deploy (default: main)'
+        required: false
+        default: 'main'
+
+# One deploy at a time. Two overlapping runs would race on the same working
+# directory and the same containers, and the loser would leave a half-built
+# image behind.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # The gate. Reuses the same steps as backend-ci rather than trusting that its
+  # run for this SHA has finished — a push race would otherwise let an untested
+  # commit through the door.
+  test:
+    name: gate — types, unit tests, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      # Includes app.module.spec.ts, which resolves the whole Nest graph. A
+      # controller injecting a service its module never imports builds green and
+      # crashes on boot — that has already put a 502 in production once.
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    name: build and deploy on the server
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Generous: a cold `docker build` with no layer cache plus npm ci runs
+          # for several minutes. Too short and the step fails after the restart
+          # has already happened, which reads as a broken deploy that in fact
+          # succeeded.
+          command_timeout: 20m
+          script: |
+            set -Eeuo pipefail
+            REF="${{ github.event.inputs.ref || github.sha }}"
+            bash /opt/plumo-cs/source/backend/ops/deploy-container.sh "$REF"
