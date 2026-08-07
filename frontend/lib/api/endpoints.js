@@ -21,6 +21,16 @@ export const auth = {
 };
 
 // ---- tickets ----
+// Linking this CS account and desk to a Plumo PM account.
+export const pm = {
+  status: () => request('/auth/pm/status'),
+  // Returns a URL rather than redirecting: a 302 from fetch() is followed
+  // opaquely by the browser instead of navigating the page, so the caller has
+  // to do the navigation itself.
+  start: (returnTo) => request(`/auth/pm/start${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`),
+  unlink: () => request('/auth/pm/unlink'),
+};
+
 export const tickets = {
   setBotEnabled: (id, enabled) => request(`/tickets/${id}/bot-enabled`, { method: 'POST', body: { enabled } }),
   list: (params) => request(`/tickets${qs(params)}`),

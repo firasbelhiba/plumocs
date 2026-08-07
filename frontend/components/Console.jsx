@@ -87,6 +87,51 @@ export default class Console extends React.Component {
       .then(() => { this.setState({ pwCur: '', pwNew: '', pwConfirm: '' }); this.toast("password changed — you're still signed in ✿"); })
       .catch((e) => this.toast(e?.status === 401 ? "the current password isn't right" : "couldn't change it — try again in a moment", 'bad'));
   };
+  // Ask the server where to send the browser, then navigate. A 302 from fetch()
+  // is followed opaquely instead of navigating the page, which is why the
+  // endpoint returns a URL rather than redirecting.
+  connectPm = async () => {
+    this.setState({ pmBusy: true, pmNotice: '' });
+    try {
+      const { authorizationUrl } = await api.pm.start(window.location.pathname);
+      window.location.assign(authorizationUrl);
+    } catch (e) {
+      this.setState({ pmBusy: false, pmNotice: e?.message || 'could not reach plumo' });
+    }
+  };
+
+  disconnectPm = async () => {
+    this.setState({ pmBusy: true, pmNotice: '' });
+    try {
+      await api.pm.unlink();
+      this.setState({ pm: { ...(this.state.pm || {}), linked: false }, pmBusy: false, pmNotice: 'disconnected from plumo' });
+    } catch (e) {
+      this.setState({ pmBusy: false, pmNotice: e?.message || 'could not disconnect' });
+    }
+  };
+
+  // The callback redirects back with ?pmLink=…; surface the outcome once and
+  // strip it, so a refresh does not replay a stale banner.
+  readPmCallback = () => {
+    const q = new URLSearchParams(window.location.search);
+    const outcome = q.get('pmLink');
+    if (!outcome) return;
+    const ws = q.get('workspace');
+    const notice =
+      outcome === 'ok' ? (ws ? `connected to plumo — this desk is linked to ${ws}` : 'connected to plumo')
+      : outcome === 'cancelled' ? 'plumo sign-in was cancelled'
+      : outcome === 'invalid' ? 'that plumo link was incomplete'
+      : `could not connect: ${q.get('reason') || 'unknown error'}`;
+    this.setState({ pmNotice: notice });
+    q.delete('pmLink'); q.delete('workspace'); q.delete('reason');
+    const rest = q.toString();
+    window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''));
+  };
+
+  loadPmStatus = async () => {
+    try { this.setState({ pm: await api.pm.status() }); } catch { /* panel stays hidden */ }
+  };
+
   setDrill = (e) => this.setState({ drill: e.currentTarget.dataset.k });
   clearDrill = () => this.setState({ drill: null });
   openAccount = () => this.setState({ screen: 'account', menu: null });
@@ -120,6 +165,10 @@ export default class Console extends React.Component {
     if (p.startScreen && p.startScreen !== 'ticket' && p.startScreen !== 'login') seed.screen = p.startScreen;
     if (Object.keys(seed).length) this.setState(seed);
     this.syncDoc(seed.theme || this.state.theme, seed.soft || this.state.soft);
+    // Read the PM callback outcome before anything else can navigate away, then
+    // ask whether this deployment offers the link at all.
+    this.readPmCallback();
+    this.loadPmStatus();
     window.addEventListener('keydown', this.onKey, true);
     this.timer = setInterval(() => this.setState({ now: Date.now() }), 1000);
 
@@ -1014,6 +1063,12 @@ export default class Console extends React.Component {
       isAccount: S.screen === 'account', openAccount: this.openAccount,
       isNotFound: S.screen === 'notfound', isOops: S.screen === 'oops',
       tabOverview: S.settingsTab === 'overview', settingsCards: this.SETTINGS_CARDS,
+      // Linking this desk to a Plumo PM workspace. `pmAvailable` is false on a
+      // deployment with no PM_ISSUER configured, in which case the panel is not
+      // rendered at all rather than shown broken.
+      pmAvailable: S.pm?.available === true, pmLinked: S.pm?.linked === true,
+      pmBusy: !!S.pmBusy, pmNotice: S.pmNotice || '',
+      connectPm: this.connectPm, disconnectPm: this.disconnectPm,
       drillOpen: !!S.drill, noDrill: !S.drill, setDrill: this.setDrill, clearDrill: this.clearDrill,
       drillTitle: dd ? dd.title : '', drillValue: dd ? dd.value : '', drillNote: dd ? dd.note : '', drillAxis: dd ? dd.axis : '',
       drillPoints: dd ? dd.series.map((v, i) => (i / (dd.series.length - 1) * 100).toFixed(1) + ',' + (36 - (v - Math.min(...dd.series)) / ((Math.max(...dd.series) - Math.min(...dd.series)) || 1) * 32).toFixed(1)).join(' ') : '',

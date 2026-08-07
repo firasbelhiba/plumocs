@@ -51,6 +51,31 @@ export default function Settings({ V }) {
                 </button>
               ))}
             </div>
+
+            {V.pmAvailable && (
+              <div className={sx('display:flex;flex-direction:column;gap:10px;padding:var(--cs-cardpad);border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface)')}>
+                <div className={sx('display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap')}>
+                  <div className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px')}>
+                    <span className={sx('font-size:14.5px;font-weight:500')}>plumo account</span>
+                    <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.5')}>
+                      {V.pmLinked
+                        ? 'this desk is connected to plumo. your account and workspace are linked.'
+                        : 'connect this desk to your plumo workspace, so the same people and projects line up across both.'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={V.pmLinked ? V.disconnectPm : V.connectPm}
+                    disabled={V.pmBusy}
+                    className={V.pmLinked ? editBtn() : primaryBtn()}
+                  >
+                    {V.pmBusy ? 'working…' : V.pmLinked ? 'disconnect' : 'connect plumo'}
+                  </button>
+                </div>
+                {V.pmNotice && (
+                  <span className={sx('font-size:12.5px;color:var(--cs-brand-ink);background:var(--cs-soft);padding:6px 10px;border-radius:var(--cs-r-sm)')}>{V.pmNotice}</span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
