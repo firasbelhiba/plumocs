@@ -14,15 +14,46 @@ import { EVENT_API_TO_DB, EVENT_DB_TO_API } from "../webhooks/webhooks.module";
 
 // ---- email.outbound ----------------------------------------------------------
 
+/**
+ * The workspace a job belongs to, or a loud failure.
+ *
+ * A JOB HAS NO REQUEST, so nothing binds a workspace and the processor runs with
+ * app_current_workspace() = NULL. Under RLS that is silent rather than fatal:
+ * reads return zero rows, writes are rejected, and the processor reports success
+ * having done nothing. That is exactly how agent replies stopped reaching
+ * customers — sendTicketReply looked up its message, RLS hid it, and the bare
+ * `return` at email.service.ts:45 made it indistinguishable from "nothing to do".
+ *
+ * Throwing here is the point. A job queued before workspaceId was stamped will
+ * now fail and be retried into the dead-letter set, where it is visible, instead
+ * of quietly evaporating.
+ */
+function requireWorkspace(job: Job<{ workspaceId?: string }>): string {
+  const workspaceId = job.data?.workspaceId;
+  if (!workspaceId) {
+    throw new Error(
+      `${job.queueName}/${job.name} carries no workspaceId. Running it unbound would read zero rows ` +
+        `and write nothing while reporting success. Jobs enqueued before this fix must be drained or requeued.`,
+    );
+  }
+  return workspaceId;
+}
+
 @Processor(QUEUES.EMAIL_OUTBOUND)
 export class EmailOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailOutboundProcessor.name);
-  constructor(private readonly email: EmailService) {
+  constructor(
+    private readonly email: EmailService,
+    private readonly workspaces: WorkspaceContextService,
+  ) {
     super();
   }
 
-  async process(job: Job<{ ticketId: string; messageId: string }>) {
-    await this.email.sendTicketReply(job.data.ticketId, job.data.messageId);
+  async process(job: Job<{ ticketId: string; messageId: string; workspaceId?: string }>) {
+    const workspaceId = requireWorkspace(job);
+    await this.workspaces.runInWorkspace(workspaceId, () =>
+      this.email.sendTicketReply(job.data.ticketId, job.data.messageId),
+    );
   }
 }
 
@@ -64,7 +95,10 @@ export class WebhookDeliverProcessor extends WorkerHost {
   private readonly logger = new Logger(WebhookDeliverProcessor.name);
   private static readonly MAX_ATTEMPTS = 6;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly workspaces: WorkspaceContextService,
+  ) {
     super();
   }
 
@@ -73,18 +107,25 @@ export class WebhookDeliverProcessor extends WorkerHost {
    * each; 'deliver' retries a single delivery row (self-scheduled backoff).
    */
   async process(job: Job) {
-    if (job.name === "fanout")
-      return this.fanout(
-        job.data as { event: string; payload: Record<string, unknown> },
-      );
-    if (job.name === "deliver")
-      return this.deliver((job.data as { deliveryId: string }).deliveryId, job);
+    // Both branches read and write workspace-scoped tables — webhooks,
+    // webhook_deliveries — so both need the binding. Unbound, fanout finds no
+    // webhooks at all and reports a clean delivery of nothing.
+    const workspaceId = requireWorkspace(job as Job<{ workspaceId?: string }>);
+    return this.workspaces.runInWorkspace(workspaceId, async () => {
+      if (job.name === "fanout")
+        return this.fanout(
+          job.data as { event: string; payload: Record<string, unknown> },
+          workspaceId,
+        );
+      if (job.name === "deliver")
+        return this.deliver((job.data as { deliveryId: string }).deliveryId, job);
+    });
   }
 
-  private async fanout(data: {
-    event: string;
-    payload: Record<string, unknown>;
-  }) {
+  private async fanout(
+    data: { event: string; payload: Record<string, unknown> },
+    workspaceId: string,
+  ) {
     const dbEvent = EVENT_API_TO_DB[data.event];
     if (!dbEvent) return;
     const hooks = await this.prisma.webhook.findMany({
@@ -98,16 +139,18 @@ export class WebhookDeliverProcessor extends WorkerHost {
           payloadJson: data.payload as object,
         },
       });
-      await this.deliverOnce(delivery.id);
+      await this.deliverOnce(delivery.id, workspaceId);
     }
   }
 
-  private async deliver(deliveryId: string, _job: Job) {
-    await this.deliverOnce(deliveryId);
+  // `job` was previously unused (`_job`). The retry re-enqueue below now needs
+  // it, to carry workspaceId onto the new job.
+  private async deliver(deliveryId: string, job: Job<{ workspaceId?: string }>) {
+    await this.deliverOnce(deliveryId, job.data?.workspaceId);
   }
 
   /** POST the signed payload; record the outcome; schedule a retry on failure. */
-  private async deliverOnce(deliveryId: string) {
+  private async deliverOnce(deliveryId: string, workspaceId?: string) {
     const delivery = await this.prisma.webhookDelivery.findUnique({
       where: { id: deliveryId },
       include: { webhook: true },
@@ -172,7 +215,15 @@ export class WebhookDeliverProcessor extends WorkerHost {
             .opts.connection as never,
           defaultJobOptions: DEFAULT_JOB_OPTS,
         });
-        await queue.add("deliver", { deliveryId }, { delay, attempts: 1 });
+        // Carry workspaceId forward. A retry is a new job with a fresh payload,
+        // so omitting it would make every retry of every webhook fail the
+        // requireWorkspace check — turning a transient endpoint outage into a
+        // permanent delivery failure.
+        await queue.add(
+          "deliver",
+          { deliveryId, workspaceId },
+          { delay, attempts: 1 },
+        );
         await queue.close();
       }
     }
@@ -327,18 +378,27 @@ export class SlaSweepProcessor extends WorkerHost {
 
 @Processor(QUEUES.SEARCH_INDEX)
 export class SearchIndexProcessor extends WorkerHost {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly workspaces: WorkspaceContextService,
+  ) {
     super();
   }
 
-  async process(job: Job<{ ticketId: string }>) {
-    try {
-      await this.prisma.$executeRaw(
-        Prisma.sql`SELECT refresh_ticket_tsv(${job.data.ticketId}::uuid)`,
-      );
-    } catch {
-      // search_tsv extras not installed — harmless in dev
-    }
+  async process(job: Job<{ ticketId: string; workspaceId?: string }>) {
+    // refresh_ticket_tsv UPDATEs tickets and reads ticket_messages, both under
+    // workspace_isolation. Unbound it matches zero rows, so message bodies
+    // silently never become searchable.
+    const workspaceId = requireWorkspace(job);
+    await this.workspaces.runInWorkspace(workspaceId, async () => {
+      try {
+        await this.prisma.$executeRaw(
+          Prisma.sql`SELECT refresh_ticket_tsv(${job.data.ticketId}::uuid)`,
+        );
+      } catch {
+        // search_tsv extras not installed — harmless in dev
+      }
+    });
   }
 }
 
@@ -350,6 +410,7 @@ export class NotificationsFanoutProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
     private readonly realtime: RealtimeService,
+    private readonly workspaces: WorkspaceContextService,
   ) {
     super();
   }
@@ -361,10 +422,17 @@ export class NotificationsFanoutProcessor extends WorkerHost {
       text: string;
       ticketId?: string;
       email?: boolean;
+      workspaceId?: string;
     }>,
   ) {
     const { kind, userIds, text, ticketId, email } = job.data;
 
+    // BEFORE requireWorkspace, deliberately. A password reset is enqueued from
+    // an unauthenticated request that has no workspace bound, so it legitimately
+    // arrives unstamped — and it needs no binding either: it reads `users` and
+    // sends mail, and `users` carries no workspace_id so it is outside RLS.
+    // Demanding a workspace here would break the one notification path that
+    // currently works.
     if (kind === "password_reset") {
       // no in-app row; just the email (text carries the link)
       const users = await this.prisma.user.findMany({
@@ -379,14 +447,21 @@ export class NotificationsFanoutProcessor extends WorkerHost {
       return;
     }
 
-    await this.prisma.notification.createMany({
-      data: userIds.map((userId) => ({
-        userId,
-        kind,
-        text,
-        ticketId: ticketId ?? null,
-      })),
-    });
+    // Everything past this point writes `notifications`, which is workspace
+    // scoped. Unbound, workspace_id defaults to app_current_workspace() = NULL
+    // and the insert fails 23502 — loudly, but only after the job has retried to
+    // exhaustion, so nobody sees it as the tenancy bug it is.
+    const workspaceId = requireWorkspace(job);
+    await this.workspaces.runInWorkspace(workspaceId, () =>
+      this.prisma.notification.createMany({
+        data: userIds.map((userId) => ({
+          userId,
+          kind,
+          text,
+          ticketId: ticketId ?? null,
+        })),
+      }),
+    );
     this.realtime.publish("notification.created", {
       userIds,
       kind,

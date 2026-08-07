@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
+import { Prisma } from '@prisma/client';
 import { Queue } from 'bullmq';
+import { PrismaService } from '../prisma/prisma.service';
 import { QUEUES } from './queue.constants';
 
 /**
@@ -19,9 +21,49 @@ export class QueueProducer {
     @InjectQueue(QUEUES.SEARCH_INDEX) private readonly searchIndex: Queue,
     @InjectQueue(QUEUES.NOTIFICATIONS_FANOUT) private readonly notificationsFanout: Queue,
     @InjectQueue(QUEUES.EXPORT_DAILY) private readonly exportDaily: Queue,
+    private readonly prisma: PrismaService,
   ) {}
 
-  private async safeAdd(queue: Queue, name: string, data: unknown) {
+  /**
+   * The workspace this job belongs to.
+   *
+   * A JOB CARRIES NO REQUEST, so the worker has nothing to bind from and runs
+   * with app_current_workspace() = NULL. Under RLS that is not an error — every
+   * SELECT returns zero rows and every INSERT is rejected, so a processor
+   * "succeeds" having done nothing at all. That is how agent replies stopped
+   * reaching customers with no error anywhere: sendTicketReply looked up its
+   * message, saw null, and returned.
+   *
+   * Read here rather than threaded through 20 call sites because every producer
+   * call happens inside the request transaction that just wrote the row the job
+   * is about — the binding is already established and correct. One trivial query
+   * per enqueue, on a connection that is already open.
+   */
+  private async currentWorkspaceId(): Promise<string | null> {
+    try {
+      const rows = await this.prisma.$queryRaw<Array<{ ws: string | null }>>(
+        Prisma.sql`SELECT app_current_workspace() AS ws`,
+      );
+      return rows[0]?.ws ?? null;
+    } catch (err) {
+      // Never fail the request for this. A job that arrives unstamped is refused
+      // loudly by the processor, which is the outcome we want anyway.
+      this.logger.error(`Could not read the bound workspace: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  private async safeAdd(queue: Queue, name: string, data: Record<string, unknown>) {
+    try {
+      const workspaceId = await this.currentWorkspaceId();
+      await queue.add(name, { ...data, workspaceId });
+    } catch (err) {
+      this.logger.error(`Failed to enqueue ${queue.name}/${name}: ${(err as Error).message}`);
+    }
+  }
+
+  /** Enqueue without a workspace — for jobs that iterate every tenant themselves. */
+  private async safeAddUnscoped(queue: Queue, name: string, data: Record<string, unknown>) {
     try {
       await queue.add(name, data);
     } catch (err) {
@@ -33,8 +75,14 @@ export class QueueProducer {
     return this.safeAdd(this.emailOutbound, 'send', data);
   }
 
+  /**
+   * Unscoped deliberately: an inbound email arrives from the outside world and
+   * belongs to no workspace until it has been routed to one by its recipient
+   * address. Binding cannot happen here — it is the processor's job, and until
+   * that routing exists this queue is single-tenant.
+   */
   parseInboundEmail(data: { raw?: string; parsed?: Record<string, unknown> }) {
-    return this.safeAdd(this.emailInbound, 'parse', data);
+    return this.safeAddUnscoped(this.emailInbound, 'parse', data);
   }
 
   deliverWebhooks(event: string, payload: Record<string, unknown>) {
@@ -49,7 +97,8 @@ export class QueueProducer {
     return this.safeAdd(this.notificationsFanout, 'fanout', data);
   }
 
+  /** Unscoped: the export loops over every workspace itself. */
   runExport(data: { requestedBy?: string } = {}) {
-    return this.safeAdd(this.exportDaily, 'run', data);
+    return this.safeAddUnscoped(this.exportDaily, 'run', data);
   }
 }
