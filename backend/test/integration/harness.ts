@@ -227,6 +227,12 @@ async function emptyWorkspaces() {
       await prisma.customer.deleteMany({});
       await prisma.slaPolicy.deleteMany({});
       await prisma.auditLog.deleteMany({});
+      // Before memberships, and for the same reason api_keys is: invitations
+      // .invited_by is a composite FK to (workspace_id, user_id) with ON DELETE
+      // RESTRICT, because who invited whom is history and deactivation is the
+      // offboarding path. A leftover invitation makes the next line fail on a
+      // foreign key rather than on anything a reader would recognise.
+      await prisma.invitation.deleteMany({});
       await prisma.workspaceMembership.deleteMany({});
       await prisma.team.deleteMany({});
     });
@@ -252,8 +258,10 @@ async function emptyWorkspaces() {
  * database that had ever run this suite.
  *
  * The empty rows are inert. Remove them, and the per-workspace ticket-number
- * sequence each one's AFTER INSERT trigger created, with the migrator credential:
- *   psql "$MIGRATE_DATABASE_URL" \
+ * sequence each one's AFTER INSERT trigger created, with the migrator
+ * credential — minus the `?schema=` suffix, which is Prisma's and which libpq
+ * rejects as an invalid URI query parameter:
+ *   psql "${MIGRATE_DATABASE_URL%%\?*}" \
  *     -c "SELECT 'DROP SEQUENCE ' || workspace_number_sequence(id) || ';'
  *           FROM workspaces WHERE slug LIKE 'itest-%'" \
  *     -c "DELETE FROM workspaces WHERE slug LIKE 'itest-%'"

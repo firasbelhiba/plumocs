@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { TeamScopeService } from '../../src/common/guards/team-scope.service';
 import {
-  prisma, workspaces, seedFixture, cleanup, inWorkspace, onlyOurs, asUser, asKey,
+  prisma, workspaces, seedFixture, cleanup, inWorkspace, onlyOurs, asUser, asKey, TAG,
   type Fixture, type WorkspaceFixture,
 } from './harness';
 
@@ -199,6 +200,123 @@ describe('workspace isolation (row-level security)', () => {
       await expect(prisma.team.create({ data: { name: `${f.slug}-nowhere` } })).rejects.toThrow(
         /null constraint|workspace/i,
       );
+    });
+  });
+
+  /**
+   * The newest tenant table, and the only one whose design turns on the policy
+   * rather than merely being covered by it.
+   *
+   * The accept flow is unauthenticated: a stranger holding a link has no token,
+   * no membership and therefore no workspace, so the row has to be findable on a
+   * connection with NOTHING bound — where `workspace_isolation` matches zero
+   * rows. app_resolve_invitation() is the SECURITY DEFINER hole cut for exactly
+   * that, and its failure mode is silence in both directions: without prosecdef
+   * every invitation link in the world reports "this link is not valid", and
+   * with EXECUTE left on PUBLIC any role on the instance trades a digest for a
+   * workspace name.
+   *
+   * The migration asserts both inside its own transaction — but only that the
+   * function is MARKED. Nothing has ever CALLED it as plumo_app on an unbound
+   * connection, which is the only way the policy and the exception are proven to
+   * fit together rather than each being individually plausible.
+   */
+  describe('invitations, and the one read allowed past the policy', () => {
+    // Real sha256 hex, because that is what the column holds and what the
+    // resolver's argument is: the only way to name a row is to already hold the
+    // token that produced it.
+    const digest = (w: WorkspaceFixture) => createHash('sha256').update(`${w.slug}-invite`).digest('hex');
+
+    // ONE address, BOTH desks, deliberately. invitations_pending_email_key is
+    // unique on (workspace_id, email); a globally unique index there would let
+    // one desk discover that an address is already invited on another by
+    // watching its own insert fail.
+    const invitee = `${TAG}-invitee@itest.invalid`;
+
+    const invite = (w: WorkspaceFixture) =>
+      inWorkspace(w.id, () =>
+        prisma.invitation.create({
+          data: {
+            email: invitee,
+            tokenHash: digest(w),
+            invitedById: w.admin, // composite FK: the inviter must be seated here
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          },
+        }),
+      );
+
+    beforeAll(async () => {
+      await invite(f);
+      await invite(f.other);
+    });
+
+    it('a seat offered on one desk is invisible from the other', async () => {
+      // One each, under a query with no predicate at all: bound, the policy IS
+      // the filter, so a leak shows up as two.
+      expect(await inWorkspace(f.id, () => prisma.invitation.count())).toBe(1);
+      expect(await inWorkspace(f.other.id, () => prisma.invitation.count())).toBe(1);
+
+      // And named directly by a digest that is unique across the whole
+      // instance, the other desk's row is absent rather than forbidden — the
+      // same answer a foreign ticket gives, for the same reason.
+      expect(
+        await inWorkspace(f.id, () =>
+          prisma.invitation.findUnique({ where: { tokenHash: digest(f.other) } }),
+        ),
+      ).toBeNull();
+    });
+
+    it('both desks may invite the same address, and neither may invite it twice', async () => {
+      // The first half already happened: the fixture invited one address on
+      // both desks and both inserts succeeded. That is only meaningful with the
+      // second half — this is per-workspace uniqueness, not absent uniqueness.
+      await expect(
+        inWorkspace(f.id, () =>
+          prisma.invitation.create({
+            data: {
+              email: invitee,
+              tokenHash: createHash('sha256').update(`${f.slug}-invite-again`).digest('hex'),
+              invitedById: f.admin,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            },
+          }),
+        ),
+      ).rejects.toThrow(/unique constraint|invitations_pending_email_key/i);
+    });
+
+    it('the unauthenticated accept path finds the row the policy hides from it', async () => {
+      // Deliberately OUTSIDE inWorkspace, because that is the shape of GET
+      // /invitations/token/:token: the route is @Public, AuthGuard never runs,
+      // WorkspaceBindingInterceptor opens no transaction and binds nothing.
+      expect(await prisma.invitation.findUnique({ where: { tokenHash: digest(f) } })).toBeNull();
+
+      // Same connection, same statelessness, one function later.
+      const rows = await prisma.$queryRaw<
+        Array<{ workspaceId: string; workspaceSlug: string; email: string; active: boolean }>
+      >(Prisma.sql`
+        SELECT workspace_id         AS "workspaceId",
+               workspace_slug::text AS "workspaceSlug",
+               email::text          AS "email",
+               workspace_active     AS "active"
+        FROM app_resolve_invitation(${digest(f)}::text)
+      `);
+
+      expect(rows).toHaveLength(1);
+      // WHICH desk, by name — this is what the caller binds with next, and
+      // getting it wrong would seat the invitee on somebody else's desk.
+      expect(rows[0].workspaceId).toBe(f.id);
+      expect(rows[0].workspaceSlug).toBe(f.slug);
+      expect(rows[0].email).toBe(invitee);
+      // Returned rather than filtered: a suspended desk must produce "not
+      // currently available", not "this link is not valid".
+      expect(rows[0].active).toBe(true);
+    });
+
+    it('and it stays a lookup rather than becoming an enumeration', async () => {
+      const rows = await prisma.$queryRaw<unknown[]>(
+        Prisma.sql`SELECT 1 FROM app_resolve_invitation(${'0'.repeat(64)}::text)`,
+      );
+      expect(rows).toEqual([]);
     });
   });
 

@@ -124,13 +124,105 @@ jobs:
 
       # Creates plumo_migrator (schema owner) and plumo_app (runtime, owns
       # nothing, NOSUPERUSER, NOBYPASSRLS) — the same split the server runs.
+      #
+      # Necessarily BEFORE the migrations: from the tenancy cutover onward
+      # almost every migration GRANTs to plumo_app by name, and a GRANT to a
+      # role that does not exist is an error rather than a no-op. roles.sql is
+      # written for this order — its REVOKE on `workspaces` is guarded on the
+      # table existing precisely because here it does not yet.
       - name: Provision split roles
         run: npm run db:roles
 
+      # THE MIGRATIONS GO ON IN TWO PASSES, AND THE REASON IS THE ENTIRE HISTORY
+      # OF THIS JOB NEVER HAVING GONE GREEN.
+      #
+      # 20260802000000_workspace_tenancy is an IN-PLACE CUTOVER, not a schema
+      # definition. It was written against a database that had been live for
+      # four days, and three separate things in it need rows that only a live
+      # database has:
+      #
+      #   preflight       refuses outright: `IF NOT EXISTS (SELECT 1 FROM users)`
+      #   section 5       builds the bootstrap memberships by SELECTing users
+      #   assertion (13)  demands an active admin membership and a platform
+      #                   admin, both of which sections 5 and 6 derive from users
+      #
+      # A fresh database has no users, so that file is structurally incapable of
+      # applying here and "Apply migrations" failed on every run this workflow
+      # has ever had — which is why the isolation specs below have never once
+      # executed. Production is not a counter-example: it applied this migration
+      # once, to a database with 38 real conversations already in it.
+      #
+      # None of the three guards is wrong. A cutover that adopts nobody has
+      # silently locked every human out of the instance, and refusing is the
+      # correct answer. So CI reproduces the PRECONDITION rather than removing
+      # it: bring the schema up to the state it had the moment before the
+      # cutover, seat one user the way the server already had one, then apply
+      # the cutover and everything after it. Splitting the deploy is the only
+      # way to get a row in between two migrations — `migrate deploy` has no
+      # `--to`, and the table does not exist before the pass below.
+      #
+      # Nothing else about the run changes: same files, same order, same
+      # plumo_migrator credential, same _prisma_migrations bookkeeping the
+      # server keeps.
+      - name: Apply migrations — up to the tenancy cutover
+        env:
+          CUTOVER: 20260802000000_workspace_tenancy
+        run: |
+          mkdir -p "$RUNNER_TEMP/after-cutover"
+          for dir in prisma/migrations/*/; do
+            name=$(basename "$dir")
+            [[ "$name" < "$CUTOVER" ]] || mv "$dir" "$RUNNER_TEMP/after-cutover/"
+          done
+          DATABASE_URL="$MIGRATE_DATABASE_URL" npx prisma migrate deploy
+
+      # One row, and this is the only window in the chain where it can be
+      # written: `users` does not exist before the pass above, and the pass
+      # below DROPs the role, team_id and availability columns off it.
+      #
+      # role = 'admin' is load-bearing rather than decorative. Section 5 copies
+      # users.role onto the membership it creates, and assertion (13) fails the
+      # whole migration when no ACTIVE ADMIN membership falls out of it.
+      #
+      # updated_at is passed explicitly because its `DEFAULT now()` is added by
+      # section 1 of the very migration this is preparing for; without it the
+      # INSERT dies on a not-null violation for a column nobody thinks about.
+      #
+      # The password hash is deliberately not a hash. Nothing authenticates in
+      # this job, and a real argon2 digest sitting in a workflow file is a
+      # credential somebody eventually copies somewhere it matters.
+      #
+      # libpq rejects Prisma's `?schema=` query parameter outright ("invalid URI
+      # query parameter"), so it is stripped — psql wants a plain connection URI
+      # and `public` is the default search path anyway.
+      - name: Seat the user the cutover adopts
+        run: |
+          psql "${MIGRATE_DATABASE_URL%%\?*}" -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO users (email, name, role, password_hash, is_active, updated_at)
+             VALUES ('ci-bootstrap@plumo.invalid', 'CI bootstrap', 'admin', 'not-a-hash', true, now())"
+
       # As plumo_migrator, because the tenancy migration refuses to run as
       # anyone else — a guard that has already caught a mistake in production.
-      - name: Apply migrations
-        run: DATABASE_URL="$MIGRATE_DATABASE_URL" npx prisma migrate deploy
+      - name: Apply migrations — the cutover and everything after it
+        run: |
+          mv "$RUNNER_TEMP"/after-cutover/* prisma/migrations/
+          DATABASE_URL="$MIGRATE_DATABASE_URL" npx prisma migrate deploy
+
+      # The one failure the split above introduces that nothing else would
+      # catch: a migration directory moved aside and never moved back applies
+      # nothing, reports success, and leaves the isolation specs asserting
+      # against a half-migrated schema — a green run that proves nothing, which
+      # is the exact shape this job exists to prevent.
+      #
+      # Counted from the catalogue rather than read off `prisma migrate status`,
+      # so it rests on no exit-code convention and no message wording.
+      - name: Every migration on disk is applied
+        run: |
+          on_disk=$(ls -1d prisma/migrations/*/ | wc -l)
+          applied=$(psql "${MIGRATE_DATABASE_URL%%\?*}" -tAc \
+            "SELECT count(*) FROM _prisma_migrations
+              WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL")
+          echo "$applied of $on_disk migrations applied"
+          test "$on_disk" -eq "$applied"
 
       # global-setup.ts asserts the connection is unprivileged before the first
       # spec, so a misprovisioned role fails loudly here rather than silently

@@ -5,12 +5,11 @@ import { WorkspaceContextService } from './workspace-context.service';
  * Can an unnamed request still resolve once a second workspace exists?
  *
  * THIS IS THE TEST THAT GUARDS AGAINST AN INSTANCE-WIDE LOGIN OUTAGE. The
- * console sends /auth/login and /auth/refresh with `auth: false`, and the
- * X-Workspace-Slug header is attached only to authenticated requests — so those
- * two endpoints structurally cannot name a workspace. While exactly one
- * workspace exists the server infers it and nobody notices. The moment a second
- * appears, the inference switches itself off and every login and every token
- * refresh on the instance answers 403.
+ * console sends /auth/login with `auth: false` and no header — its body is the
+ * credential and there is no session yet — so it structurally cannot name a
+ * workspace. While exactly one workspace exists the server infers it and nobody
+ * notices. The moment a second appears, the inference switches itself off and
+ * every login on the instance answers 403.
  *
  * It does not even fail at a helpful moment: a successful single-tenant probe is
  * memoised for the life of the process, so the outage begins at the next restart
@@ -19,6 +18,10 @@ import { WorkspaceContextService } from './workspace-context.service';
  * A login knows WHO is asking even when it does not know WHICH desk. One active
  * membership means there was never anything to disambiguate — that is what these
  * cases pin down.
+ *
+ * /auth/refresh was in the same boat and is no longer: it now sends the header
+ * (the console gated it on `auth` by mistake), because a refresh has no human to
+ * read a 403 and retry. See dual-membership-refresh.spec.ts.
  */
 describe('WorkspaceContextService — unnamed request resolution', () => {
   const MEMBERSHIP_ROW = {

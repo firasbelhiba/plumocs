@@ -16,6 +16,56 @@ import { NotFound, Oops } from './screens/EdgeScreens';
 import Overlays from './screens/Overlays';
 import { sx } from './sx';
 
+/**
+ * "30m" / "4h" / "2d" → minutes, and back. SLA targets are stored as a minute
+ * count but nobody writes 360 when they mean six hours. null means "that isn't
+ * a duration", which lets the form say so before the round trip rather than
+ * after a 400.
+ */
+const MINS = (s) => {
+  const m = /^(\d+)\s*(m|min|mins|h|hr|hrs|d)?$/i.exec(String(s ?? '').trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!n) return null;
+  const u = (m[2] || 'm').toLowerCase();
+  return u.startsWith('h') ? n * 60 : u === 'd' ? n * 1440 : n;
+};
+const MINS_TEXT = (n) =>
+  n == null ? '' : n % 1440 === 0 ? n / 1440 + 'd' : n % 60 === 0 ? n / 60 + 'h' : n + 'm';
+
+/** Mirrors the adapter's own formatting so the table reads the same either way. */
+const FMT_MINS = (mins) => {
+  if (mins == null) return '—';
+  if (mins < 60) return `${Math.round(mins)}m`;
+  if (mins < 48 * 60) {
+    const h = Math.floor(mins / 60);
+    const m = Math.round(mins % 60);
+    return m ? `${h}h ${String(m).padStart(2, '0')}m` : `${h}h`;
+  }
+  return `${Math.round(mins / 1440)}d`;
+};
+
+/** The only event names the webhooks API accepts — anything else is a 400. */
+const WEBHOOK_EVENTS = [
+  { value: 'ticket.created', label: 'a conversation is opened' },
+  { value: 'ticket.updated', label: 'a conversation changes' },
+  { value: 'ticket.assigned', label: 'a conversation is assigned' },
+  { value: 'ticket.resolved', label: 'a conversation is resolved' },
+  { value: 'message.added', label: 'a message is added' },
+  { value: 'sla.breached', label: 'an sla target is missed' },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'low' }, { value: 'normal', label: 'normal' },
+  { value: 'high', label: 'high' }, { value: 'urgent', label: 'urgent' },
+];
+
+/** Sunday-first keys, matching the schedule json the backend walks. */
+const DAY_KEYS = [
+  ['mon', 'monday'], ['tue', 'tuesday'], ['wed', 'wednesday'], ['thu', 'thursday'],
+  ['fri', 'friday'], ['sat', 'saturday'], ['sun', 'sunday'],
+];
+
 export default class Console extends React.Component {
   STATUS = {
     new: { l: 'new', t: 'st-new' }, open: { l: 'open', t: 'st-open' },
@@ -55,6 +105,11 @@ export default class Console extends React.Component {
     keyName: '', keyKind: 'chatbot',
     invites: [], invitesLoad: 'idle',
     inviteOpen: false, inviteEmail: '', inviteRole: 'agent', inviteTeam: '', inviteBusy: false, inviteError: '',
+    // settings panels own their rows once opened — see loadSettingsTab
+    settings: {}, settingsErr: {},
+    editor: null, editorBusy: false, editorError: '',
+    hoursBusy: false, holidayDraft: '',
+    inboundDraft: '', inboundBusy: false, inboundError: '',
   };
 
   forgot = (e) => { e.preventDefault(); this.setState({ loginView: 'reset', loginError: false }); };
@@ -913,9 +968,494 @@ export default class Console extends React.Component {
     });
   };
 
+  /* ---- settings: real writes ---------------------------------------------
+   *
+   * Every handler below replaced an onClick={V.mock} — a toast that named an
+   * outcome and sent nothing. The worst was deactivate: it rendered a
+   * confirmation dialog and said "X deactivated" while the person kept their
+   * session, their role and every permission, so an admin revoking an
+   * outsider's access was told it had worked when it had not.
+   *
+   * Two rules hold for all of it. A success line is printed only after a 2xx,
+   * and a failure prints what the server actually said.
+   */
+
+  /** The server's own words, with kinder phrasing for the two we can predict. */
+  apiMessage(e, fallback = "that didn't save — try again in a moment") {
+    if (e?.status === 0) return "can't reach the server — nothing was saved";
+    if (e?.status === 403) return 'that one needs an admin — ask one of yours';
+    return e?.message || fallback;
+  }
+
+  /**
+   * Each settings panel loads its own rows when it opens.
+   *
+   * The adapter fills its caches once at bootstrap and offers no reload, so a
+   * tag created here would not reach the table until the next full page load,
+   * and an SLA row would arrive pre-formatted ("4h 30m") with the minute count
+   * the PATCH needs already thrown away. These panels are the only place these
+   * records are written, so they keep their own copy and re-read it after every
+   * write — that is what makes "the list updated" a fact rather than a hope.
+   * Until the first read lands, renderVals falls back to the bootstrap copy so
+   * nothing is ever blank.
+   */
+  SETTINGS_SOURCES = {
+    sla: { load: () => api.slaPolicies.list() },
+    hours: { load: () => api.businessHours.list() },
+    canned: { load: () => api.cannedResponses.list() },
+    tags: { load: () => api.tags.list() },
+    // Both are admin-only reads; asking as anyone else is a guaranteed 403.
+    hooks: { load: () => api.webhooks.list(), adminOnly: true },
+    email: {
+      load: () => api.email.inboundAddress(),
+      adminOnly: true,
+      then: (row) => this.setState({ inboundDraft: row?.inboundEmail ?? '', inboundError: '' }),
+    },
+  };
+
+  loadSettingsTab = async (tab) => {
+    const src = this.SETTINGS_SOURCES[tab];
+    if (!src || !this.api) return;
+    if (src.adminOnly && this.state.role !== 'admin') return;
+    try {
+      const rows = await src.load();
+      this.setState((s) => ({
+        settings: { ...s.settings, [tab]: rows },
+        settingsErr: { ...s.settingsErr, [tab]: '' },
+      }));
+      if (src.then) src.then(rows);
+    } catch (e) {
+      // Say the panel is stale rather than presenting bootstrap's copy as current.
+      this.setState((s) => ({
+        settingsErr: { ...s.settingsErr, [tab]: this.apiMessage(e, "couldn't load these just now") },
+      }));
+    }
+  };
+
+  /**
+   * Keep the console's copy of the people list in step with a write.
+   *
+   * `agents` is built at bootstrap and the adapter offers no reload, so without
+   * this the table — and every assignee menu that reads the same array — would
+   * keep showing the old role, or the deactivated person, until the next full
+   * page load. Passing null for `changes` removes them.
+   */
+  syncAgent(id, changes) {
+    const A = this.api;
+    if (!A) return;
+    A.agents = changes
+      ? A.agents.map((a) => (a.id === id ? { ...a, ...changes } : a))
+      : A.agents.filter((a) => a.id !== id);
+    this.forceUpdate();
+  }
+
+  teamChoices(noneLabel = 'no team for now') {
+    return [{ value: '', label: noneLabel }].concat(
+      (this.api ? this.api.teams : []).map((x) => ({ value: x.id, label: x.name })),
+    );
+  }
+
+  /**
+   * Deactivate somebody's access to this desk.
+   *
+   * DELETE is a soft deactivate of the membership: their replies stay on every
+   * ticket, and the backend revokes their refresh tokens so the session ends
+   * instead of lingering. Removing them from the cached list afterwards is the
+   * visible half — an admin has to be able to see that it took.
+   */
+  askDeactivate = (e) => {
+    const { id, name } = e.currentTarget.dataset;
+    this.setState({
+      confirm: {
+        title: 'deactivate ' + name + '?',
+        body: "they lose access to this desk straight away and are signed out. their replies stay on every ticket, and you can invite them back any time.",
+        ok: 'deactivate', tone: 'danger',
+        action: async () => {
+          this.setState({ confirm: null });
+          try {
+            await api.users.deactivate(id);
+            this.syncAgent(id, null);
+            this.toast(name + ' no longer has access to this desk');
+          } catch (err) {
+            this.toast(this.apiMessage(err, "couldn't deactivate them — nothing changed"), 'bad');
+          }
+        },
+      },
+    });
+  };
+
+  /**
+   * Settings' one record editor.
+   *
+   * Six panels each needed a small form. One modal driven by a descriptor beats
+   * six bespoke ones for the property that matters here: there is exactly one
+   * place a failure is rendered and exactly one place a success is announced,
+   * so none of them can quietly drift back into announcing something that did
+   * not happen.
+   */
+  EDITORS = {
+    user: {
+      title: (m) => 'edit ' + m.name,
+      ok: 'save',
+      note: 'role and team belong to this desk only — changing them here does not touch any other workspace they are a member of.',
+      fields: () => [
+        { name: 'role', kind: 'select', label: 'role', options: this.ROLE_OPTIONS },
+        { name: 'teamId', kind: 'select', label: 'team', options: this.teamChoices() },
+      ],
+      initial: (m) => ({ role: m.role, teamId: m.teamId || '' }),
+      submit: async (v, m) => {
+        const patch = {};
+        if (v.role !== m.role) patch.role = v.role;
+        // null, not undefined: an explicit null is how the team is cleared, and
+        // @IsOptional lets it through to reach the update.
+        if ((v.teamId || null) !== (m.teamId || null)) patch.teamId = v.teamId || null;
+        if (!Object.keys(patch).length) return 'nothing changed';
+        const after = await api.users.patch(m.id, patch);
+        this.syncAgent(m.id, { role: after.role, team: after.teamId });
+        return m.name + ' updated';
+      },
+    },
+
+    'sla-new': {
+      title: () => 'new sla policy',
+      ok: 'create the policy',
+      note: 'targets are written as 30m, 4h or 2d. priority is fixed when the policy is created.',
+      fields: () => [
+        { name: 'name', kind: 'text', label: 'name', placeholder: 'weekend cover' },
+        { name: 'priority', kind: 'select', label: 'applies to priority', options: PRIORITY_OPTIONS },
+        { name: 'first', kind: 'text', label: 'first response target', placeholder: '30m' },
+        { name: 'resolution', kind: 'text', label: 'resolution target', placeholder: '6h' },
+      ],
+      initial: () => ({ name: '', priority: 'normal', first: '', resolution: '' }),
+      validate: (v) =>
+        !v.name.trim() ? 'give the policy a name so you can tell them apart'
+        : MINS(v.first) == null ? 'the first response target should read like 30m, 4h or 2d'
+        : MINS(v.resolution) == null ? 'the resolution target should read like 30m, 4h or 2d'
+        : '',
+      submit: async (v) => {
+        await api.slaPolicies.create({
+          name: v.name.trim(), priority: v.priority,
+          firstResponseMins: MINS(v.first), resolutionMins: MINS(v.resolution),
+        });
+        await this.loadSettingsTab('sla');
+        return 'policy created';
+      },
+    },
+
+    'sla-edit': {
+      title: (m) => 'edit ' + m.name,
+      ok: 'save',
+      // priority is absent from UpdateSlaPolicyDto, so it is absent here too
+      // rather than offered as a field the server would silently ignore.
+      note: 'priority cannot be changed after a policy exists — create another one instead.',
+      fields: () => [
+        { name: 'name', kind: 'text', label: 'name' },
+        { name: 'first', kind: 'text', label: 'first response target', placeholder: '30m' },
+        { name: 'resolution', kind: 'text', label: 'resolution target', placeholder: '6h' },
+      ],
+      initial: (m) => ({
+        name: m.name, first: MINS_TEXT(m.firstResponseMins), resolution: MINS_TEXT(m.resolutionMins),
+      }),
+      validate: (v) =>
+        !v.name.trim() ? 'a policy needs a name'
+        : MINS(v.first) == null ? 'the first response target should read like 30m, 4h or 2d'
+        : MINS(v.resolution) == null ? 'the resolution target should read like 30m, 4h or 2d'
+        : '',
+      submit: async (v, m) => {
+        await api.slaPolicies.patch(m.id, {
+          name: v.name.trim(), firstResponseMins: MINS(v.first), resolutionMins: MINS(v.resolution),
+        });
+        await this.loadSettingsTab('sla');
+        return 'policy updated';
+      },
+    },
+
+    'canned-new': {
+      title: () => 'new canned response',
+      ok: 'save the response',
+      note: 'a response for everyone is admin-only; a lead can write one for their own team.',
+      fields: () => this.CANNED_FIELDS(),
+      initial: () => ({ title: '', body: '', tags: '', teamId: '' }),
+      validate: (v) => (!v.title.trim() ? 'give it a title' : !v.body.trim() ? 'a response needs some words' : ''),
+      submit: async (v) => {
+        await api.cannedResponses.create(this.cannedBody(v));
+        await this.loadSettingsTab('canned');
+        return 'response saved';
+      },
+    },
+
+    'canned-edit': {
+      title: (m) => 'edit ' + m.title,
+      ok: 'save',
+      fields: () => this.CANNED_FIELDS(),
+      initial: (m) => ({
+        title: m.title, body: m.body, tags: (m.tags || []).join(', '), teamId: m.teamId || '',
+      }),
+      validate: (v) => (!v.title.trim() ? 'give it a title' : !v.body.trim() ? 'a response needs some words' : ''),
+      submit: async (v, m) => {
+        await api.cannedResponses.patch(m.id, this.cannedBody(v));
+        await this.loadSettingsTab('canned');
+        return 'response updated';
+      },
+    },
+
+    'tag-new': {
+      title: () => 'new tag',
+      ok: 'create the tag',
+      fields: () => [
+        { name: 'key', kind: 'text', label: 'key', placeholder: 'billing', helper: 'lowercase letters, numbers and hyphens — this is what gets stored on a conversation, and it cannot be changed later.' },
+        { name: 'label', kind: 'text', label: 'label', placeholder: 'billing' },
+        { name: 'color', kind: 'text', label: 'colour', placeholder: '#B8CFB4', helper: 'optional.' },
+      ],
+      initial: () => ({ key: '', label: '', color: '' }),
+      validate: (v) =>
+        !/^[a-z0-9-]+$/.test(v.key.trim()) ? 'the key can only hold lowercase letters, numbers and hyphens'
+        : !v.label.trim() ? 'give the tag a label' : '',
+      submit: async (v) => {
+        await api.tags.create({
+          key: v.key.trim(), label: v.label.trim(), color: v.color.trim() || undefined,
+        });
+        await this.loadSettingsTab('tags');
+        return 'tag created';
+      },
+    },
+
+    'tag-edit': {
+      title: (m) => 'edit ' + m.label,
+      ok: 'save',
+      note: 'the key stays as it is — conversations already carry it.',
+      fields: () => [
+        { name: 'label', kind: 'text', label: 'label' },
+        { name: 'color', kind: 'text', label: 'colour', placeholder: '#B8CFB4', helper: 'optional.' },
+      ],
+      initial: (m) => ({ label: m.label, color: m.color || '' }),
+      validate: (v) => (!v.label.trim() ? 'give the tag a label' : ''),
+      submit: async (v, m) => {
+        await api.tags.patch(m.id, { label: v.label.trim(), color: v.color.trim() || undefined });
+        await this.loadSettingsTab('tags');
+        return 'tag updated';
+      },
+    },
+
+    'hook-new': {
+      title: () => 'add an endpoint',
+      ok: 'add the endpoint',
+      note: "we'll POST a json body to this url whenever one of the chosen things happens.",
+      fields: () => [
+        { name: 'url', kind: 'text', label: 'endpoint url', placeholder: 'https://example.com/hooks/plumo' },
+        { name: 'events', kind: 'checks', label: 'tell them when', options: WEBHOOK_EVENTS },
+        { name: 'secret', kind: 'text', label: 'signing secret', helper: 'optional — we sign each delivery with it so you can verify us.' },
+      ],
+      initial: () => ({ url: '', events: [], secret: '' }),
+      validate: (v) =>
+        !v.url.trim() ? 'an endpoint needs a url'
+        : !v.events.length ? 'choose at least one thing to be told about' : '',
+      submit: async (v) => {
+        await api.webhooks.create({
+          url: v.url.trim(), events: v.events, secret: v.secret.trim() || undefined,
+        });
+        await this.loadSettingsTab('hooks');
+        return 'endpoint added';
+      },
+    },
+  };
+
+  CANNED_FIELDS = () => [
+    { name: 'title', kind: 'text', label: 'title', placeholder: 'refund is on its way' },
+    { name: 'body', kind: 'textarea', label: 'the words', placeholder: 'hi {{name}} — …', helper: '{{name}} becomes the customer’s first name when it is inserted.' },
+    { name: 'tags', kind: 'text', label: 'tags', placeholder: 'billing, refund', helper: 'comma separated; optional.' },
+    { name: 'teamId', kind: 'select', label: 'team', options: this.teamChoices('everyone') },
+  ];
+
+  cannedBody(v) {
+    return {
+      title: v.title.trim(),
+      body: v.body,
+      tags: v.tags.split(',').map((t) => t.trim()).filter(Boolean),
+      // undefined, not null: teamId is @IsUUID and a global response is the
+      // absence of a team, not a team called null.
+      teamId: v.teamId || undefined,
+    };
+  }
+
+  openEditor(kind, meta = {}) {
+    const def = this.EDITORS[kind];
+    if (!def) return;
+    this.setState({
+      editor: { kind, meta, values: def.initial(meta) }, editorBusy: false, editorError: '', menu: null,
+    });
+  }
+  closeEditor = () => this.setState({ editor: null, editorBusy: false, editorError: '' });
+  onEditorField = (e) => {
+    // Read the element eagerly: the updater below runs later, and by then the
+    // input's own value may have moved on.
+    const el = e.currentTarget;
+    const name = el.dataset.f;
+    const box = el.type === 'checkbox';
+    const value = el.value;
+    const checked = el.checked;
+    this.setState((s) => {
+      if (!s.editor) return null;
+      const cur = s.editor.values[name];
+      const next = box
+        ? (checked ? [...(cur || []), value] : (cur || []).filter((x) => x !== value))
+        : value;
+      return { editor: { ...s.editor, values: { ...s.editor.values, [name]: next } }, editorError: '' };
+    });
+  };
+  submitEditor = async () => {
+    const ed = this.state.editor;
+    if (!ed) return;
+    const def = this.EDITORS[ed.kind];
+    const complaint = def.validate ? def.validate(ed.values) : '';
+    if (complaint) { this.setState({ editorError: complaint }); return; }
+    this.setState({ editorBusy: true, editorError: '' });
+    try {
+      const said = await def.submit(ed.values, ed.meta);
+      this.setState({ editor: null, editorBusy: false });
+      this.toast(said + ' ✿');
+    } catch (e) {
+      // Stay open and keep what they typed. Closing on failure is how a form
+      // ends up looking like it saved.
+      this.setState({ editorBusy: false, editorError: this.apiMessage(e) });
+    }
+  };
+
+  /**
+   * Row openers.
+   *
+   * Each reads the raw record the panel loaded, because the table row has
+   * already been formatted for reading and cannot be turned back into a PATCH
+   * body: "4h 30m" is not 270, and a tag's row id is its key rather than the
+   * uuid the route wants. If the raw row is not there, say so instead of
+   * sending something that would 400.
+   */
+  rawRow(tab, match) {
+    const rows = this.state.settings[tab];
+    if (!Array.isArray(rows)) return null;
+    return rows.find(match) ?? null;
+  }
+  missingRow(tab) {
+    this.toast(this.state.settingsErr[tab] || 'still fetching these — try again in a moment', 'bad');
+  }
+
+  editUser = (e) => {
+    const id = e.currentTarget.dataset.id;
+    const a = (this.api?.agents || []).find((x) => x.id === id);
+    if (!a) return;
+    this.openEditor('user', { id, name: a.name, role: a.role, teamId: a.team || '' });
+  };
+  newSlaPolicy = () => this.openEditor('sla-new');
+  editSlaPolicy = (e) => {
+    const row = this.rawRow('sla', (p) => p.id === e.currentTarget.dataset.id);
+    row ? this.openEditor('sla-edit', row) : this.missingRow('sla');
+  };
+  newCanned = () => this.openEditor('canned-new');
+  editCanned = (e) => {
+    const row = this.rawRow('canned', (r) => r.id === e.currentTarget.dataset.id);
+    row ? this.openEditor('canned-edit', row) : this.missingRow('canned');
+  };
+  newTag = () => this.openEditor('tag-new');
+  editTag = (e) => {
+    const row = this.rawRow('tags', (t) => t.key === e.currentTarget.dataset.key);
+    row ? this.openEditor('tag-edit', row) : this.missingRow('tags');
+  };
+  newWebhook = () => this.openEditor('hook-new');
+
+  /* ---- business hours ---- */
+
+  /** The one schedule row this desk keeps, once the panel has read it. */
+  hoursRow() {
+    const rows = this.state.settings.hours;
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  }
+  async writeHours(patch, said) {
+    const row = this.hoursRow();
+    if (!row) { this.missingRow('hours'); return false; }
+    this.setState({ hoursBusy: true });
+    try {
+      const next = await api.businessHours.patch(row.id, patch);
+      this.setState((s) => ({
+        settings: { ...s.settings, hours: [next, ...(s.settings.hours || []).slice(1)] },
+        hoursBusy: false,
+      }));
+      if (said) this.toast(said);
+      return true;
+    } catch (e) {
+      // The checkbox is bound to server state, so it snaps back on its own.
+      this.setState({ hoursBusy: false });
+      this.toast(this.apiMessage(e, "couldn't change the schedule"), 'bad');
+      return false;
+    }
+  }
+  /**
+   * Turn a working day on or off.
+   *
+   * The week is one json blob on one row, so a single day is a read-modify-write
+   * of the whole thing. Turning a day back on reuses whatever window the rest of
+   * the week keeps, rather than inventing 9–5 for a desk that works 8–4.
+   */
+  toggleHoursDay = (e) => {
+    const { day } = e.currentTarget.dataset;
+    const on = e.currentTarget.checked;
+    const row = this.hoursRow();
+    if (!row) { this.missingRow('hours'); return; }
+    const weekly = { ...(row.weeklyJson || {}) };
+    const sample = Object.values(weekly).find((w) => Array.isArray(w) && w.length) || [['09:00', '17:00']];
+    weekly[day] = on ? [[...sample[0]]] : [];
+    this.writeHours({ weeklyJson: weekly }, on ? 'that day counts again' : 'the clocks rest that day now');
+  };
+  onHolidayDraft = (e) => this.setState({ holidayDraft: e.target.value });
+  addHoliday = async () => {
+    const date = this.state.holidayDraft;
+    if (!date) { this.toast('pick a date first', 'bad'); return; }
+    const row = this.hoursRow();
+    if (!row) { this.missingRow('hours'); return; }
+    const list = Array.isArray(row.holidaysJson) ? row.holidaysJson : [];
+    if (list.includes(date)) { this.toast('that day is already a holiday', 'bad'); return; }
+    const ok = await this.writeHours({ holidaysJson: [...list, date].sort() }, 'holiday added — the clocks rest that day');
+    if (ok) this.setState({ holidayDraft: '' });
+  };
+  removeHoliday = (e) => {
+    const { date } = e.currentTarget.dataset;
+    const row = this.hoursRow();
+    if (!row) { this.missingRow('hours'); return; }
+    const list = (Array.isArray(row.holidaysJson) ? row.holidaysJson : []).filter((d) => d !== date);
+    this.writeHours({ holidaysJson: list }, 'holiday removed — that day works again');
+  };
+
+  /* ---- inbound address ---- */
+
+  onInboundDraft = (e) => this.setState({ inboundDraft: e.target.value, inboundError: '' });
+  saveInbound = async () => {
+    const v = this.state.inboundDraft.trim();
+    // An empty field means "switch the channel off", which the API takes as an
+    // explicit null. It is deliberately not the same as omitting the field.
+    const next = v === '' ? null : v;
+    this.setState({ inboundBusy: true, inboundError: '' });
+    try {
+      const res = await api.email.setInboundAddress(next);
+      this.setState((s) => ({
+        settings: { ...s.settings, email: res },
+        inboundDraft: res?.inboundEmail ?? '', inboundBusy: false,
+      }));
+      this.toast(res?.inboundEmail
+        ? 'this desk now receives mail at ' + res.inboundEmail
+        : 'inbound mail is switched off for this desk');
+    } catch (e) {
+      this.setState({
+        inboundBusy: false,
+        inboundError: this.apiMessage(e, "couldn't save that address"),
+      });
+    }
+  };
+
   setSettingsTab = (e) => {
     const v = e.currentTarget.dataset.v;
-    this.setState({ settingsTab: v, secret: null }, () => { if (v === 'team') this.loadInvites(); });
+    this.setState({ settingsTab: v, secret: null }, () => {
+      if (v === 'team') this.loadInvites();
+      this.loadSettingsTab(v);
+    });
   };
   /** Value-form of setAvail — Segment hands us the next value directly. */
   pickAvail = (v) => this.applyAvail(v);
@@ -950,7 +1490,12 @@ export default class Console extends React.Component {
         () => { this.loadQueue({ noFail: true }); this.loadCounts(); },
       );
     } catch (e) {
-      this.setState({ loginError: true });
+      // The error itself, not a boolean. Login.jsx's loginErrorMessage reads
+      // `status` and `code` off it to tell a 429 and a switched-off membership
+      // apart from a wrong password; setting `true` here discarded both and was
+      // why every failure rendered the same sentence. `?? true` keeps the old
+      // shape for a throw that carries nothing — that function takes either.
+      this.setState({ loginError: e ?? true });
       if (e?.offline) this.toast("can't reach the server — is the backend running?", 'bad');
     }
   };
@@ -1124,6 +1669,59 @@ export default class Console extends React.Component {
         };
       });
 
+    /**
+     * The settings tables, built from the rows each panel loaded for itself,
+     * falling back to the bootstrap caches until that first read lands so
+     * nothing flashes empty. The raw rows are also what make the editors
+     * possible at all: the adapter's copies are already formatted for reading
+     * ("4h 30m", a tag keyed by its slug) and cannot be turned back into a
+     * request body.
+     */
+    const stg = S.settings;
+    const bh = Array.isArray(stg.hours) && stg.hours.length ? stg.hours[0] : null;
+    const settingsRows = {
+      slaRows: Array.isArray(stg.sla)
+        ? stg.sla.filter((p) => p.isActive !== false).map((p) => ({
+            id: p.id, name: p.name, priority: p.priority,
+            firstResponse: FMT_MINS(p.firstResponseMins), resolution: FMT_MINS(p.resolutionMins),
+            hours: p.businessHours ? 'business hours' : '24/7',
+          }))
+        : (A ? A.slaPolicies : []),
+      hoursRows: bh
+        ? DAY_KEYS.map(([key, day]) => {
+            const w = (bh.weeklyJson || {})[key] || [];
+            return { key, day, open: w.length ? w[0][0] : '—', close: w.length ? w[0][1] : '—', on: w.length > 0 };
+          })
+        : (A ? A.businessHours : []).map((d) => ({ ...d, key: '' })),
+      cannedRows: Array.isArray(stg.canned)
+        ? stg.canned.map((r) => ({
+            id: r.id, title: r.title, team: r.team?.name ?? 'everyone',
+            tagList: (r.tags || []).join(', '), snippet: r.body.slice(0, 110) + '…',
+          }))
+        : (A ? A.cannedResponses : []).map(r => ({ id: r.id, title: r.title, team: r.team, tagList: r.tags.join(', '), snippet: r.body.slice(0, 110) + '…' })),
+      tagRows: Array.isArray(stg.tags)
+        ? stg.tags.map((t2) => ({
+            id: t2.id, key: t2.key, label: t2.label,
+            tone: this.TAGTONE[t2.key] || 'neutral', count: (fc.tag || {})[t2.key] || t2.count || 0,
+          }))
+        : (A ? A.tags : []).map(t2 => ({ id: t2.id, key: t2.id, label: t2.label, tone: t2.tone, count: (fc.tag || {})[t2.id] || 0 })),
+      hookRows: Array.isArray(stg.hooks)
+        ? stg.hooks.map((w) => ({
+            id: w.id, url: w.url, events: (w.events || []).join(', '),
+            status: !w.isActive ? 'disabled' : w.lastDelivery?.status === 'failed' ? 'failing' : 'active',
+            last: w.lastDelivery ? this.rel(Date.parse(w.lastDelivery.createdAt)) + ' ago' : '—',
+            tone: w.isActive && w.lastDelivery?.status !== 'failed' ? 'sla-met' : 'sla-breach',
+          }))
+        : (A ? A.webhooks : []).map(w => ({ id: w.id, url: w.url, events: w.events, status: w.status, last: w.last, tone: w.status === 'active' ? 'sla-met' : 'sla-breach' })),
+    };
+    const holidays = (bh && Array.isArray(bh.holidaysJson) ? bh.holidaysJson : []).map((d) => ({
+      date: d,
+      label: new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).toLowerCase(),
+    }));
+
+    const ed = S.editor;
+    const edDef = ed ? this.EDITORS[ed.kind] : null;
+
     const dd = (A && S.drill && A.drilldowns) ? A.drilldowns[S.drill] : null;
     const rep = A ? A.reports : { kpis: [], volume: [], byChannel: [], byAgent: [] };
     const maxVol = Math.max(1, ...rep.volume.map(v => Math.max(v.created, v.resolved)));
@@ -1277,16 +1875,58 @@ export default class Console extends React.Component {
       tabTeam: S.settingsTab === 'team', tabSla: S.settingsTab === 'sla', tabHours: S.settingsTab === 'hours',
       tabCanned: S.settingsTab === 'canned', tabTags: S.settingsTab === 'tags', tabHooks: S.settingsTab === 'hooks',
       tabKeys: S.settingsTab === 'keys', tabEmail: S.settingsTab === 'email',
-      teamRows: (A ? A.agents : []).map(a => ({ id: a.id, name: a.name, email: a.email, role: a.role, av: a.av, initials: this.initials(a.name), teamName: ((A ? A.teams : []).find(t2 => t2.id === a.team) || {}).name, avail: a.avail, lastRel: a.lastActive < 60 ? a.lastActive + 'm ago' : Math.round(a.lastActive / 60) + 'h ago', availTone: a.avail === 'available' ? 'sla-met' : 'sla-paused' })),
-      slaRows: A ? A.slaPolicies : [], hoursRows: A ? A.businessHours : [],
-      hookRows: (A ? A.webhooks : []).map(w => ({ id: w.id, url: w.url, events: w.events, status: w.status, last: w.last, tone: w.status === 'active' ? 'sla-met' : 'sla-breach' })),
-      keyRows: A ? A.apiKeys : [], tagRows: (A ? A.tags : []).map(t2 => ({ id: t2.id, label: t2.label, tone: t2.tone, count: (fc.tag || {})[t2.id] || 0 })),
-      cannedRows: (A ? A.cannedResponses : []).map(r => ({ id: r.id, title: r.title, team: r.team, tagList: r.tags.join(', '), snippet: r.body.slice(0, 110) + '…' })),
+      teamRows: (A ? A.agents : []).map(a => ({ id: a.id, name: a.name, email: a.email, role: a.role, av: a.av, initials: this.initials(a.name), teamName: ((A ? A.teams : []).find(t2 => t2.id === a.team) || {}).name, avail: a.avail, lastRel: a.lastActive < 60 ? a.lastActive + 'm ago' : Math.round(a.lastActive / 60) + 'h ago', availTone: a.avail === 'available' ? 'sla-met' : 'sla-paused',
+        // Both writes are @Roles('admin'), so offering them to a lead would be
+        // offering them a 403. Never on your own row: the backend has no
+        // self-guard, and deactivating yourself revokes your own tokens.
+        canEdit: S.role === 'admin', canDeactivate: S.role === 'admin' && a.id !== me.id,
+      })),
+      ...settingsRows,
+      keyRows: A ? A.apiKeys : [],
       secret: S.secret, hasSecret: !!S.secret, copySecret: this.copySecret,
       keyName: S.keyName, onKeyName: this.onKeyName,
       keyKind: S.keyKind, setKeyKind: this.setKeyKind,
       keyKinds: Object.entries(this.KEY_KINDS).map(([id, k]) => ({ id, ...k, on: S.keyKind === id })),
       revokeKey: this.revokeKey, genKey: this.genKey, hideKey: this.hideKey,
+
+      /* settings writes. Everything here replaced a V.mock — see the block
+         above setSettingsTab. The write endpoints are @Roles('admin') except
+         canned responses, which leads may manage for their own team, so the
+         controls are offered on exactly those terms rather than offered to
+         everyone and refused by the server. */
+      canManageDesk: S.role === 'admin', canManageCanned: S.role !== 'agent',
+      editUser: this.editUser, askDeactivate: this.askDeactivate,
+      newSlaPolicy: this.newSlaPolicy, editSlaPolicy: this.editSlaPolicy,
+      newCanned: this.newCanned, editCanned: this.editCanned,
+      newTag: this.newTag, editTag: this.editTag, newWebhook: this.newWebhook,
+      slaErr: S.settingsErr.sla || '', hoursErr: S.settingsErr.hours || '',
+      cannedErr: S.settingsErr.canned || '', tagsErr: S.settingsErr.tags || '',
+      hooksErr: S.settingsErr.hooks || '', emailErr: S.settingsErr.email || '',
+
+      editorOpen: !!ed, editorTitle: ed && edDef ? edDef.title(ed.meta) : '',
+      editorOk: ed && edDef ? edDef.ok : '', editorNote: ed && edDef ? edDef.note || '' : '',
+      editorError: S.editorError, editorBusy: !!S.editorBusy,
+      editorFields: ed && edDef
+        ? edDef.fields(ed.meta).map((f) => ({
+            ...f,
+            value: ed.values[f.name] ?? '',
+            options: (f.options || []).map((o) => ({
+              ...o,
+              on: f.kind === 'checks'
+                ? (ed.values[f.name] || []).includes(o.value)
+                : o.value === ed.values[f.name],
+            })),
+          }))
+        : [],
+      closeEditor: this.closeEditor, submitEditor: this.submitEditor, onEditorField: this.onEditorField,
+
+      hoursReady: !!bh, hoursBusy: !!S.hoursBusy, toggleHoursDay: this.toggleHoursDay,
+      holidays, hasHolidays: holidays.length > 0, holidayDraft: S.holidayDraft,
+      onHolidayDraft: this.onHolidayDraft, addHoliday: this.addHoliday, removeHoliday: this.removeHoliday,
+
+      inboundDraft: S.inboundDraft, onInboundDraft: this.onInboundDraft, saveInbound: this.saveInbound,
+      inboundBusy: !!S.inboundBusy, inboundError: S.inboundError || '',
+      inboundOn: !!(stg.email && stg.email.inboundEmail),
 
       // invitations. `canInvite` is admin and only admin — the endpoints are,
       // so offering the button to a lead would be offering them a 403.

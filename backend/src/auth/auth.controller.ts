@@ -24,6 +24,21 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('refresh')
+  // THE HEADER IS THE POINT OF THIS ROUTE'S SIGNATURE, not decoration.
+  //
+  // AuthService.refresh re-resolves the membership every time rather than
+  // carrying the old one over, so a refresh that names no desk has to be
+  // resolved by guessing — and for somebody who belongs to two workspaces the
+  // resolver refuses to guess and answers 403. The console reads a failed
+  // refresh as session death, so that 403 is a logout every fifteen minutes for
+  // exactly the people invitations are about to create.
+  //
+  // On the header and not a `workspaceSlug` on RefreshDto: naming a tenant is
+  // one mechanism across this API (WORKSPACE_SLUG_HEADER), a body field would
+  // be a second one to keep in step, and it is the only form login can use —
+  // its body is the credential. Public says nothing about tenancy: this route
+  // has no bearer token to carry a workspace for it, which is precisely why it
+  // has to be told.
   refresh(@Body() dto: RefreshDto, @Headers(WORKSPACE_SLUG_HEADER) slug?: string) {
     return this.auth.refresh(dto.refreshToken, slug?.trim() || undefined);
   }

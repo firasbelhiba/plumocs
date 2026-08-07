@@ -82,9 +82,64 @@ function Federated({ provider, icon, children, onClick, muted }) {
   );
 }
 
+/* ---- sign-in failures ----------------------------------------------------- */
+
+/**
+ * The one thing everybody who fails to sign in used to be told.
+ *
+ * Still the answer for a bad credential, and still the answer for an address
+ * that has no account — those two must read identically or this form becomes an
+ * oracle for who works here. The API agrees: auth.service returns exactly this
+ * 401 for "no such user", "account deactivated" and "wrong password" alike.
+ */
+const BAD_CREDENTIALS = 'incorrect email or password. no harm done — try once more.';
+
+/**
+ * What a failed sign-in should actually say.
+ *
+ * Every failure rendered BAD_CREDENTIALS, so four different facts arrived as one
+ * sentence: an agent whose desk access an admin had just switched off retyped a
+ * password that was correct all along, and somebody being rate-limited was told
+ * their password was wrong and kept trying — which is the one response that
+ * makes a rate limit worse.
+ *
+ * The workspace answers are safe to be specific about, unlike the credential
+ * one: they are 403s, and a 403 is only reachable once the password has already
+ * been verified. There is nobody left to enumerate to by then.
+ *
+ * Accepts whatever the console hands over: `true` (the historical shape — no
+ * detail, so the credential line), a ready-made string, or an ApiError carrying
+ * `status` and the envelope's `code`. Anything it does not recognise falls back
+ * to the credential line rather than inventing a diagnosis.
+ */
+export function loginErrorMessage(err) {
+  if (!err) return null;
+  if (typeof err === 'string') return err;
+
+  // status 0 is this client's own marker for "fetch never got there".
+  if (err.status === 0) return "can't reach the server right now — try again in a moment.";
+  if (err.status === 429) return 'too many attempts. wait a moment, then try again.';
+
+  // Actionable, and the reason it gets its own line: the account is real, the
+  // password was right, and somebody with admin can undo this in a click.
+  if (err.code === 'WORKSPACE_MEMBERSHIP_DISABLED') {
+    return 'your access to this workspace has been turned off. an admin can switch it back on.';
+  }
+
+  // Every other 403 from the workspace resolver — not a member, no such desk,
+  // desk suspended, or several desks and none named. The server deliberately
+  // collapses those into one answer so a valid login cannot be used to map which
+  // desks exist here, and this line does not try to un-collapse it.
+  if (err.status === 403) return "this account can't reach this workspace. ask an admin to invite you.";
+
+  return BAD_CREDENTIALS;
+}
+
 /* ---- screen -------------------------------------------------------------- */
 
 export default function Login({ V }) {
+  const loginError = loginErrorMessage(V.loginError);
+
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-6 py-10 relative overflow-hidden bg-bg"
@@ -138,13 +193,13 @@ export default function Login({ V }) {
               <span className="flex-1 h-px bg-[color:var(--border)]" />
             </div>
 
-            {V.loginError && (
-              <div className="flex gap-2.5 items-start px-3 py-2.5 rounded-token-sm mb-4 text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
+            {loginError && (
+              <div role="alert" className="flex gap-2.5 items-start px-3 py-2.5 rounded-token-sm mb-4 text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="flex-none mt-px">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M12 8v4.5M12 16h.01" />
                 </svg>
-                <span>incorrect email or password. no harm done — try once more.</span>
+                <span>{loginError}</span>
               </div>
             )}
 

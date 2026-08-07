@@ -95,16 +95,22 @@ export class WorkspaceContextService {
     // Nothing named a workspace. Before reaching for any instance-wide default,
     // ask the narrower question: does THIS human belong to exactly one desk?
     //
-    // /auth/login and /auth/refresh cannot send the header — the console marks
-    // them `auth: false` and the header is attached only to authenticated
-    // requests — so on a multi-workspace instance both would fall through to
-    // soleSlug(), get null, and answer 403 to every user alive. That is not a
-    // hypothetical: it is what makes creating a second workspace an outage
-    // rather than a data change, and it detonates at the next restart because a
-    // successful probe is memoised.
+    // /auth/login cannot send the header — its body IS the credential and the
+    // console has no session yet — so on a multi-workspace instance it would
+    // fall through to soleSlug(), get null, and answer 403 to every user alive.
+    // That is not a hypothetical: it is what makes creating a second workspace
+    // an outage rather than a data change, and it detonates at the next restart
+    // because a successful probe is memoised.
     //
     // A login already knows who is asking. One active membership means there
     // was never anything to disambiguate.
+    //
+    // /auth/refresh USED to arrive here unnamed too, for a worse reason: the
+    // console gated the header on `auth`, and refresh is `auth: false` because
+    // it carries no bearer token. It now names its desk explicitly, so it takes
+    // the branch below rather than this one — which matters, because this
+    // branch cannot answer for a two-membership user and a refresh must not
+    // depend on the caller having only one desk.
     if (!slug) {
       const sole = await this.soleMembership(userId);
       if (sole) return sole;
@@ -112,9 +118,10 @@ export class WorkspaceContextService {
 
     const target = slug ?? (await this.soleSlug());
     if (!target) {
-      throw new ForbiddenException(
-        `More than one workspace exists — name yours with the ${WORKSPACE_SLUG_HEADER} header`,
-      );
+      throw new ForbiddenException({
+        code: 'WORKSPACE_NOT_NAMED',
+        message: `More than one workspace exists — name yours with the ${WORKSPACE_SLUG_HEADER} header`,
+      });
     }
 
     const rows = await this.prisma.$queryRaw<
@@ -132,14 +139,33 @@ export class WorkspaceContextService {
     // not a member". Distinguishing them tells an attacker with one valid login
     // which desks exist on this instance, and none of the three is actionable
     // by the caller anyway.
+    //
+    // The `code` is carried so the console can say something other than
+    // "incorrect email or password" to somebody whose password was in fact
+    // correct — it deliberately does NOT subdivide the three cases above, and
+    // is reachable only after the password has already been verified, so it
+    // enumerates nothing.
     const row = rows[0];
-    if (!row) throw new ForbiddenException('You do not have access to this workspace');
+    if (!row) {
+      throw new ForbiddenException({
+        code: 'WORKSPACE_ACCESS_DENIED',
+        message: 'You do not have access to this workspace',
+      });
+    }
 
     // The per-desk switch, distinct from users.is_active which the login path
     // already checked. Offboarding somebody from one desk must not lock them out
     // of the others, so these two are checked in two different places.
+    //
+    // Its own code, unlike the three collapsed above: this one IS actionable —
+    // the person exists, the desk exists, an admin turned them off and can turn
+    // them back on — and telling them so is what stops them retyping a correct
+    // password until they give up.
     if (!row.membershipActive) {
-      throw new ForbiddenException('Your access to this workspace has been disabled');
+      throw new ForbiddenException({
+        code: 'WORKSPACE_MEMBERSHIP_DISABLED',
+        message: 'Your access to this workspace has been disabled',
+      });
     }
 
     return { workspaceId: row.workspaceId, workspaceSlug: row.workspaceSlug, role: row.role, teamId: row.teamId };
@@ -153,6 +179,11 @@ export class WorkspaceContextService {
    * to return first, which is a cross-tenant answer arrived at by coin flip. The
    * caller then falls through to the instance default and, failing that, to a
    * 403 telling them to name the workspace — which is the honest reply.
+   *
+   * That 403 is only honest when the caller CAN name one. It is why /auth/login
+   * and /auth/refresh both send the slug header now: a token refresh has no
+   * human to read the message and retry, so an unnamed refresh turned this
+   * refusal into a fifteen-minute logout loop for anyone on two desks.
    */
   private async soleMembership(userId: string): Promise<ResolvedMembership | null> {
     const rows = await this.prisma.$queryRaw<

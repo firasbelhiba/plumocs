@@ -88,7 +88,15 @@ async function parseBody(res) {
   }
 }
 
-async function rawRequest(path, { method = 'GET', body, headers = {}, auth = true } = {}) {
+/**
+ * @param {object} opts
+ * @param {boolean} [opts.auth]      send the bearer token, and treat a 401 as
+ *                                   "refresh and retry" rather than an answer.
+ * @param {boolean} [opts.workspace] name the desk with X-Workspace-Slug.
+ *                                   Defaults to `auth`, which is what every
+ *                                   caller wants; /auth/refresh overrides it.
+ */
+async function rawRequest(path, { method = 'GET', body, headers = {}, auth = true, workspace = auth } = {}) {
   let res;
   try {
     res = await fetch(`${API_URL}${path}`, {
@@ -104,9 +112,23 @@ async function rawRequest(path, { method = 'GET', body, headers = {}, auth = tru
         // request without this header is a 403. Sending it now means the second
         // workspace is a data change, not an outage.
         //
+        // Gated on `workspace`, NOT on `auth`. Those two were the same flag
+        // once, and conflating them is what logged a two-desk user out every
+        // fifteen minutes: /auth/refresh is `auth: false` because it carries no
+        // bearer token, which silently also meant "do not name the desk", and
+        // an unnamed refresh for somebody with two memberships is a 403 the
+        // client reads as session death. Naming a desk is about WHICH tenant,
+        // carrying a token is about WHO — a public endpoint can need the first
+        // without the second.
+        //
+        // Still off for /auth/login and the invitation endpoints, which default
+        // it from `auth: false`: those decide which desk you land on, and
+        // pinning them to whatever desk the previous session happened to be on
+        // would refuse a valid sign-in as somebody else.
+        //
         // Older sessions stored before this shipped have no workspace, so this
         // stays absent and the server falls back exactly as before.
-        ...(auth && session?.workspace?.slug ? { 'x-workspace-slug': session.workspace.slug } : {}),
+        ...(workspace && session?.workspace?.slug ? { 'x-workspace-slug': session.workspace.slug } : {}),
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -130,12 +152,41 @@ async function rawRequest(path, { method = 'GET', body, headers = {}, auth = tru
 async function refreshTokens() {
   if (!session?.refreshToken) throw new ApiError('No session', { status: 401 });
   if (!refreshing) {
+    // The desk this session is already on, read before the request so the
+    // check below compares against what we actually asked for.
+    const asked = session.workspace?.slug ?? null;
     refreshing = rawRequest('/auth/refresh', {
       method: 'POST',
       body: { refreshToken: session.refreshToken },
       auth: false,
+      // Named even though this is a public endpoint. The server re-resolves the
+      // membership on every refresh — deliberately, so a revoked one cannot be
+      // renewed — and with nothing naming a desk that resolution has to guess.
+      // It refuses to guess for somebody with two memberships and answers 403,
+      // which lands in the catch below as session death: a 15-minute logout
+      // loop for anyone on two desks. Invitations create the first such person.
+      //
+      // The header rather than a `workspaceSlug` field on the body: it is the
+      // one way a client names a tenant everywhere else on this API, the route
+      // already reads it (auth.controller.ts), and the global ValidationPipe
+      // runs `forbidNonWhitelisted`, so an unknown body field is a 400 until
+      // RefreshDto grows one. One mechanism, no second way to be wrong.
+      workspace: true,
     })
       .then((data) => {
+        // A refresh renews the desk you are on; it must never move you to
+        // another one. It cannot today — we named the desk and the server
+        // resolves that slug or refuses — but the whole bug being fixed here
+        // was a silent workspace resolution, so this one is checked out loud.
+        // citext on the server side, hence the case-insensitive compare.
+        const landed = data.workspace?.slug ?? null;
+        if (asked && landed && landed.toLowerCase() !== asked.toLowerCase()) {
+          throw new ApiError('Session refreshed onto a different workspace', {
+            status: 401,
+            code: 'WORKSPACE_MISMATCH',
+          });
+        }
+
         // Spread the existing session, do NOT rebuild it. setSession assigns
         // wholesale, so listing only the three fields the refresh returns drops
         // everything else on it — in particular `workspace`, which is what puts
@@ -143,7 +194,17 @@ async function refreshTokens() {
         // silently un-names this client every 15 minutes until the next full
         // page load restores it from /auth/me, and on a multi-workspace
         // instance an un-named request is a 403.
-        setSession({ ...session, accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user });
+        //
+        // The server's answer wins over the stored one when it gives one, which
+        // is how a session stored before `workspace` existed learns its desk
+        // here instead of waiting for the next /auth/me.
+        setSession({
+          ...session,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          user: data.user,
+          workspace: data.workspace ?? session.workspace,
+        });
         return data;
       })
       .finally(() => {

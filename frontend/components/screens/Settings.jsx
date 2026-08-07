@@ -3,7 +3,7 @@
 import { sx } from '../sx';
 import { buttonVariants } from '../common/Button';
 import { cn } from '@/lib/utils';
-import { Button, Input, Modal, Select, UserAvatar } from '../common';
+import { Button, Input, Modal, Select, Textarea, UserAvatar } from '../common';
 
 /* Settings keeps its dense bespoke layout, but every control below borrows the
    shared components' own class strings (buttonVariants / the Input recipe) so
@@ -17,6 +17,16 @@ const primaryBtn = () => cn(buttonVariants({ variant: 'primary', size: 'md' }), 
 const fieldInput = () => cn(
   'flex h-input w-full rounded-token-sm border bg-surface px-2.5 py-1.5 text-[13px] text-fg placeholder:text-fg-3',
   'border-[color:var(--border)] focus:outline-none focus:border-[color:var(--primary)] focus-ring',
+);
+
+/**
+ * A panel whose rows could not be fetched says so, in place, rather than
+ * showing the copy bootstrap happened to leave behind as if it were current.
+ */
+const LoadNote = ({ children }) => (
+  <span data-tone="sla-breach" className={sx('font-size:12.5px;padding:8px 12px;border-radius:var(--cs-r-sm);background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
+    {children}
+  </span>
 );
 
 export default function Settings({ V }) {
@@ -105,11 +115,17 @@ export default function Settings({ V }) {
                   <span data-tone="st-open" className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>{u.role}</span>
                   <span className={sx('color:var(--cs-muted)')}>{u.teamName}</span>
                   <span className={sx('color:var(--cs-muted);font-size:12.5px;font-variant-numeric:tabular-nums')}>{u.lastRel}</span>
+                  {/* Both writes are admin-only on the server. A lead sees no
+                      buttons rather than buttons that answer 403, and nobody
+                      sees a deactivate control on their own row — it would
+                      revoke their own tokens and sign them out mid-sentence. */}
                   <span className={sx('display:flex;gap:6px;justify-content:flex-end')}>
-                    <button onClick={V.mock} data-msg="edit panel opens here" className={editBtn()}>edit</button>
-                    <button onClick={V.askMock} data-title={'deactivate ' + u.name + '?'} data-body="they'll lose access but their replies stay on every ticket. you can bring them back any time." data-ok="deactivate" data-msg={u.name + ' deactivated'} aria-label="deactivate" className={sx('display:grid;place-items:center;width:26px;height:26px;border:0.5px solid var(--cs-border);border-radius:50%;background:var(--cs-surface);color:var(--cs-muted);cursor:pointer', { hover: 'background:var(--cs-hover);color:var(--cs-text)' })}>
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
-                    </button>
+                    {u.canEdit && <button onClick={V.editUser} data-id={u.id} className={editBtn()}>edit</button>}
+                    {u.canDeactivate && (
+                      <button onClick={V.askDeactivate} data-id={u.id} data-name={u.name} aria-label={'deactivate ' + u.name} title={'deactivate ' + u.name} className={sx('display:grid;place-items:center;width:26px;height:26px;border:0.5px solid var(--cs-border);border-radius:50%;background:var(--cs-surface);color:var(--cs-muted);cursor:pointer', { hover: 'background:var(--cs-hover);color:var(--cs-text)' })}>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
@@ -227,8 +243,9 @@ export default function Settings({ V }) {
                 <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>sla policies</h2>
                 <p className={sx('font-size:13px;color:var(--cs-muted)')}>targets by priority. clocks pause outside business hours, and while you are waiting on someone.</p>
               </div>
-              <button onClick={V.mock} data-msg="policy saved ✿" className={primaryBtn()}>add a policy</button>
+              {V.canManageDesk && <button onClick={V.newSlaPolicy} className={primaryBtn()}>add a policy</button>}
             </div>
+            {V.slaErr && <LoadNote>{V.slaErr}</LoadNote>}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
               <div className={sx('display:grid;grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) 140px 130px 150px 70px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
                 <span>name</span><span>priority</span><span>first response</span><span>resolution</span><span>hours</span><span className={sx('text-align:right')}></span>
@@ -240,31 +257,15 @@ export default function Settings({ V }) {
                   <span className={sx('font-variant-numeric:tabular-nums')}>{p.firstResponse}</span>
                   <span className={sx('font-variant-numeric:tabular-nums')}>{p.resolution}</span>
                   <span className={sx('color:var(--cs-muted)')}>{p.hours}</span>
-                  <span className={sx('text-align:right')}><button onClick={V.mock} data-msg="policy editor opens here" className={editBtn()}>edit</button></span>
+                  <span className={sx('text-align:right')}>
+                    {V.canManageDesk && <button onClick={V.editSlaPolicy} data-id={p.id} className={editBtn()}>edit</button>}
+                  </span>
                 </div>
               ))}
             </div>
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:20px;display:flex;flex-direction:column;gap:14px;max-width:620px')}>
-              <span className={sx('font-size:14px;font-weight:500')}>new policy</span>
-              <div className={sx('display:grid;grid-template-columns:1fr 1fr;gap:12px')}>
-                <label className={sx('display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>name
-                  <input placeholder="weekend cover" className={fieldInput()} />
-                </label>
-                <label className={sx('display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>applies to
-                  <input placeholder="been waiting a while" className={fieldInput()} />
-                </label>
-                <label className={sx('display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>first response target
-                  <input placeholder="30m" className={fieldInput()} />
-                </label>
-                <label className={sx('display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>resolution target
-                  <input placeholder="6h" className={fieldInput()} />
-                </label>
-              </div>
-              <div className={sx('display:flex;gap:8px')}>
-                <button onClick={V.mock} data-msg="policy saved ✿" className={sx('padding:9px 18px;border:none;border-radius:var(--plumo-radius-pill);background:var(--cs-btn);color:#fff;font-size:13px;font-weight:500;cursor:pointer')}>save policy</button>
-                <button onClick={V.mock} data-msg="nothing saved — no harm done" className={sx('padding:9px 18px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:13px;cursor:pointer')}>cancel</button>
-              </div>
-            </div>
+            {/* The "new policy" card that used to sit here was a set of inputs
+                nothing read and two buttons that only toasted. "add a policy"
+                above opens the real form. */}
           </div>
         )}
 
@@ -272,25 +273,67 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:680px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
               <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>business hours</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>europe/lisbon · sla clocks rest when your team does.</p>
+              <p className={sx('font-size:13px;color:var(--cs-muted)')}>sla clocks rest when your team does.</p>
             </div>
+            {V.hoursErr && <LoadNote>{V.hoursErr}</LoadNote>}
+
+            {/* No calendar at all is a real state, not a loading one — the
+                clocks then run around the clock. Say that rather than show an
+                empty week with every switch greyed out and no explanation. */}
+            {!V.hoursReady && !V.hoursErr && (
+              <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md);line-height:1.55')}>
+                this desk has no working calendar yet, so sla clocks run 24/7. one has to be created on
+                the server before the days below can be switched on and off here.
+              </span>
+            )}
+
+            {/* The tick is bound to what the server confirmed, not to a local
+                guess: a failed write leaves the day exactly as it was and says
+                so, instead of a tick that stays put over an unchanged schedule. */}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
               {V.hoursRows.map(d => (
                 <div key={d.day} className={sx('display:grid;grid-template-columns:130px 1fr 1fr 70px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
                   <span>{d.day}</span>
                   <span className={sx('font-variant-numeric:tabular-nums;color:var(--cs-muted)')}>{d.open}</span>
                   <span className={sx('font-variant-numeric:tabular-nums;color:var(--cs-muted)')}>{d.close}</span>
-                  <span className={sx('text-align:right')}><input type="checkbox" defaultChecked={d.on} onChange={V.mock} data-msg="schedule updated" aria-label="working day" className={sx('width:15px;height:15px;accent-color:var(--cs-brand);cursor:pointer')} /></span>
+                  <span className={sx('text-align:right')}>
+                    <input
+                      type="checkbox"
+                      checked={d.on}
+                      disabled={!V.canManageDesk || !V.hoursReady || V.hoursBusy}
+                      onChange={V.toggleHoursDay}
+                      data-day={d.key}
+                      aria-label={'work on ' + d.day}
+                      className={sx('width:15px;height:15px;accent-color:var(--cs-brand);cursor:pointer')}
+                    />
+                  </span>
                 </div>
               ))}
             </div>
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:var(--cs-cardpad);display:flex;flex-direction:column;gap:8px')}>
-              <span className={sx('font-size:13.5px;font-weight:500')}>holidays</span>
-              <div className={sx('display:flex;gap:6px;flex-wrap:wrap')}>
-                <span className={sx('padding:4px 11px;border-radius:100px;background:var(--cs-soft);font-size:12.5px')}>25 dec · christmas</span>
-                <span className={sx('padding:4px 11px;border-radius:100px;background:var(--cs-soft);font-size:12.5px')}>1 jan · new year</span>
-                <button onClick={V.mock} data-msg="holiday added" className={sx('padding:4px 11px;border:0.5px dashed var(--cs-border);border-radius:100px;background:transparent;color:var(--cs-muted);font-size:12.5px;cursor:pointer')}>+ add</button>
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:var(--cs-cardpad);display:flex;flex-direction:column;gap:10px')}>
+              <div className={sx('display:flex;flex-direction:column;gap:3px')}>
+                <span className={sx('font-size:13.5px;font-weight:500')}>holidays</span>
+                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>the clocks rest on these days too, so no target ever lands on one.</span>
               </div>
+              <div className={sx('display:flex;gap:6px;flex-wrap:wrap;align-items:center')}>
+                {V.holidays.map(h => (
+                  <span key={h.date} className={sx('display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:100px;background:var(--cs-soft);font-size:12.5px')}>
+                    {h.label}
+                    {V.canManageDesk && (
+                      <button onClick={V.removeHoliday} data-date={h.date} disabled={V.hoursBusy} aria-label={'stop resting on ' + h.label} className={sx('border:none;background:transparent;color:var(--cs-muted);font-size:13px;line-height:1;cursor:pointer;padding:0')}>×</button>
+                    )}
+                  </span>
+                ))}
+                {!V.hasHolidays && (
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>none yet — every working day counts.</span>
+                )}
+              </div>
+              {V.canManageDesk && (
+                <div className={sx('display:flex;gap:8px;align-items:center;flex-wrap:wrap')}>
+                  <input type="date" value={V.holidayDraft} onChange={V.onHolidayDraft} aria-label="holiday date" className={cn(fieldInput(), 'max-w-[200px]')} />
+                  <button onClick={V.addHoliday} disabled={!V.hoursReady || V.hoursBusy} className={editBtn()}>add a holiday</button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -302,8 +345,9 @@ export default function Settings({ V }) {
                 <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>canned responses</h2>
                 <p className={sx('font-size:13px;color:var(--cs-muted)')}>written once, kindly, so nobody has to find the words twice.</p>
               </div>
-              <button onClick={V.mock} data-msg="response saved ✿" className={primaryBtn()}>new response</button>
+              {V.canManageCanned && <button onClick={V.newCanned} className={primaryBtn()}>new response</button>}
             </div>
+            {V.cannedErr && <LoadNote>{V.cannedErr}</LoadNote>}
             <div className={sx('display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px')}>
               {V.cannedRows.map(r => (
                 <div key={r.id} className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:var(--cs-cardpad);display:flex;flex-direction:column;gap:8px')}>
@@ -315,7 +359,7 @@ export default function Settings({ V }) {
                   <span className={sx('display:flex;align-items:center;gap:8px')}>
                     <span className={sx('padding:2px 9px;border-radius:100px;background:var(--cs-soft);font-size:11.5px;color:var(--cs-muted)')}>{r.tagList}</span>
                     <span className={sx('flex:1')}></span>
-                    <button onClick={V.mock} data-msg="editor opens here" className={editBtn()}>edit</button>
+                    {V.canManageCanned && <button onClick={V.editCanned} data-id={r.id} className={editBtn()}>edit</button>}
                   </span>
                 </div>
               ))}
@@ -327,18 +371,23 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:620px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
               <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>tags</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>six is plenty. colours come from the plumo palette.</p>
+              <p className={sx('font-size:13px;color:var(--cs-muted)')}>how conversations get sorted. a key is written onto every conversation that wears it, so it never changes.</p>
             </div>
+            {V.tagsErr && <LoadNote>{V.tagsErr}</LoadNote>}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
               {V.tagRows.map(t => (
                 <div key={t.id} className={sx('display:grid;grid-template-columns:1fr 90px 80px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
                   <span data-tone={t.tone} className={sx('display:inline-flex;align-items:center;gap:7px;padding:3px 11px;border-radius:100px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}><i className={sx('width:7px;height:7px;border-radius:50%;background:var(--tone-hue)')}></i>{t.label}</span>
                   <span className={sx('color:var(--cs-muted);font-variant-numeric:tabular-nums;font-size:12.5px')}>{t.count} conversations</span>
-                  <span className={sx('text-align:right')}><button onClick={V.mock} data-msg="tag editor opens here" className={editBtn()}>edit</button></span>
+                  <span className={sx('text-align:right')}>
+                    {V.canManageDesk && <button onClick={V.editTag} data-key={t.key} className={editBtn()}>edit</button>}
+                  </span>
                 </div>
               ))}
             </div>
-            <button onClick={V.mock} data-msg="tag created ✿" className={sx('align-self:flex-start;padding:9px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:13px;cursor:pointer', { hover: 'color:var(--cs-brand);border-color:var(--cs-brand)' })}>+ new tag</button>
+            {V.canManageDesk && (
+              <button onClick={V.newTag} className={sx('align-self:flex-start;padding:9px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:13px;cursor:pointer', { hover: 'color:var(--cs-brand);border-color:var(--cs-brand)' })}>+ new tag</button>
+            )}
           </div>
         )}
 
@@ -349,8 +398,9 @@ export default function Settings({ V }) {
                 <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>webhooks</h2>
                 <p className={sx('font-size:13px;color:var(--cs-muted)')}>where plumo tells other systems what happened.</p>
               </div>
-              <button onClick={V.mock} data-msg="endpoint added — we'll send a test event" className={primaryBtn()}>add endpoint</button>
+              {V.canManageDesk && <button onClick={V.newWebhook} className={primaryBtn()}>add endpoint</button>}
             </div>
+            {V.hooksErr && <LoadNote>{V.hooksErr}</LoadNote>}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
               <div className={sx('display:grid;grid-template-columns:minmax(240px,1.6fr) minmax(180px,1fr) 110px 140px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
                 <span>endpoint</span><span>events</span><span>status</span><span className={sx('text-align:right')}>last delivery</span>
@@ -456,35 +506,119 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:680px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
               <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>email &amp; channels</h2>
-              <p className={sx("font-size:13px;color:var(--cs-muted)")}>where conversations come in, and who they look like they're from.</p>
+              <p className={sx("font-size:13px;color:var(--cs-muted)")}>where conversations come in.</p>
             </div>
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:20px;display:flex;flex-direction:column;gap:14px')}>
-              <span className={sx('font-size:14px;font-weight:500')}>inbound</span>
-              <label className={sx('display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>support address
-                <input defaultValue="help@plumo.app" onChange={V.mock} data-msg="address updated" className={fieldInput()} />
-              </label>
-              <span className={sx('font-size:14px;font-weight:500;margin-top:4px')}>outbound</span>
-              <label className={sx('display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>reply-to name
-                <input defaultValue="plumo support" onChange={V.mock} data-msg="name updated" className={fieldInput()} />
-              </label>
-            </div>
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
-              <div className={sx('padding:12px 16px;border-bottom:1px solid var(--cs-border);font-size:14px;font-weight:500')}>connected channels</div>
-              <div className={sx('display:grid;grid-template-columns:1fr 120px 90px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                <span>in-app widget</span><span data-tone="sla-met" className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>connected</span>
-                <span className={sx('text-align:right')}><button onClick={V.mock} data-msg="widget settings open here" className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12px;cursor:pointer')}>manage</button></span>
+
+            {/* The receiving address is the only setting on this screen with
+                anything behind it. The reply-to name and the three "manage"
+                buttons that used to sit under it had no endpoint at all — they
+                showed a toast and changed nothing, so they are gone. */}
+            {!V.canManageDesk ? (
+              <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md)')}>
+                the receiving address is an admin setting — ask one of yours.
+              </span>
+            ) : (
+              <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:20px;display:flex;flex-direction:column;gap:12px')}>
+                <div className={sx('display:flex;flex-direction:column;gap:4px')}>
+                  <span className={sx('font-size:14px;font-weight:500')}>inbound</span>
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.5')}>
+                    mail sent to this address becomes a conversation on this desk. leave it empty to stop
+                    receiving mail — nothing already here is lost, new messages are simply refused.
+                  </span>
+                </div>
+
+                {V.emailErr && <LoadNote>{V.emailErr}</LoadNote>}
+
+                {V.inboundError && (
+                  <div className="px-3 py-2.5 rounded-token-sm text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
+                    {V.inboundError}
+                  </div>
+                )}
+
+                <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end')}>
+                  <label className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>receiving address
+                    <input
+                      type="email"
+                      value={V.inboundDraft}
+                      onChange={V.onInboundDraft}
+                      placeholder="help@yourcompany.com"
+                      autoComplete="off"
+                      className={fieldInput()}
+                    />
+                  </label>
+                  <button onClick={V.saveInbound} disabled={V.inboundBusy} className={primaryBtn()}>
+                    {V.inboundBusy ? 'saving…' : 'save'}
+                  </button>
+                </div>
+
+                <span data-tone={V.inboundOn ? 'sla-met' : 'sla-paused'} className={sx('width:fit-content;padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
+                  {V.inboundOn ? 'receiving mail' : 'inbound mail is off'}
+                </span>
               </div>
-              <div className={sx('display:grid;grid-template-columns:1fr 120px 90px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                <span>HashCare bridge</span><span data-tone="sla-met" className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>connected</span>
-                <span className={sx('text-align:right')}><button onClick={V.mock} data-msg="bridge settings open here" className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12px;cursor:pointer')}>manage</button></span>
-              </div>
-              <div className={sx('display:grid;grid-template-columns:1fr 120px 90px;gap:12px;padding:11px 16px;align-items:center;font-size:13.5px')}>
-                <span>public api</span><span data-tone="sla-paused" className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>read only</span>
-                <span className={sx('text-align:right')}><button onClick={V.mock} data-msg="api settings open here" className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12px;cursor:pointer')}>manage</button></span>
-              </div>
-            </div>
+            )}
+
+            <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.55')}>
+              the reply-to name, the in-app widget and the chatbot bridge have no setting behind them yet,
+              so there is nothing here to change. keys for the public api live in the api keys panel.
+            </span>
           </div>
         )}
+
+        {/* One editor for every panel that writes a record.
+            Six bespoke forms would be six places for a success message to
+            drift back in front of a failed request; this is one place a
+            failure is shown and one place a success is announced, and it
+            stays open — holding what was typed — until the server agrees. */}
+        <Modal
+          isOpen={V.editorOpen}
+          onClose={V.closeEditor}
+          title={V.editorTitle}
+          size="md"
+          footer={
+            <>
+              <Button variant="secondary" size="md" onClick={V.closeEditor}>not now</Button>
+              <Button size="md" onClick={V.submitEditor} disabled={V.editorBusy}>
+                {V.editorBusy ? 'saving…' : V.editorOk}
+              </Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3.5">
+            {V.editorNote && <p className="text-[13px] text-fg-3">{V.editorNote}</p>}
+
+            {V.editorError && (
+              <div className="px-3 py-2.5 rounded-token-sm text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
+                {V.editorError}
+              </div>
+            )}
+
+            {V.editorFields.map(f => (
+              f.kind === 'select' ? (
+                <Select key={f.name} label={f.label} value={f.value} data-f={f.name}
+                  onChange={V.onEditorField} options={f.options} helperText={f.helper} />
+              ) : f.kind === 'textarea' ? (
+                <Textarea key={f.name} label={f.label} value={f.value} data-f={f.name}
+                  onChange={V.onEditorField} placeholder={f.placeholder} helperText={f.helper} rows={6} />
+              ) : f.kind === 'checks' ? (
+                <fieldset key={f.name} className="flex flex-col gap-1.5">
+                  <legend className="text-xs font-medium text-fg mb-1">{f.label}</legend>
+                  {f.options.map(o => (
+                    <label key={o.value} className="flex items-center gap-2 text-[13px] text-fg-2">
+                      <input type="checkbox" data-f={f.name} value={o.value} checked={o.on}
+                        onChange={V.onEditorField}
+                        className={sx('width:14px;height:14px;accent-color:var(--cs-brand);cursor:pointer')} />
+                      {o.label}
+                    </label>
+                  ))}
+                </fieldset>
+              ) : (
+                <Input key={f.name} label={f.label} value={f.value} data-f={f.name}
+                  onChange={V.onEditorField} placeholder={f.placeholder} helperText={f.helper}
+                  autoComplete="off" />
+              )
+            ))}
+          </div>
+        </Modal>
       </div>
     </div>
   );

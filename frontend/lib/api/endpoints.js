@@ -10,7 +10,15 @@ import { request, requestRoot, qs } from './client';
 // ---- auth ----
 export const auth = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password }, auth: false }),
-  refresh: (refreshToken) => request('/auth/refresh', { method: 'POST', body: { refreshToken }, auth: false }),
+  // `auth: false` because there is no bearer token to send, `workspace: true`
+  // because the desk still has to be named — see client.js. Refreshing without
+  // naming it logs a two-membership user out every 15 minutes. The live refresh
+  // is client.js's own single-flight call; this stays in step with it so the
+  // published surface is not a differently-broken copy.
+  refresh: (refreshToken) =>
+    request('/auth/refresh', { method: 'POST', body: { refreshToken }, auth: false, workspace: true }),
+  // Logout needs no desk: the refresh token identifies the row to revoke, and
+  // revoking it is the same act on whichever desk it was issued for.
   logout: (refreshToken) => request('/auth/logout', { method: 'POST', body: { refreshToken }, auth: false }),
   forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: { email }, auth: false }),
   resetPassword: (token, newPassword) =>
@@ -149,6 +157,21 @@ export const apiKeys = {
   list: () => request('/api-keys'),
   create: (body) => request('/api-keys', { method: 'POST', body }),
   revoke: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
+};
+
+/**
+ * The desk's receiving address — the on/off switch for the inbound channel.
+ *
+ * Provisioning leaves it null and the backend refuses all inbound mail until an
+ * admin sets one, so this is a setting with a visible consequence rather than a
+ * cosmetic one. Both are admin-only. `null` is a meaningful value on the way in:
+ * it switches the channel off, and the API deliberately does not treat it as
+ * "field omitted".
+ */
+export const email = {
+  inboundAddress: () => request('/email/inbound-address'),
+  setInboundAddress: (inboundEmail) =>
+    request('/email/inbound-address', { method: 'PUT', body: { inboundEmail } }),
 };
 
 // ---- attachments ----

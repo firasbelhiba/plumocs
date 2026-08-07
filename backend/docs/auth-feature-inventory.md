@@ -5,6 +5,7 @@ I verified the disputed and load-bearing claims directly against the tree. Here 
 # Plumo CS — Authentication readiness before tester week
 
 **Repo:** `C:/Users/firas/OneDrive/Documents/plumocs` · **HEAD:** `17e3137` · **Compiled:** 2026-08-07
+**Amended:** 2026-08-07, after three changes landed — the settings mocks, the CI integration blocker, and the dual-membership refresh. Amendments are marked **[08-07]** and the original wording is left standing wherever it is still true. **Nothing was upgraded because code was written.** Three rows moved to EXECUTED and every one of them moved because the test was run and watched, not because it now exists; the reasoning is in §3.8, which is also where the four things that ran and *failed* are recorded.
 
 **How to read the status column.** This is the only thing in this document that matters.
 
@@ -39,24 +40,26 @@ Nothing below is called working because a test passes. Where four separate passe
 | PM account linking from Settings | `GET /auth/pm/start` → `pm-identity.module.ts:142-176` | **UNRUN** — and believed broken two ways | See §3.7. |
 | PM unlink | `GET /auth/pm/unlink` → `pm-identity.module.ts:332-337` | **UNRUN** | Code path looks correct. |
 | Invitation create + send | `POST /invitations` → `backend/src/invitations/invitations.service.ts:92-206` | **UNRUN** | **No invitation has ever been created, sent, or accepted.** |
-| Invitation lookup | `GET /invitations/token/:token` → `invitations.service.ts:290-349` | **UNRUN** | Depends on a `SECURITY DEFINER` function never called against a real DB. |
+| Invitation lookup | `GET /invitations/token/:token` → `invitations.service.ts:290-349` | **UNRUN** | ~~Depends on a `SECURITY DEFINER` function never called against a real DB.~~ **[08-07]** The function underneath it now has been — `app_resolve_invitation` returns the right row, on an unbound `plumo_app` connection, in `workspace-isolation.integration.spec.ts`, executed (§3.8). **The endpoint is still UNRUN**: the spec calls the SQL directly, so the grant and the column aliases are proven and the controller, DTO and service around them are not. |
 | Invitation accept | `POST /invitations/token/:token/accept` → `invitations.service.ts:352-533` | **UNRUN** | The bind-then-write sequence is the riskiest untested code you have. |
 | Invitation revoke | `DELETE /invitations/:id` → `invitations.service.ts:254-284` | **UNRUN** | Not covered by any test in its own spec file either. |
-| Invitations table RLS + resolver + partial index | `backend/prisma/migrations/20260807190000_invitations/migration.sql:253-300` | **EXECUTED** (SQL only) | The migration asserts its own invariants inside its transaction. Proves the schema, not the service. |
+| Invitations table RLS + resolver + partial index | `backend/prisma/migrations/20260807190000_invitations/migration.sql:253-300` | **EXECUTED** (SQL only) | The migration asserts its own invariants inside its transaction. Proves the schema, not the service. **[08-07]** Now proven by something outside the migration too: four cases in `workspace-isolation.integration.spec.ts`, run and passing (§3.8). A seat offered on one desk is invisible from the other; the pending-email index is per-workspace, not global; `app_resolve_invitation` reads across the policy as designed; an unknown digest returns nothing. The migration only ever asserted the function was *marked* `prosecdef` — until this run, nothing had **called** it. |
 | Role hierarchy gate (`@Roles`) | `backend/src/common/guards/roles.guard.ts:14-41` | **MOCKED** | Pure function, genuinely proven. Fabricated `ExecutionContext`s. |
 | `PERMISSIONS` matrix | `backend/src/common/permissions.ts:14-71` | **UNRUN as enforcement** | Grep confirms **no guard and no service reads it**. It is documentation with a test asserting the documentation against itself. |
-| Team-scope row filtering | `backend/src/common/guards/team-scope.service.ts:53-115` | **UNRUN** | ⚠️ Downgraded from EXECUTED — see §7.1. The CI job that would prove it has never run. |
-| Tenant isolation (RLS between the two desks) | `backend/test/integration/workspace-isolation.integration.spec.ts` | **UNRUN** | ⚠️ Same reason. Not proven by anything that has executed. |
+| Team-scope row filtering | `backend/src/common/guards/team-scope.service.ts:53-115` | **[08-07] EXECUTED** | ~~⚠️ Downgraded from EXECUTED — see §7.1. The CI job that would prove it has never run.~~ It has now run — not in CI, on a throwaway PostgreSQL 17.2 cluster, migrated by the new two-pass recipe and connected as unprivileged `plumo_app`. `team-scope.integration.spec.ts` passes. Read §3.8 for exactly what that does and does not license. |
+| Tenant isolation (RLS between the two desks) | `backend/test/integration/workspace-isolation.integration.spec.ts` | **[08-07] EXECUTED** | ~~⚠️ Same reason. Not proven by anything that has executed.~~ **The single biggest change in this revision.** The whole spec passes, including `global-setup.ts`'s refusal to run as a privileged connection — which is what makes a pass mean anything, since an owner or superuser is exempt from every policy and would report perfect isolation with no policies at all. Caveat in §3.8: PG 17.2 not the runner's 18, and the CI job that is supposed to do this on every push is **still red for other reasons**. |
 | Per-request membership re-read | `backend/src/common/guards/auth.guard.ts:69-72` | **EXECUTED** | Runs on every authenticated request you make. Good design. |
 | Single-desk workspace resolution | `workspace-context.service.ts:108-111` | **EXECUTED** | This is what keeps your login working on a two-workspace instance. |
-| Two-desk workspace resolution | `workspace-context.service.ts:115-118` | **MOCKED** (the 403) / **UNRUN** (the lockout) | See §3.1. The invitation feature is what will create the first two-desk user. |
+| Two-desk workspace resolution | `workspace-context.service.ts:115-118` | **MOCKED** (the 403) / **UNRUN** (the lockout) | See §3.1. The invitation feature is what will create the first two-desk user. **[08-07]** The client half is fixed and the status does **not** move: `/auth/refresh` now names its desk, so the 403 is no longer reached, but no browser has held a two-membership session across a token expiry. The fix is asserted by `dual-membership-refresh.spec.ts` (backend, 5 cases, real controller + real service + real `WorkspaceContextService`) and `refresh-workspace.test.js` (frontend, 5 cases) — both MOCKED at the Prisma boundary. §3.1 has the new chain. |
+| **[08-07]** RLS coverage of every `workspace_id` table | `db-roles.integration.spec.ts:80-106` | **EXECUTED — and it fails** | Ran for the first time and immediately earned its keep: **`pm_oauth_states` carries `workspace_id` with row-level security OFF and zero policies.** New finding, §3.15. |
 | API key issue + use | `POST /api-keys` → `backend/src/api-keys/api-keys.module.ts:64-79` | **EXECUTED** | You have minted console keys and used them. |
 | API key revoke | `DELETE /api-keys/:id` → `api-keys.module.ts:82-88` | **UNRUN** | No test revokes a key and re-authenticates. |
 | API key expiry | column + `auth.guard.ts:96-99` | **UNRUN** / **UNDEFINED** | Verified: `CreateApiKeyDto` (`api-keys.module.ts:10-23`) has **no `expiresAt` field**. Every key ever issued through the product is immortal. |
 | Rate limiting — proxy trust | `backend/src/common/guards/principal-throttler.guard.ts` | **MOCKED, but strongly** | Uses a **real** `FastifyAdapter` with real injected requests. The forgery bypass is genuinely closed. |
 | Rate limiting — the counting | `backend/src/app.module.ts:60-70` | **UNRUN** | In-memory, per-process store. Never exercised under load. |
-| Deactivate a user from the console | `frontend/components/screens/Settings.jsx:110` | **UNRUN — and it is wired to a mock** | See §3.2. This is the most dangerous item here. |
-| Deactivate a user via API | `DELETE /users/:id` → `backend/src/users/users.module.ts:239-243` | **UNRUN** | Verified: **no call site anywhere in the frontend.** |
+| Deactivate a user from the console | `frontend/components/screens/Settings.jsx` | **UNRUN** | ~~**— and it is wired to a mock**~~ **[08-07]** The mock is gone; the button calls `DELETE /users/:id`, prints its success line only after a 2xx, and is not rendered on your own row. **Status stays UNRUN — nobody has clicked it against a real server.** What changed is that failure is now silent-and-safe rather than silent-and-reassuring. See §3.2. |
+| Deactivate a user via API | `DELETE /users/:id` → `backend/src/users/users.module.ts:239-243` | **UNRUN** | ~~Verified: **no call site anywhere in the frontend.**~~ **[08-07]** It has one now (the row above). The endpoint itself is unchanged and still has never been called by anything. |
+| **[08-07]** Inbound email address — the desk's on/off switch | `PUT /email/inbound-address` → `frontend/components/screens/Settings.jsx` | **UNRUN** | The highest-value find in the settings audit. Provisioning leaves `workspaces.inbound_email` NULL and the desk **refuses all inbound mail** until an admin sets one; the field that appeared to save it saved nothing. Now wired, with empty meaning an explicit `null` (channel off) rather than an omitted field. Never executed. |
 
 ---
 
@@ -116,6 +119,16 @@ This is the section that matters. Each item: what breaks if it is wrong, and the
 
 **Status: MOCKED (the 403) / UNRUN (the lockout in a browser).**
 
+> **[08-07] BOTH HALVES OF THIS ARE NOW FIXED IN CODE, AND THE STATUS DOES NOT MOVE.** Steps 1–2 and 6–7 of the chain below no longer describe the tree. The lockout has still never been reproduced *or* refuted in a browser, and it is still the case that no two-membership user has held a session across a token expiry. Read the chain as the record of a diagnosis, and the two notes under it as what replaced each end.
+>
+> **The refresh end (steps 1–2).** `client.js`'s `rawRequest` used one flag for two unrelated questions: `auth` meant both "carry a bearer token" and "name the desk". `/auth/refresh` is legitimately `auth: false` — it has no access token to send — and that silently also meant "say nothing about which tenant", which is what turned a 403 into a fifteen-minute logout loop. It now takes a separate `workspace` option, defaulting to `auth` so every other caller is unchanged, and the refresh passes `workspace: true`. The route already read the header (`auth.controller.ts`); only the client was silent. A body field was rejected deliberately: `main.ts` runs `forbidNonWhitelisted`, so an unknown field is a 400 until `RefreshDto` grows one, and login can only ever use the header because its body is the credential.
+>
+> **It cannot move you between tenants** — the question worth asking of any fix in this area, because doing so silently would be worse than the logout. Two independent reasons. The server resolves `app_resolve_membership(user, slug)`, which binds *both* arguments, so a named refresh returns that desk's membership or nothing; there is no branch that resolves a different one. And the client compares the slug it asked for against the slug it got back (case-insensitively — the column is `citext`) and throws `WORKSPACE_MISMATCH`, killing the session, if they differ. Verified by reading both sides end to end. The one case that still resolves by inference is a session stored *before* `workspace` existed: it sends no header, falls to `soleMembership()`, and therefore only ever lands on the single desk that user belongs to — the refresh now adopts the server's answer, so it learns its desk there instead of waiting for the next `/auth/me`.
+>
+> **The message end (steps 6–7).** `Login.jsx` exports `loginErrorMessage(err)` and renders it: `status 0` → unreachable server, `429` → rate limit, `WORKSPACE_MEMBERSHIP_DISABLED` → "an admin can switch it back on", any other 403 → "can't reach this workspace", everything else including 401 → the original credential line. To make 403 distinguishable without matching on strings, the two refusals in `workspace-context.service.ts` now carry codes (`WORKSPACE_ACCESS_DENIED`, `WORKSPACE_MEMBERSHIP_DISABLED`, `WORKSPACE_NOT_NAMED`); the messages are unchanged and the three collapsed cases stay collapsed. **No enumeration is introduced**: unknown address, deactivated account and wrong password still return one identical 401 line — pinned by a test asserting the two are byte-identical — and every 403 line is only reachable *after* the password has verified.
+>
+> **Step 6 was the whole feature, and it was still broken after the above landed.** `Console.jsx` caught the error and stored `loginError: true`, discarding `status` and `code` one frame before `loginErrorMessage` could read them, so all five messages collapsed back to the credential line. Fixed here (`loginError: e ?? true`) and pinned by three cases in `login-errors.test.js` that drive the real `signIn` handler rather than the formatter — confirmed to fail against the old line and pass against the new one.
+
 The chain, every link verified:
 
 1. `frontend/lib/api/endpoints.js:12-13` — `/auth/login` and `/auth/refresh` are both `auth: false`.
@@ -159,7 +172,42 @@ It opens a confirmation dialog that says *"they'll lose access"*, then fires a t
 
 > **What breaks:** during a test week you will at some point want to remove someone. You will click deactivate, be told it worked, and they will retain full access indefinitely. This is silently wrong in the *reassuring* direction, which is the worst kind.
 >
-> **Smallest test:** none needed — grep already proves it. **Removing someone this week requires `curl` or SQL. Know that before you need it.**
+> **Smallest test:** none needed — grep already proves it. ~~**Removing someone this week requires `curl` or SQL. Know that before you need it.**~~
+
+#### [08-07] All 18 mock call sites are gone — 12 wired, 6 removed
+
+`V.mock` / `V.askMock` no longer appear anywhere in `Settings.jsx`. **None of this is EXECUTED.** Every row below is UNRUN: the code was written and unit-tested, and no button has been pressed against a real server. The reason to record it here is that the failure mode has changed shape — a control that does nothing now *looks* like it did nothing.
+
+**Wired (12).** All are `@Roles('admin')` on the server except canned responses (`lead`), and the console renders no button where the role would be refused — a lead sees nothing rather than a button that answers 403.
+
+| Control | Endpoint | Worth knowing |
+|---|---|---|
+| team row **deactivate ✕** | `DELETE /users/:id` | The dangerous one, above. Confirmation kept; success line only after 2xx; the person disappears from the list so an admin can *see* it took; failure toasts the server's message and leaves them in place. **Not rendered on your own row** — the backend has no self-guard and deactivation revokes refresh tokens globally, so an admin could sign themselves out mid-sentence. |
+| team row **edit** | `PATCH /users/:id` | Sends only what changed; explicit `null` clears the team. |
+| sla **add a policy** | `POST /sla-policies` | Opens the real form; the header button previously toasted "policy saved". |
+| sla row **edit** | `PATCH /sla-policies/:id` | Priority deliberately absent — `UpdateSlaPolicyDto` has no such field, so offering it would be a control the server silently ignores. |
+| business-hours **day checkbox** | `PATCH /business-hours/:id` | Read-modify-write of `weeklyJson`; the tick is bound to server state, so a failed write visibly snaps back. Re-enabling a day reuses that week's own window rather than inventing 09:00–17:00. |
+| **holiday + add** | `PATCH /business-hours/:id` | Chips render real `holidaysJson` — they were hardcoded "25 dec · christmas". A remove ✕ was added so an added holiday is not a one-way door. |
+| canned **new response** / **edit** | `POST` / `PATCH /canned-responses` | |
+| tags **edit** | `PATCH /tags/:id` | The table row's id is the tag *key*; the route wants the uuid, so the panel reads the raw rows. Pinned by a test. |
+| **+ new tag** | `POST /tags` | |
+| webhooks **add endpoint** | `POST /webhooks` | Event names are checkboxes of the six the DTO accepts, so a 400 is not reachable by typo. |
+| email **support address** | `PUT /email/inbound-address` | See the §1 row — this is the inbound channel's on/off switch, and the field was pretending to save it. |
+
+**Removed (6).** Each because there is no endpoint behind it, so wiring was not an option and leaving it was a lie.
+
+| Control | Why it is gone |
+|---|---|
+| sla **save policy** / **cancel** (inline card) | The whole "new policy" card was inputs nothing read plus two toast-only buttons. Deleted; `POST /sla-policies` above is the real path. |
+| email **reply-to name** | No endpoint — `email.controller.ts` exposes only the inbound address. |
+| **in-app widget → manage** | No endpoint. |
+| **HashCare bridge → manage** | No endpoint, and `hashcare` is demo fiction — the adapter already notes it "was a fictional customer… not a channel anybody has". |
+| **public api → manage** | No endpoint; the api keys panel is where the public api is actually controlled, and the panel now says so. |
+
+**Two things this did not fix, recorded so they are not mistaken for done:**
+
+- **`V.mock` still has three live call sites outside the settings screen**, all still announcing outcomes that did not happen: `screens/Account.jsx:84` (a settings toggle), `screens/EdgeScreens.jsx:44` ("we've told the team"), `screens/Ticket.jsx:380` ("article added to your reply"). `mock`/`askMock` are therefore still defined and exported.
+- **`Console.SETTINGS_CARDS` still carries invented meta strings** — "8 people · 2 teams", "3 endpoints · 1 failing", "3 connected" — on the settings overview. Static text rather than controls, but the panels behind them now load live rows, so the overview will visibly disagree with the tables.
 
 ### 3.3 No invitation has ever touched a real database
 
@@ -257,6 +305,61 @@ The workflow's own header says the integration job exists "so a broken policy fa
 > **What breaks:** if you fix a bug during test week, you have no automated way to know you didn't break isolation between the two live workspaces.
 >
 > **Smallest fix:** insert a minimal user before `prisma migrate deploy` in the integration job, or make that guard conditional on the database being non-empty. Half a day, and it is the only item here that stops this list from getting longer.
+
+#### [08-07] The diagnosis was right, the fix is in, and the migration chain has now been executed end to end
+
+**What was done.** `migrate deploy` has no `--to`, and `users` does not exist before the second migration, so there is no way to get a row in between two migrations except to split the deploy. The integration job now moves every directory `>= 20260802000000_workspace_tenancy` aside, deploys the 6 that precede it, inserts one user, restores the other 10 and deploys them. **No guard was weakened.** The cutover's refusal to adopt nobody is correct — a cutover that adopts nobody has locked every human out of the instance — so CI reproduces the precondition instead of removing it.
+
+Three details in that step are load-bearing and easy to lose in a later edit: `role = 'admin'`, because section 5 copies `users.role` onto the membership and assertion (13) fails the whole file without an active admin; `updated_at` passed explicitly, because its `DEFAULT now()` is added by section 1 of the very migration being prepared for (confirmed against the `init` DDL — it is the one column that is `NOT NULL` with no default); and a new **"every migration on disk is applied"** step counted from `_prisma_migrations`, because a directory moved aside and never moved back would apply nothing, report success, and leave the specs asserting against a half-migrated schema. That is a green run proving nothing, which is the exact failure this job exists to prevent.
+
+**What was verified, and how.** Not in CI — on a throwaway PostgreSQL **17.2** cluster created for this purpose, on a spare port, touching no existing database. Split roles from `prisma/sql/roles.sql`, then the two-pass recipe run by hand exactly as the workflow writes it:
+
+| Step | Result |
+|---|---|
+| Split at the cutover | 6 before / 10 after, 16 total |
+| Pass 1 — up to the cutover | applied, exit 0 |
+| Seat the user | `INSERT 0 1` |
+| Pass 2 — cutover and after | **applied, exit 0 — the step that had never once succeeded** |
+| "Every migration on disk is applied" | `16 of 16` |
+| Bootstrap state the cutover derived | one `dar-blockchain` membership, `role=admin`, `is_active=t`; one user with `is_platform_admin=t` — i.e. assertion (13) satisfied by observation, not by reading |
+
+Two incidental claims held up under execution: libpq really does reject Prisma's `?schema=` query parameter, so the `${VAR%%\?*}` strip in both psql calls is required rather than defensive; and `roles.sql` really must run before the migrations, since the cutover onward `GRANT`s to `plumo_app` by name.
+
+**Then the specs ran — for the first time ever — and four of them fail.** 7 suites, 75 tests, **71 passed, 4 failed**. This is precisely the thing the fix's author flagged as unknown: unblocking the step that always failed does not prove the seven spec files pass, and if it broke it would break somewhere no run had ever reached. It did.
+
+| Suite | Result |
+|---|---|
+| `workspace-isolation.integration.spec.ts` | **PASS** — including the four new invitation cases |
+| `team-scope.integration.spec.ts` | **PASS** |
+| `sweep-and-facets.integration.spec.ts` | **PASS** |
+| `db-roles.integration.spec.ts` | **FAIL** — 1 case. **A real gap. See §3.15.** |
+| `cursor-pagination.integration.spec.ts` | **FAIL** — 1 case. Stale assertion, behaviour correct. |
+| `transaction-routing.integration.spec.ts` | **FAIL** — 1 case. Stale assertion, behaviour correct. |
+| `chat-ingest.integration.spec.ts` | **FAIL** — 1 case. Stale assertion, behaviour correct and unit-pinned. |
+
+The three stale ones are all the same story — assertions written before the tenancy cutover, never re-run because the job died earlier, now describing a world that no longer exists:
+
+- **`cursor-pagination`** asserts the index `tickets_updated_at_id_idx`. The cutover deliberately dropped it and created `tickets_workspace_id_updated_at_id_idx` — a tenant-scoped cursor index, which is the correct shape. Confirmed present in the live catalogue. The test needs the new name.
+- **`transaction-routing`** asserts an unbound tenant write fails with `/null constraint|workspace/i`. It **does** fail closed — that is the property under test — but with `42501, new row violates row-level security policy for table "teams"`. RLS refuses it now, which is better than the null-constraint refusal the test was written against. Only the expected wording is wrong.
+- **`chat-ingest`** asserts the updates cursor lags the present by more than a second. But `nextUpdatesCursor` floors the cursor at `since`, so a client polling faster than the 30-second lag window gets `cursor === since` — intentional, documented, and **pinned by the unit spec** at `src/chat/updates-cursor.spec.ts` ("clamps the cursor back to `since` … pinned"). The integration assertion contradicts the unit contract; the integration one is the wrong one.
+
+> **What this licenses, precisely.** Tenant isolation between two desks is now proven by something that has executed — that is real and it is the first time it has been true. **It is not proven by CI.** The workflow YAML has never been run by GitHub Actions; I reproduced its steps by hand in bash. The runner uses PostgreSQL 18 and this ran on 17.2. And the job as a whole will still go **red** on the next push to `main` that touches `backend/`, now failing at `Integration tests` instead of at `Apply migrations` — four steps later, with one genuine finding and three stale assertions between it and green.
+>
+> **Smallest remaining work:** three one-line assertion updates, then a decision on §3.15. None of it is in the migration or the workflow.
+
+### 3.15 [08-07] `pm_oauth_states` has a `workspace_id` and no row-level security
+
+**Status: EXECUTED — this is a finding, not a prediction.** `db-roles.integration.spec.ts` asks the catalogue for every `public` table carrying a `workspace_id` column whose RLS is off or which has no policy, and expects an empty list. It returns one row:
+
+```
+table: pm_oauth_states   rlsEnabled: false   policies: 0
+```
+
+The mechanism is the trap the readiness plan already wrote down for invitations: the policy set was derived **once**, at `20260806140000_row_level_security`, over "every public table with a `workspace_id` column". `pm_oauth_states` gained its `workspace_id` afterwards, in the PM OAuth migrations (`20260807020000` / `20260807030000`), so it was never in scope and nothing since has revisited it. A table added later gets no policy automatically — stated in the plan as a risk for a table that did not exist yet, and true meanwhile of one that did.
+
+**How much it matters, stated carefully.** Less than the bare finding suggests, and not nothing. The column is **nullable** here, unlike every real tenant table where `workspace_id` is `NOT NULL` — this is an OAuth CSRF/PKCE state row, addressed by an unguessable single-use `state` secret, not enumerated by tenant. So there is no cross-tenant *read path through the product*. What is true is that `plumo_app` can `SELECT` every pending row in the table, including other desks' `code_verifier` values, and that reaching that requires SQL access rather than an API call.
+
+> **The decision is not mine to make and I have not made it.** It is genuinely two-sided: add a policy, or narrow the test's rule so it exempts non-tenant tables with a nullable `workspace_id` and say why in the exemption. Getting it wrong in the first direction is worse than the gap — this table is read on the OAuth callback on a connection with no workspace bound, so the obvious policy would refuse every sign-in, which is exactly the failure `password_resets` was deliberately excluded to avoid. **No migration was written for this.** Whoever owns the tenancy work should decide, and `password_resets` and `app_resolve_invitation` are the two precedents to copy from.
 
 ### 3.9 Two concurrent refreshes with the same token both succeed
 
@@ -429,7 +532,8 @@ Not because the logic is wrong — because `app_resolve_invitation` has never be
 
 **2. A tester ends up on two desks and is permanently locked out.**
 Fifteen minutes in they are logged out, and the screen tells them their password is wrong (§3.1).
-→ **Mitigation this week: put every tester on exactly one workspace. Do not invite anyone to both.** Real fix afterwards: send `x-workspace-slug` on login and refresh, plus a picker.
+→ ~~**Mitigation this week: put every tester on exactly one workspace. Do not invite anyone to both.** Real fix afterwards: send `x-workspace-slug` on login and refresh, plus a picker.~~
+→ **[08-07] The real fix landed for refresh, and the screen no longer lies. Keep the mitigation anyway, for this week.** The refresh now names its desk and the 403 is no longer reached (§3.1), but *this has never been exercised by a browser holding a two-membership session across a token expiry* — which is the only observation that would settle it, and it takes 20 minutes of waiting. **What has not been built is the picker**: there is still no `GET /workspaces/mine` and no way for a two-desk user to reach their *other* desk. They are pinned to whichever desk their session started on. So "one tester, one desk" remains the right rule for the week — no longer because the alternative is a lockout, but because the alternative is a desk they cannot get to.
 
 **3. "Continue with Plumo" refuses everyone with "this sign-in did not start in this browser."**
 The binding cookie has never been stored or read by a real browser, and it is hand-written without `@fastify/cookie` (§3.5).
@@ -437,7 +541,8 @@ The binding cookie has never been stored or read by a real browser, and it is ha
 
 **4. You need to remove a tester and cannot.**
 The console button is a mock; the backend route has no caller (§3.2).
-→ **Mitigation: know now that removal is `curl` or SQL. Better: wire the button before Monday — the endpoint already exists and already does the right thing.**
+→ ~~**Mitigation: know now that removal is `curl` or SQL. Better: wire the button before Monday — the endpoint already exists and already does the right thing.**~~
+→ **[08-07] The button is wired (§3.2). It has still never been clicked against a real server, so press it once on a throwaway account before you need it in anger** — that is the two-minute check that moves this row to EXECUTED, and the failure it would catch (a 403, a wrong id, a role gate) is one you want to find on a Tuesday rather than while removing someone. `curl` remains the fallback.
 
 **5. The password reset half-works.**
 The link opens (proven). Whether submitting changes the password, burns the token and kills sessions is unproven (§3.4).
@@ -461,7 +566,8 @@ P2002 unmapped in `http-exception.filter.ts`. Cosmetic, plausible with two peopl
 
 **11. Nothing you learn this week is backed by a test that runs.**
 Fix a bug during the week and you have no automated check that you did not break isolation between the two live workspaces (§3.8).
-→ **Mitigation: the seed-before-migrate fix. Half a day, and it is the only item that stops this list from growing.**
+→ ~~**Mitigation: the seed-before-migrate fix. Half a day, and it is the only item that stops this list from growing.**~~
+→ **[08-07] Half-true now. The seed-before-migrate fix is written and the isolation spec has been run and passes — but not by CI, and CI is still red.** Isolation between the two desks is genuinely proven by an execution for the first time (§3.8). What you do **not** yet have is the automatic version: the job now fails four steps later, on one real finding (§3.15) and three assertions that were stale before this week. Until those are settled, a push to `main` still gives you a red check rather than a guarantee — and a red check that everyone learns to ignore is worse than the honest failure it replaced. **This is the item most worth finishing before Monday**, and what remains is three one-line edits and one decision, not half a day of migration work.
 
 **12. Invitation tokens sitting in your logs** (§3.12). Low probability of exploitation this week, trivial to fix, and it stops being trivial once you have contractors or a log shipper.
 
@@ -482,10 +588,14 @@ Also unverifiable from here and worth a glance: **SMTP TLS** (`email.service.ts:
 I re-read the source for each of these. Stating them because two change the plan.
 
 **7.1 — Team-scope and RLS: "EXECUTED in CI" vs "the integration job has never run."**
+**[08-07] Resolved by execution, and the pessimist was right about the past while the optimist is now right about the present.** The mechanism below was real: the job could not reach the test step, so citing a CI file as evidence was citing a file rather than a run. That has now been fixed and the specs have been executed (§3.8) — `team-scope` and `workspace-isolation` both pass, and both are marked EXECUTED in §1 on the strength of the run, not the fix. The distinction the disagreement turned on survives intact and is worth keeping: **the existence of a CI file is not its execution**, and it still is not — the workflow itself has never been run by GitHub Actions, and the job would still finish red today.
+
 **The pessimistic reading is right, and I verified the mechanism myself.** The invitations pass cited `team-scope.integration.spec.ts` running "in CI against Postgres 18" as proof that team-scoped row filtering is EXECUTED. But `.github/workflows/backend-ci.yml` builds a fresh empty database and runs `prisma migrate deploy` with no seed step, and `20260802000000_workspace_tenancy/migration.sql:62-64` raises `'tenancy: no users'` on an empty database. The migration cannot succeed there, so the test step cannot start. **The existence of a CI file was mistaken for its execution.** I have downgraded team-scope, workspace-isolation and db-roles to UNRUN in §1.
 
 **7.2 — Why CI fails: two causes claimed, only one is real.**
 The adversarial pass gave two blockers: (a) `CREATE EXTENSION` fails because `plumo_migrator` is `NOSUPERUSER`, and (b) the no-users guard. **(a) is wrong.** `prisma/sql/roles.sql:123-133` explicitly grants `CREATE ON DATABASE` to `plumo_migrator`, with a comment saying it exists "so migrations can install trusted extensions (citext, pgcrypto, btree_gin)" — and both are trusted extensions in PG13+, installable by a non-superuser holding that grant. **(b) is confirmed at the source and is sufficient on its own.** Fix the seed, not the grant.
+
+> **[08-07] Both halves of this now rest on execution rather than reading, and both stand.** The whole 16-migration chain applied cleanly on a real cluster as `plumo_migrator` (§3.8), so (a) was indeed a false alarm — the extensions install fine under that grant. And seating exactly one user is sufficient on its own: nothing else was changed, and the cutover went from "structurally incapable" to green. It is worth recording that (b) was *sufficient* as well as necessary, because the tempting cheap fix — weakening the `IF NOT EXISTS (SELECT 1 FROM users)` guard — would have been both unnecessary and wrong.
 
 **7.3 — "Wrong password" status: UNRUN vs "MOCKED-adjacent."**
 **UNRUN is correct.** I listed the spec files: `auth.pm-signin-binding`, `auth.service.password-recovery`, `auth.service.pm-login`, `auth.service.provisioning`. **None covers `login()`.** There is no mock asserting it either, so "MOCKED-adjacent" overstates it. You have almost certainly typo'd your own password at some point, but that is not evidence anyone recorded.
