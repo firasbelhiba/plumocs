@@ -222,5 +222,10 @@ jobs:
           docker run --rm --entrypoint sh plumo-cs-migrate:ci -c \
             'ls -ld /app /app/node_modules/.bin/prisma 2>&1; test -w "$HOME" && echo "HOME writable" || echo "HOME NOT writable"'
 
+      # Both invocations, on purpose. The bin is what CMD actually runs, and npx
+      # is what a human will reach for when debugging a container at 2am — if
+      # HOME regresses, npx breaks first and this catches it there.
       - name: Migrate image can run prisma
-        run: docker run --rm plumo-cs-migrate:ci npx prisma --version
+        run: |
+          docker run --rm --entrypoint node_modules/.bin/prisma plumo-cs-migrate:ci --version
+          docker run --rm --entrypoint npx plumo-cs-migrate:ci prisma --version

@@ -44,10 +44,28 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 FROM build AS migrate
 WORKDIR /app
+
+# USER DOES NOT CHANGE HOME. Docker leaves HOME at /root when you switch user,
+# and /root is mode 700 — so uid 1000 cannot write it. npm's cache defaults to
+# $HOME/.npm, so `npx prisma` died with EACCES before Prisma ever started, and
+# so would anything else that caches. The `runtime` stage never hit this because
+# serving traffic writes nothing.
+#
+# This was not theoretical: `prisma --version` failed in CI on this exact image.
+# Left unfound, it would have surfaced as the first migration after cutover
+# failing — the one moment with the least appetite for a surprise.
+ENV HOME=/home/node
+
 # Non-root here too. This container holds the schema-owner credential, so it is
 # the most dangerous one in the stack — root inside it was the weakest link.
 USER node
-CMD ["npx", "prisma", "migrate", "deploy"]
+
+# The binary directly, not `npx`. npx resolves through the npm cache even for a
+# package that is already installed locally, which is a writable directory this
+# container has no other reason to need. Calling the bin removes the dependency
+# entirely; the CLI is a devDependency and is present because this stage is
+# FROM build, not from the --omit=dev tree.
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
 
 # ---------------------------------------------------------------------------
 # runtime — what actually serves traffic
