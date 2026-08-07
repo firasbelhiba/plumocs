@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import type { FastifyReply } from 'fastify';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { CurrentUser, Principal, Roles } from '../common/decorators';
+import { CurrentUser, Principal, Public, Roles } from '../common/decorators';
 import { PmIdentityService, PmUserInfo } from './pm-identity.service';
 
 /**
@@ -150,7 +150,12 @@ export class PmIdentityController {
    * what authenticates it: it was created for a specific CS user, is single-use,
    * and expires. That is stronger than a session cookie here, because it also
    * proves the callback belongs to the flow that started.
+   *
+   * The @Public() is load-bearing, not decoration: without it the global
+   * AuthGuard rejects the redirect before this handler runs, and every user
+   * returning from PM sees a 401 they can do nothing about.
    */
+  @Public()
   @Get('callback')
   async callback(
     @Query('code') code: string,
