@@ -93,6 +93,26 @@ if [[ "$pending" -gt 0 ]]; then
 fi
 
 # ------------------------------------------------------------------- start ---
+# STOP THE NATIVE UNITS FIRST, and this is not tidiness.
+#
+# The compose services run with network_mode: host, so the API container binds
+# host port 3002 — the port plumo-api.service is already holding. The container
+# would fail to bind and exit, and the health check below would STILL PASS,
+# because the old systemd process is there answering it. A false green, on the
+# one step whose entire job is to tell the truth about whether the new build
+# works.
+#
+# Disabled as well as stopped: a host reboot with both enabled would race, and
+# whichever won would be a coin toss. deploy-native.sh re-enables them, which is
+# what makes the fallback at the end of this script real.
+if systemctl is-enabled --quiet plumo-api.service 2>/dev/null || systemctl is-active --quiet plumo-api.service 2>/dev/null; then
+  log "Stopping the native systemd units (they hold port 3002)"
+  sudo systemctl disable --now plumo-api.service plumo-worker.service || die "Could not stop the native units; refusing to start containers that cannot bind."
+  NATIVE_WAS_RUNNING=1
+else
+  NATIVE_WAS_RUNNING=0
+fi
+
 log "Starting api and worker on ${SHA}"
 docker compose -f "$COMPOSE" up -d --remove-orphans api worker
 
@@ -119,6 +139,20 @@ if [[ "$healthy" -ne 1 ]]; then
       sleep 2
     done
     die "ROLLBACK ALSO UNHEALTHY — the service is down. docker compose -f $COMPOSE logs --tail 100 api"
+  fi
+
+  # Nothing to roll back to in containers — this is the first container deploy,
+  # or the previous image is gone. Put the native stack back rather than leaving
+  # the site down: it was serving traffic ninety seconds ago and is known good.
+  if [[ "${NATIVE_WAS_RUNNING:-0}" == "1" ]]; then
+    warn "No previous image. Restoring the native systemd stack."
+    docker compose -f "$COMPOSE" down --remove-orphans || true
+    sudo systemctl enable --now plumo-api.service plumo-worker.service
+    for _ in $(seq 1 30); do
+      curl -fsS --max-time 3 "$HEALTH_URL" >/dev/null 2>&1 && \
+        die "Restored the native stack, which is healthy. ${SHA} is NOT deployed. Logs: docker compose -f $COMPOSE logs --tail 100 api"
+      sleep 2
+    done
   fi
   die "No previous image to roll back to. Service is down. docker compose -f $COMPOSE logs --tail 100 api"
 fi
