@@ -179,8 +179,25 @@ export class PmIdentityController {
     @Res() reply: FastifyReply,
   ) {
     const consoleUrl = (this.config.get<string>('pm.consoleUrl') ?? '').replace(/\/+$/, '');
+
+    // WHERE a failure lands depends on which flow this was, and getting it
+    // wrong loses the message entirely: a failed SIGN-IN means nobody is
+    // logged in, so /settings bounces to the login screen and the reason is
+    // gone — and "your account is not linked yet" is the single most likely
+    // outcome of a first attempt. Peek at the state row to find out; a link
+    // names its user, a sign-in does not.
+    const pending = state
+      ? await this.prisma.pmOAuthState.findUnique({ where: { state }, select: { userId: true } })
+      : null;
+    const isSignIn = !pending?.userId;
+
     const back = (params: Record<string, string>) =>
-      reply.redirect(`${consoleUrl}/settings?${new URLSearchParams(params).toString()}`, 302);
+      reply.redirect(
+        isSignIn
+          ? `${consoleUrl}/?${new URLSearchParams({ ...params, pmSignIn: params.pmLink ?? 'failed' }).toString()}`
+          : `${consoleUrl}/settings?${new URLSearchParams(params).toString()}`,
+        302,
+      );
 
     // The user pressed Deny, or PM refused. Not an error condition for us.
     if (error) return back({ pmLink: 'cancelled' });

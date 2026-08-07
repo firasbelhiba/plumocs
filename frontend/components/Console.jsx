@@ -154,6 +154,22 @@ export default class Console extends React.Component {
   // strip it, so a refresh does not replay a stale banner.
   readPmCallback = () => {
     const q = new URLSearchParams(window.location.search);
+
+    // A failed SIGN-IN comes back to the login screen, not to settings — the
+    // caller has no session, so there is nothing behind /settings for them.
+    // Surface the reason there instead of dropping it.
+    const signIn = q.get('pmSignIn');
+    if (signIn && signIn !== 'ok') {
+      this.setState({
+        pmSignInError:
+          signIn === 'cancelled' ? 'plumo sign-in was cancelled' : q.get('reason') || 'plumo sign-in failed',
+      });
+      q.delete('pmSignIn'); q.delete('pmLink'); q.delete('reason');
+      const left = q.toString();
+      window.history.replaceState({}, '', window.location.pathname + (left ? '?' + left : ''));
+      return;
+    }
+
     const outcome = q.get('pmLink');
     if (!outcome) return;
     const ws = q.get('workspace');
