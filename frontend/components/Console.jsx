@@ -1550,13 +1550,39 @@ export default class Console extends React.Component {
     this.pingService();
   };
   signIn = async () => {
+    // Enter reaches this through `onLoginKey`, which no disabled button can
+    // block, so the busy flag has to be the guard as well as the spinner.
+    if (this.state.signInBusy) return;
     const email = this.state.loginEmail.trim();
     if (!email || !this.state.loginPw.trim()) { this.setState({ loginError: true }); return; }
     try {
+      // PM's submit button carries `loading`/`disabled` for exactly this
+      // window (`login/page.tsx:259-269`). CS's sat inert while the credential
+      // call was in flight — a second or more where the only honest reading of
+      // the screen was that the click had missed.
+      this.setState({ signInBusy: true });
       await this.api.login(email, this.state.loginPw, this.state.keepSignedIn);
+      // Hand off to the boot loader the moment the credentials are accepted.
+      //
+      // This is where PM leaves the sign-in screen: `AuthContext.login` awaits
+      // the credential call and then routes away, and everything after that —
+      // the workspace fetch, the workspace layout's own validation — happens
+      // under the full-screen branded loader
+      // (`app/(authenticated)/[workspace]/layout.tsx:91-97`). CS used to hold
+      // the sign-in form on screen, inert, for the whole of `bootstrap()` and
+      // then snap into the console; the ten calls bootstrap makes are exactly
+      // the stretch PM covers.
+      //
+      // `booted: false` re-uses the gate the cold start already renders
+      // (`isBooting`, render() below) rather than adding a second flag: one
+      // boot screen, one condition, so the two paths cannot drift apart. It is
+      // dismissed the same way PM's is — by the data landing, with no minimum
+      // duration and no fade — which is why the loader's own 3.6s rail creeps
+      // to 92% and never completes.
+      this.setState({ booted: false, signInBusy: false });
       const me = await this.api.bootstrap();
       this.setState(
-        { loggedIn: true, loginError: false, loginPw: '', role: me.role, avail: me.availability ?? 'available', notifs: this.api.notifications, screen: 'queue' },
+        { booted: true, loggedIn: true, loginError: false, loginPw: '', role: me.role, avail: me.availability ?? 'available', notifs: this.api.notifications, screen: 'queue' },
         () => { this.loadQueue({ noFail: true }); this.loadCounts(); },
       );
     } catch (e) {
@@ -1565,7 +1591,11 @@ export default class Console extends React.Component {
       // apart from a wrong password; setting `true` here discarded both and was
       // why every failure rendered the same sentence. `?? true` keeps the old
       // shape for a throw that carries nothing — that function takes either.
-      this.setState({ loginError: e ?? true });
+      //
+      // `booted: true` unconditionally: if the throw came from `bootstrap()`
+      // the handoff above already hid the form, and without this the console
+      // would sit under the loader forever instead of showing the error.
+      this.setState({ booted: true, signInBusy: false, loginError: e ?? true });
       if (e?.offline) this.toast('Network error. Please check your connection.', 'bad');
     }
   };
@@ -1808,6 +1838,7 @@ export default class Console extends React.Component {
       pwType: S.pwShown ? 'text' : 'password', pwToggleLabel: S.pwShown ? 'Hide' : 'Show',
       onLoginEmail: this.onLoginEmail, onLoginPw: this.onLoginPw, togglePw: this.togglePw, signIn: this.signIn, forgot: this.forgot,
       onLoginKey: this.onLoginKey, keepSignedIn: S.keepSignedIn, toggleKeepSignedIn: this.toggleKeepSignedIn,
+      signInBusy: !!S.signInBusy,
       federated: this.federated, requestAccess: this.requestAccess, serviceUp: S.serviceUp,
 
       me: meView, go: this.go, signOut: this.signOut,
@@ -2039,8 +2070,12 @@ export default class Console extends React.Component {
     const V = this.renderVals();
     return (
       <>
+        {/* `min-h-screen`, not `h-screen`: PM's boot gate is
+            `min-h-screen flex items-center justify-center`
+            (`[workspace]/layout.tsx:93`), which lets the box grow rather than
+            clip if the stack ever outgrows a short viewport. */}
         {V.isBooting && (
-          <div className="h-screen flex items-center justify-center bg-bg">
+          <div className="min-h-screen flex items-center justify-center bg-bg">
             <LogoLoader />
           </div>
         )}

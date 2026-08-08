@@ -9,16 +9,24 @@ interface PlumoAnimatedIconProps {
 }
 
 /**
- * Animated plumo app icon: primary-blue rounded tile with a breathing blob
- * and blinking eyes. Ported from `plumo-app-icon-animated.html` and
- * re-expressed as a self-contained React/SVG component.
+ * Animated plumo app icon: rounded brand tile with a breathing blob and
+ * blinking eyes. This is the mark PM's boot loader shows
+ * (`src/components/brand/PlumoAnimatedIcon.tsx`), reproduced here down to the
+ * path data, the tile radius ratio, and every animation duration.
  *
- * The *static* look (blue tile, centering, blob size) is set via inline styles
+ * The one difference is the colour. PM's tile is `#2563EB`; CS's desk is green,
+ * so the tile and the eye strokes are `#4C9F6E` — the same hex
+ * `public/assets/marks/mark-primary.svg` and `app/icon.svg` already carry, so
+ * the booting mark and the favicon are the same green.
+ *
+ * The *static* look (tile colour, centering, blob size) is set via inline styles
  * so it paints correctly on the very first frame — including the server-rendered
  * HTML. Only the animations live in `styled-jsx`, whose CSS is injected at
- * runtime; keeping the background there previously caused a white-blob→blue-tile
+ * runtime; keeping the background there previously caused a white-blob→green-tile
  * flash on boot before the styles landed.
  */
+const TILE = '#4C9F6E';
+
 export const PlumoAnimatedIcon: React.FC<PlumoAnimatedIconProps> = ({ size = 56, className }) => {
   const radius = Math.round(size * (80 / 360)); // keeps proto radius ratio
 
@@ -29,11 +37,13 @@ export const PlumoAnimatedIcon: React.FC<PlumoAnimatedIconProps> = ({ size = 56,
         width: size,
         height: size,
         borderRadius: radius,
-        background: '#2563EB',
+        background: TILE,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: '0 8px 24px rgba(37, 99, 235, 0.25)',
+        // PM's own shadow, re-tinted: same 0 8px 24px at 25%, mixed from the
+        // tile colour rather than from PM's blue.
+        boxShadow: '0 8px 24px rgba(76, 159, 110, 0.25)',
       }}
       aria-hidden
     >
@@ -53,14 +63,14 @@ export const PlumoAnimatedIcon: React.FC<PlumoAnimatedIconProps> = ({ size = 56,
           <path
             d="M 22 34 Q 28 27, 34 34"
             fill="none"
-            stroke="#2563EB"
+            stroke={TILE}
             strokeWidth="3.2"
             strokeLinecap="round"
           />
           <path
             d="M 46 34 Q 52 27, 58 34"
             fill="none"
-            stroke="#2563EB"
+            stroke={TILE}
             strokeWidth="3.2"
             strokeLinecap="round"
           />
@@ -70,14 +80,14 @@ export const PlumoAnimatedIcon: React.FC<PlumoAnimatedIconProps> = ({ size = 56,
           <path
             d="M 22 32 L 34 32"
             fill="none"
-            stroke="#2563EB"
+            stroke={TILE}
             strokeWidth="3.2"
             strokeLinecap="round"
           />
           <path
             d="M 46 32 L 58 32"
             fill="none"
-            stroke="#2563EB"
+            stroke={TILE}
             strokeWidth="3.2"
             strokeLinecap="round"
           />

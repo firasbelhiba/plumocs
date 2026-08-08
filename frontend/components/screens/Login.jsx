@@ -325,7 +325,17 @@ export default function Login({ V }) {
               </Button>
             </div>
 
-            <Button size="md" onClick={V.signIn} rightIcon={<ArrowIn />} className="w-full justify-center">
+            {/* `loading` + `disabled` together, as PM's submit button has them
+                (`login/page.tsx:264-266`). Button already swallows the right
+                icon while loading, so there is no `!loading &&` guard here. */}
+            <Button
+              size="md"
+              onClick={V.signIn}
+              loading={V.signInBusy}
+              disabled={V.signInBusy}
+              rightIcon={<ArrowIn />}
+              className="w-full justify-center"
+            >
               Sign in
             </Button>
 
