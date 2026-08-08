@@ -107,20 +107,7 @@
 
 img, svg { display: block; max-width: 100%; }
 
-h1, h2, h3, h4 {
-  font-weight: var(--plumo-fw-medium);
-  letter-spacing: -0.3px;
-  margin: 0;
-}
 p { margin: 0; }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-  }
-}
 
 /* ============================================================
    Console theme layer: semantic vars only — every component is
@@ -259,6 +246,28 @@ p { margin: 0; }
   * {
     @apply border-[color:var(--border)];
   }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply text-fg font-semibold;
+  }
+
+  a {
+    @apply text-[color:var(--primary)] hover:text-[color:var(--primary-hover)] transition-colors;
+  }
+}
+
+/* Hide the browser's native password reveal/clear controls (Edge/IE render an
+   ::-ms-reveal "eye" and ::-ms-clear "x" inside password/text inputs). The app
+   ships its own show/hide toggle, so the native eye would appear as a second one
+   beside it. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
 }
 
 /* ---- Token-driven utilities the primitives rely on (ported from PM) ---- */
@@ -347,10 +356,7 @@ body{
   font-family:var(--plumo-font);font-weight:var(--plumo-fw-regular);line-height:var(--plumo-lh-body);
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
 }
-a{color:var(--cs-brand);text-decoration:none} a:hover{opacity:.8}
-h1,h2,h3,h4{color:var(--cs-brand-ink)}
 button,input,textarea,select{font-family:var(--plumo-font)}
-[data-scroll]{scrollbar-width:thin;scrollbar-color:var(--cs-border) transparent}
 @keyframes cs-shimmer{0%{opacity:.55}50%{opacity:.95}100%{opacity:.55}}
 @keyframes cs-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cs-spin{to{transform:rotate(360deg)}}
@@ -572,4 +578,70 @@ select {
 .interactive:active {
   transform: translateY(0) scale(0.99);
   transition-duration: var(--dur-instant);
+}
+
+/* Accessibility: honor reduced-motion — kill animations + transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Hide scrollbar visually but keep scroll behavior (panels/rails) */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ───────── Global scrollbar styling ─────────
+   Thin, token-aware bar that is faintly visible at rest and darkens on
+   hover. Applied to every scroll container so it matches the plumo
+   surface across the app. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+*:hover,
+*:focus-within {
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.15s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-3);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }

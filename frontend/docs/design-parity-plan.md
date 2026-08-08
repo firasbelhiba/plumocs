@@ -274,9 +274,12 @@ either directory would silently purge.
 ### BATCH 2 — Base element parity
 *Still `globals.css` only. These are the rules that decide how untouched HTML looks.*
 
+**STATUS 2026-08-08:** items 7, 8, 9, 11 **DONE**. Item 10 **DEFERRED** — it is Open
+Question I and unanswered; see the note under it.
+
 ---
 
-#### 7. Fix the base heading and link rules — **S**
+#### 7. Fix the base heading and link rules — **S** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:110-114` and `:297` and `:296`.
 **PM** `src/app/globals.css:207-218`.
@@ -302,9 +305,21 @@ titles (item 33) change appearance immediately.
 **Risk:** medium-visible, low-technical. **Check:** `Reports.jsx:30` title should go from
 forest green 500 to near-black 600.
 
+**DONE 2026-08-08.** PM `:207-218` copied verbatim into CS's `@layer base`; the unlayered
+`h1,h2,h3,h4` weight/tracking rule, the `--cs-brand-ink` heading colour and the
+`a{color:var(--cs-brand)} a:hover{opacity:.8}` pair are all gone. Heading `margin:0` and link
+`text-decoration:none` now come from Tailwind preflight, which is where PM gets them.
+**The check above only half-lands: the title goes to near-black *500*, not 600.**
+`Reports.jsx:30`, `Customers.jsx:23`, `Account.jsx:23` and `EdgeScreens.jsx:16,37` each carry
+a literal `font-medium`, and `@layer utilities` outranks `@layer base`, so the base
+`font-semibold` cannot reach them. The colour half lands everywhere. **The weight arrives with
+item 34** — see the correction noted there.
+Side effect: `--plumo-fw-medium` (`:57`) is now defined and unused. Left in place deliberately;
+item 46 already schedules the `--plumo-fw-*` pair for deletion.
+
 ---
 
-#### 8. Port the scrollbar suite — **M**
+#### 8. Port the scrollbar suite — **M** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:299` — `[data-scroll]{scrollbar-width:thin;scrollbar-color:var(--cs-border) transparent}`, opt-in, no webkit rules.
 **PM** `src/app/globals.css:549-556, 562-600`.
@@ -319,9 +334,14 @@ ease`, thumb-hover → `var(--text-3)`, transparent track and corner. Also bring
 harmless — leave them.
 **Risk:** low. **Check:** the Queue list and the Ticket rail in Chrome.
 
+**DONE 2026-08-08.** PM `:549-556` + `:562-600` copied verbatim, `.scrollbar-hidden` included;
+the superseded `[data-scroll]` rule removed, the JSX attributes left alone. Confirmed in the
+built stylesheet, not just in source. **The Chrome check above is still owed** — nothing in
+this batch has been looked at in a browser.
+
 ---
 
-#### 9. Hide the native password reveal control — **S**
+#### 9. Hide the native password reveal control — **S** ✅ DONE 2026-08-08
 
 **CS** — absent. **PM** `src/app/globals.css:225-228`:
 `input::-ms-reveal, input::-ms-clear { display: none; }`
@@ -330,9 +350,12 @@ harmless — leave them.
 **After:** one toggle.
 **Blast radius:** 1 (the login password field). **Risk:** none. **Check:** Edge, login screen.
 
+**DONE 2026-08-08.** PM `:225-228` copied verbatim with its comment, placed immediately after
+`@layer base` as in PM. The Edge check is still owed.
+
 ---
 
-#### 10. Decide the scroll ownership model — **M**
+#### 10. Decide the scroll ownership model — **M** ⏸ DEFERRED 2026-08-08
 
 **CS** `app/globals.css:290` — `html, body { height: 100% }` only; document-level scrolling.
 **PM** `src/app/globals.css:191-194, 203-204` — `html { overflow: hidden; height: 100% }` and
@@ -349,14 +372,32 @@ is big.
 **Check:** login at 800px viewport height (must still scroll or fit), Queue with 200 rows,
 Ticket with a long thread, Settings.
 
+**DEFERRED 2026-08-08 — this is Open Question I and the owner has not answered it.** Two
+findings that should inform the answer, both established while doing the rest of Batch 2:
+- **The in-app half is a no-op, confirmed.** `Console.jsx:1968` already builds
+  `height:100vh; display:flex; overflow:hidden`. Locking `html`/`body` changes nothing there.
+- **The login half does not survive a straight copy.** PM's counterpart
+  (`src/app/login/page.tsx:128`) is `min-h-screen flex flex-col login-bg overflow-y-auto` —
+  but `overflow-y-auto` on an auto-height block never opens a scroll container, so once
+  `body{overflow:hidden}` lands, anything past 100vh is clipped and unreachable **in PM too**.
+  CS's three tall centred pages (`screens/Login.jsx:145`, `app/accept-invite/page.jsx:246`,
+  `app/reset-password/page.jsx:131`) are `min-h-screen … overflow-hidden` and would clip the
+  same way. Adopting PM here means either accepting the clipping or giving those wrappers a
+  definite height (`h-full overflow-y-auto`) — **a fix PM does not have.** That makes this a
+  "fix PM first" call rather than a port, which is a third option Open Question I does not
+  currently offer.
+
 ---
 
-#### 11. Align the reduced-motion block — **S**
+#### 11. Align the reduced-motion block — **S** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:117-123` — `0.001ms`, no `scroll-behavior`.
 **PM** `src/app/globals.css:527-536` — `0.01ms` and `scroll-behavior: auto !important`.
 
 Trivial; do it while you're in the file. **Blast radius:** reduced-motion users only.
+
+**DONE 2026-08-08.** `0.001ms` → `0.01ms` ×2, `scroll-behavior: auto !important` added, and the
+block moved to sit directly after `.interactive` to match PM's position at `:526-536`.
 
 ---
 
@@ -936,8 +977,15 @@ of the screen, and 16px vs 14px wordmark.
 | colour | none → inherits the brand-green base rule | explicit `text-fg` |
 | subtitle | `text-[13px] text-fg-3` | `text-[13px] text-fg-2 mt-1` — one step darker |
 
-Item 7 already fixes the colour and weight globally; this item fixes the element, size and
-subtitle tone.
+~~Item 7 already fixes the colour and weight globally; this item fixes the element, size and
+subtitle tone.~~
+**CORRECTED 2026-08-08, after item 7 shipped.** Item 7 fixes the **colour** globally — these
+four titles are near-black today. It does **not** fix the weight here: each of these call
+sites carries a literal `font-medium`, and `@layer utilities` outranks the `@layer base`
+`font-semibold`. **The 500 → 600 change is this item's job, not item 7's** — the `font-medium`
+class has to be deleted at the call site, along with `tracking-[-.6px]` (item 7 removed the
+base tracking; these override it back). Add `EdgeScreens.jsx:16,37` to the file list above:
+same `font-medium` + `tracking` pair on `text-[24px]` headings.
 
 CS is internally inconsistent too: `Login.jsx:161, 284, 320` uses `font-semibold` at 26–32px
 while every in-app title uses `font-medium` at 21–22px. Standardising on PM removes that too.
@@ -1448,9 +1496,25 @@ PM locks `html` and `body` to `overflow: hidden` and delegates all scrolling to 
 scrolls at the document level. Adopting PM's rule should be a no-op for the in-app views but
 will change `Login.jsx`, which is a tall centred page. Do you want CS's login to scroll the
 document (as now) or to be a fixed-height centred card (as PM's)?
+**UPDATED 2026-08-08 — still unanswered, and there is a third option.** The in-app no-op is
+now confirmed (`Console.jsx:1968`). But PM's own login only *appears* to scroll: its
+`overflow-y-auto` sits on an auto-height block, which never opens a scroll container, so under
+`body{overflow:hidden}` PM clips tall login content too. So the real choice is: (a) keep CS's
+document scrolling, (b) copy PM and inherit its clipping bug on three pages, or (c) fix PM
+first — give the auth wrappers a definite height so `overflow-y-auto` actually engages, then
+port. Full detail under item 10.
 
 **J. React version constraint.**
 CS is React 19.1 / Next 15.4; PM is React 18.3 / Next 14.2. `react-hot-toast` must be `^2.6.0`
 or later on CS, not PM's pinned `^2.4.1` (item 22). Same caution applies to any other PM
 dependency you port. Worth confirming there is no plan to align the framework versions first
 — if there is, do that before Batch 5.
+
+**K. CS is already shipping PM's accent blue on the sidebar.** *(Added 2026-08-08, found
+during the Batch 2 colour check. Pre-existing — no batch put it there.)*
+`globals.css:121` defines `--cs-btn: #2563EB` and `:207` overrides it to `#3B82F6` in dark.
+Those are byte-for-byte PM's `--plumo-blue` and `--plumo-sky`. `:342` uses it for the active
+nav item: `nav [data-on="true"] { --cs-onfg: var(--cs-btn); --cs-onbar: var(--cs-btn) }` — so
+the selected sidebar row, its label and its indicator bar are all PM accent blue in a green
+product. No item in this plan touches it. **Is that deliberate, or should the nav active state
+bind `--primary` like everything else?**
