@@ -63,20 +63,36 @@ export const StatCard: React.FC<StatCardProps> = ({
         {icon && <span className="text-fg-3 shrink-0">{icon}</span>}
       </div>
 
-      {/* Value + delta */}
+      {/* Value + delta
+          This row decides the card's height, so it is pinned to ONE LINE.
+          `flex` does not wrap, but the delta's own text does: at a 218px card
+          "Median · 7 days" broke in two beside "6h 10m", the taller flex item
+          dragged the card from 88px to 120px, and every card in the grid
+          stretched to match — so the page jumped 32px the moment reports
+          landed, and no skeleton could predict it, because which of five values
+          wraps depends on the numbers that arrived.
+          The value never shrinks: it is the thing being read. The delta gives
+          way instead, ellipsing rather than taking a second line. */}
       <div className="mt-2 flex items-baseline gap-2">
-        <div className={cn('font-mono text-2xl font-semibold tracking-tight', colorClass)}>
+        <div className={cn('font-mono text-2xl font-semibold tracking-tight shrink-0', colorClass)}>
           {value}
         </div>
         {delta && (
-          <span className="text-[11px] font-mono font-medium" style={{ color: deltaColor }}>
+          <span
+            className="text-[11px] font-mono font-medium min-w-0 truncate whitespace-nowrap"
+            style={{ color: deltaColor }}
+            title={typeof delta === 'string' ? delta : undefined}
+          >
             {delta}
           </span>
         )}
         {trend && !delta && (
           <span
             className={cn(
-              'text-[11px] font-medium',
+              // Same one-line rule as the delta above: this is the other thing
+              // that can sit beside the value, so it gets the same treatment or
+              // the height problem simply returns through the other branch.
+              'text-[11px] font-medium min-w-0 truncate whitespace-nowrap',
               trend.direction === 'up'
                 ? 'text-[color:var(--success)]'
                 : 'text-[color:var(--danger)]',
