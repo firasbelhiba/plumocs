@@ -35,9 +35,23 @@ on:
   #
   # Anything that adds an irreversible step to this pipeline belongs AFTER that
   # smoke test, not before it.
-  push:
+  # CHAINED TO CI RATHER THAN RACING IT.
+  #
+  # This used to trigger on push, in parallel with the `backend` workflow, and
+  # re-ran a smaller gate of its own. Two things were wrong with that. The
+  # integration job — a real PostgreSQL with the split roles, the only thing that
+  # executes a migration before production does — had NO say in whether a deploy
+  # happened. And a migration-bearing push always went red, because the deploy
+  # correctly refused to apply schema on its own, so a working pipeline looked
+  # broken and a genuinely broken one looked the same.
+  #
+  # Now it waits for the whole of `backend` to pass. That is strictly stronger:
+  # types, unit tests, container images AND the integration suite must be green
+  # for this exact commit before anything reaches the server.
+  workflow_run:
+    workflows: ['backend']
+    types: [completed]
     branches: [main]
-    paths: ['backend/**', '.github/workflows/deploy.yml']
 
   # Ship a known-good commit by hand — rollbacks, and re-running a deploy whose
   # SSH step flaked without pushing an empty commit to trigger it.
@@ -47,6 +61,11 @@ on:
         description: 'Commit or tag to deploy (default: main)'
         required: false
         default: 'main'
+      migrations:
+        description: 'Apply pending migrations'
+        type: boolean
+        required: false
+        default: false
 
 # One deploy at a time. Two overlapping runs would race on the same working
 # directory and the same containers, and the loser would leave a half-built
@@ -56,38 +75,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # The gate. Reuses the same steps as backend-ci rather than trusting that its
-  # run for this SHA has finished — a push race would otherwise let an untested
-  # commit through the door.
-  test:
-    name: gate — types, unit tests, build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.ref || github.sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npx tsc --noEmit
-      # Includes app.module.spec.ts, which resolves the whole Nest graph. A
-      # controller injecting a service its module never imports builds green and
-      # crashes on boot — that has already put a 502 in production once.
-      - run: npm test
-      - run: npm run build
+  # THE GATE IS NOW THE `backend` WORKFLOW ITSELF — there is no duplicate here.
+  #
+  # It ran types, unit tests, the container image build and the integration suite
+  # against a real PostgreSQL for this exact commit. Re-running a weaker subset
+  # would only add minutes and a second thing to keep in sync.
+  #
+  # A failed or cancelled CI run still triggers workflow_run, so the conclusion
+  # is checked explicitly. Without this line every red build would deploy.
 
   deploy:
     name: build and deploy on the server
-    needs: test
     runs-on: ubuntu-latest
     environment: production
+    # Deploy only when CI actually passed. workflow_run fires on failure and
+    # cancellation too, so without this a red build would ship.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -100,9 +105,28 @@ jobs:
           # has already happened, which reads as a broken deploy that in fact
           # succeeded.
           command_timeout: 20m
+          # WITH_MIGRATIONS is on for a CI-triggered deploy, and that is a
+          # deliberate change of policy rather than a convenience.
+          #
+          # It was off because a deploy that quietly migrates can quietly destroy
+          # data, and nothing had ever executed a migration before production did.
+          # That is no longer true: the integration job applies every migration to
+          # a real PostgreSQL 18 with the same split roles, and it has already
+          # earned it — it caught a rename that left five NOT NULL constraints
+          # behind, which would have failed identically on the server.
+          #
+          # The remaining protections are unchanged and are what make this safe:
+          # deploy-container.sh takes a fresh backup before migrating, smoke-tests
+          # the new image against the live database on a spare port BEFORE
+          # stopping anything, and rolls back if the result does not serve.
+          #
+          # A manual dispatch still defaults to OFF. Deploying a hand-picked ref
+          # has not been through CI, so it does not get CI's permission.
           script: |
             set -Eeuo pipefail
-            REF="${{ github.event.inputs.ref || github.sha }}"
+            REF="${{ github.event.inputs.ref || github.event.workflow_run.head_sha }}"
+            export WITH_MIGRATIONS="${{ github.event_name == 'workflow_run' && '1' || (github.event.inputs.migrations == 'true' && '1' || '0') }}"
+            echo "deploying $REF (migrations: $WITH_MIGRATIONS)"
 
             # Sync the checkout BEFORE running the script that lives in it.
             # Otherwise this is a bootstrap paradox: the first deploy of a new
