@@ -55,7 +55,9 @@ export function handlingOf(t: {
  */
 const ticketInclude = (workspaceId: string) =>
   ({
-    customer: { include: { organization: true } },
+    // `Organization` was renamed `Company` on 2026-08-08 — see the model's
+    // comment in schema.prisma and docs/organization-vs-workspace.md.
+    customer: { include: { company: true } },
     assignee: {
       select: {
         id: true,
@@ -136,7 +138,7 @@ export class TicketsService {
         priority,
         channel,
         customerId: customer.id,
-        organizationId: customer.organizationId,
+        companyId: customer.companyId,
         teamId,
         assigneeId,
         slaPolicyId: due.policyId,
@@ -580,11 +582,29 @@ export class TicketsService {
       diff.assigneeId = { from: ticket.assigneeId, to: dto.assigneeId };
     }
     if (dto.teamId !== undefined) {
-      if (actor.kind === 'user' && actor.role === 'agent') {
+      // The machine case is stated FIRST and explicitly, because it used to be
+      // stated nowhere. Both branches below were once written
+      // `actor.kind === 'user' && actor.role === '…'`, which looks like a
+      // type-narrowing convenience (only a user has `role`) and is actually a
+      // hole: a Principal is a user OR an api_key, a key carries scopes and NO
+      // role, so for a key neither branch fired and every move was allowed. A
+      // `tickets:write` key could put any ticket into any team — including a
+      // key bound to one team, which could push a ticket somewhere
+      // visibilityWhere would then hide from it. Never gate a privileged
+      // branch on `kind === 'user'`; say what the machine may do.
+      if (actor.kind === 'api_key') {
+        // Exactly the rule resolveRouting() applies on create, which is the
+        // point: a principal that may not create a ticket in a team has no
+        // business moving one there either. A bound key is confined to its
+        // team (null included — unrouting would strand the ticket outside its
+        // own reach); an unbound key is instance-wide by deliberate grant.
+        if (actor.teamId && dto.teamId !== actor.teamId) {
+          throw new ForbiddenException('Outside this key’s team');
+        }
+      } else if (actor.role === 'agent') {
         throw new ForbiddenException('Agents cannot move tickets between teams');
-      }
-      // a lead's reach is their own team on BOTH sides of the move
-      if (actor.kind === 'user' && actor.role === 'lead' && dto.teamId && dto.teamId !== actor.teamId) {
+      } else if (actor.role === 'lead' && dto.teamId && dto.teamId !== actor.teamId) {
+        // a lead's reach is their own team on BOTH sides of the move
         throw new ForbiddenException('Leads can only move tickets into their own team');
       }
       data.team = dto.teamId ? { connect: { id: dto.teamId } } : { disconnect: true };
@@ -640,8 +660,33 @@ export class TicketsService {
     diff: Record<string, { from: unknown; to: unknown }>,
   ) {
     assertTransition(ticket.status, to);
-    if (isReopen(ticket.status, to) && actor.kind === 'user' && actor.role === 'agent') {
-      throw new ForbiddenException('Reopening a closed conversation needs a lead');
+    if (isReopen(ticket.status, to)) {
+      // This read `… && actor.kind === 'user' && actor.role === 'agent'`, so it
+      // fired for humans only: an api_key has scopes and NO role, walked past
+      // the whole check, and could reopen closed work that a lead can only do
+      // inside their own team and an agent cannot do at all.
+      //
+      // A machine cannot satisfy "needs a lead", and there is no scope that
+      // stands in for one. Roles live on WorkspaceMembership; API_SCOPES names
+      // no reopen grant and scopes are literal with no inheritance
+      // (roles.guard.ts), so `tickets:write` — the same grant used for replying
+      // and retagging — must not be read as conferring it. Its two sibling
+      // lead-only actions are already machine-proof one layer up: bulk and
+      // merge carry @Roles('lead') with no @Scopes, so RolesGuard rejects a key
+      // with "This route is human-only". Reopen is reachable at all only
+      // because PATCH /tickets/:id and POST /tickets/:id/status must stay open
+      // to machines for ordinary ticket work.
+      //
+      // This costs the chatbot nothing. A visitor writing back to a finished
+      // conversation still reopens it — through ChatService.appendMessage's own
+      // deliberate write on the chat:write scope, not through here — so the one
+      // legitimate machine reopen in the product is unaffected.
+      if (actor.kind === 'api_key') {
+        throw new ForbiddenException('Reopening a closed conversation needs a lead; an API key cannot be one');
+      }
+      if (actor.role === 'agent') {
+        throw new ForbiddenException('Reopening a closed conversation needs a lead');
+      }
     }
     data.status = to;
     diff.status = { from: ticket.status, to };
@@ -706,6 +751,11 @@ export class TicketsService {
   // ---- bulk -------------------------------------------------------------------
 
   async bulk(dto: BulkDto, actor: Principal) {
+    // `kind === 'user'` here is narrowing, not a gate — unlike the two places
+    // where it WAS a gate (see the team-move and reopen comments above). The
+    // route is @Roles('lead') with no @Scopes, so RolesGuard turns a key away
+    // with "This route is human-only" before this runs. If bulk is ever opened
+    // to machines, this needs a machine rule first.
     if (actor.kind === 'user' && actor.role === 'agent') {
       throw new ForbiddenException('Bulk actions need a lead');
     }
@@ -746,6 +796,8 @@ export class TicketsService {
    * within the actor's scope.
    */
   async merge(sourceId: string, targetId: string, actor: Principal) {
+    // Narrowing, not a gate — @Roles('lead') with no @Scopes keeps machines out
+    // of this route entirely. Same caveat as bulk() above.
     if (actor.kind === 'user' && actor.role === 'agent') {
       throw new ForbiddenException('Merging needs a lead');
     }

@@ -2,15 +2,45 @@
 
 **Audit date:** 2026-08-07 · **Scope:** `backend/src`, `frontend/components` · **Method:** read the code, cite `file:line`, distinguish *enforced* from *looks enforced*.
 
+> **Amended 2026-08-08 — holes 1, 2 and 3 are closed; §4's recommendation is done.**
+> Three changes landed together and this document was updated in place rather than
+> reissued, so the findings below still read as they were written and each closed
+> item carries a **CLOSED** note with the fix's `file:line`. Amendments are marked
+> **[2026-08-08]**. What changed:
+>
+> 1. `POST`/`PATCH /organizations` gained `@Roles('admin')` — and the resource was
+>    **renamed `organizations` → `companies`** in the same pass (see
+>    [§2](#2-the-endpoint-matrix) and `docs/organization-vs-workspace.md`). Every
+>    route path, table and column moved with it.
+> 2. A last-admin guard now sits in `UsersService` (hole 2).
+> 3. The two API-key bypasses in `tickets.service.ts` are fixed (hole 3).
+> 4. `PERMISSIONS` is deleted; `permissions.ts` keeps the live parts (§4).
+>
+> Still open and unchanged: holes **4–10**, and the boot-time route-table test
+> that [§6](#6-what-is-proven-vs-assumed) argues for. Line references throughout
+> were re-verified against the post-change tree on 2026-08-08.
+
 ---
 
 ## VERDICT
 
 **Yes — RBAC is implemented, it is real, and it runs on every request.** The guard is registered globally, the role hierarchy works, and the rules the product actually depends on are enforced; what is missing is not the mechanism but four specific gaps — two write routes with no gate at all, no last-admin protection, four API-key branches that skip checks a human would hit, and no test that any of it is wired to the right routes.
 
+> **[2026-08-08]** Three of those four are now closed. The remaining one is the
+> last sentence — *no test that any of it is wired to the right routes* — and it
+> is now the largest gap in this document by a wide margin. It is narrower than
+> it was: `companies.module.spec.ts` drives the real `RolesGuard` through a real
+> `Reflector` against the actual handlers, so the pattern for such a test exists
+> and is proven to work. It covers four routes out of 58.
+
 The honest one-line summary: **the enforcement is sound, the coverage has holes, and the proof is thin.** Nothing here is a "rewrite RBAC" finding. Items 1–3 in [HOLES](#3-holes) are each under 20 lines to fix.
 
 One correction to the brief this audit was commissioned against: **`PERMISSIONS` is dead, but `permissions.ts` is not.** The `PERMISSIONS` map is read by nothing but its own spec — that part is confirmed. But `roleAtLeast` and `ROLE_ORDER` in the same file are the actual hierarchy, imported by `roles.guard.ts:4`, and `API_SCOPES` is imported by `api-keys.module.ts:8` to validate the scope DTO. Deleting the file would break the guard. Delete the *map*, keep the rest.
+
+> **[2026-08-08] Done, exactly that way.** `PERMISSIONS` and `PermissionRule` are
+> gone; `ROLE_ORDER`, `roleAtLeast`, `Role`, `API_SCOPES` and `ApiScope` remain and
+> are still imported by `roles.guard.ts:4` and `api-keys.module.ts:8`. The file
+> header now explains why there is deliberately no matrix and points here.
 
 ---
 
@@ -20,10 +50,10 @@ A principal is resolved per request, not per session. `AuthGuard` re-reads the *
 
 Enforcement is two layers, and only the first is visible to a route audit:
 
-1. **`@Roles()` + `RolesGuard`** — a coarse floor. 42 route-level decorators (34 admin, 7 lead, 1 agent) over 58 mutating routes.
+1. **`@Roles()` + `RolesGuard`** — a coarse floor. 42 route-level decorators (34 admin, 7 lead, 1 agent) over 58 mutating routes. **[2026-08-08] Now 44 (36 admin, 7 lead, 1 agent)** — the two added admin gates are `POST`/`PATCH /companies`, hole 1. Route total is unchanged: the rename moved paths, not endpoints.
 2. **`TeamScopeService`** (`common/guards/team-scope.service.ts`) — a *row* filter, called explicitly by services. Not a guard, not global. This is where most of the interesting policy lives.
 
-Roles are **hierarchical, not exact-match**: `roleAtLeast` is `ROLE_ORDER[role] >= ROLE_ORDER[min]` over `{agent:0, lead:1, admin:2}` (`permissions.ts:90-95`), so admin satisfies `@Roles('lead')`. RLS isolates *tenants* and is orthogonal to all of this — it never implements a role.
+Roles are **hierarchical, not exact-match**: `roleAtLeast` is `ROLE_ORDER[role] >= ROLE_ORDER[min]` over `{agent:0, lead:1, admin:2}` (`permissions.ts:41-43`, was `:90-95` before the map was deleted), so admin satisfies `@Roles('lead')`. RLS isolates *tenants* and is orthogonal to all of this — it never implements a role.
 
 ### What a lead can do that an agent cannot
 
@@ -31,9 +61,9 @@ As the **code** has it, not the matrix:
 
 | capability | where it is actually enforced |
 |---|---|
-| Reopen a resolved/closed ticket | `tickets.service.ts:643` — agents throw, everyone else passes |
+| Reopen a resolved/closed ticket | ~~`tickets.service.ts:643`~~ **[2026-08-08]** `:663-689` — agents throw, **api\_keys throw**, everyone else passes |
 | Assign work to **other people** in their team | `tickets.service.ts:658-704` (`assertCanAssign`) — an agent may only assign *to themselves*, and only from their own team's pool |
-| Move a ticket **into** their own team | `tickets.service.ts:582-589` — agents blocked outright; a lead may only move *into* their own team |
+| Move a ticket **into** their own team | ~~`tickets.service.ts:582-589`~~ **[2026-08-08]** `:584-612` — agents blocked outright; a lead may only move *into* their own team; a **bound key** is confined to its own team |
 | Bulk actions | `tickets.controller.ts:73` **and** `tickets.service.ts:709-711` (stated twice, both agree) |
 | Merge tickets | `tickets.controller.ts:79` **and** `tickets.service.ts:749-751` |
 | Manage their team's canned responses | `canned-responses.module.ts:79,85,91` + `assertManage` `:37-42` |
@@ -56,8 +86,8 @@ This is not a codebase that forgot about authorization. Several things here are 
 - **`loadAndAssert` (`team-scope.service.ts:32-36`) fuses "fetch" with "may you".** Its docstring records that `remove()` once made only the first call and any admin could delete any ticket by id. Fusing them made the omission *unrepresentable*. That is the right structural fix, and it is why the ticket surface has no scope holes today.
 - **`loadTicketUnchecked` (`:46`) is deliberately ugly-named** so it cannot be reached for absent-mindedly. Two callers, both legitimate.
 - **The `NO_TEAM` sentinel (`:17`) is a real bug prevented.** A bare `{teamId: undefined}` is stripped by Prisma and degrades to *match everything* — a team-less lead would have seen the entire instance. Matching an impossible UUID fails closed instead. This is exactly the kind of thing that ships broken everywhere else.
-- **`UsersService.update` splits the DTO across two tables explicitly** (`users.module.ts:136-152`) rather than spreading it, with a comment saying why: so a future field can't be sent to whichever table happens to accept it.
-- **`assertCanAssign` handles the API-key case properly** (`tickets.service.ts:659-677`) and explains the reasoning — handing a ticket to someone outside the key's team would surface it in that person's inbox, a leak the key's *read* scope would never permit. This is the model the other two key branches should have copied.
+- **`UsersService.update` splits the DTO across two tables explicitly** (~~`users.module.ts:136-152`~~ **[2026-08-08]** `:213-238`) rather than spreading it, with a comment saying why: so a future field can't be sent to whichever table happens to accept it. That split is also what made hole 2 tractable — the guard could be placed once, ahead of both writes, because the two writes were already separate.
+- **`assertCanAssign` handles the API-key case properly** (~~`tickets.service.ts:659-677`~~ **[2026-08-08]** `:703-747`) and explains the reasoning — handing a ticket to someone outside the key's team would surface it in that person's inbox, a leak the key's *read* scope would never permit. This is the model the other two key branches should have copied. **[2026-08-08] They now have** — see hole 3.
 - **`main.ts:67-73` sets `whitelist: true, forbidNonWhitelisted: true`**, so privilege-escalation-by-extra-field is a 400, not a silent write. `PATCH /users/me` cannot smuggle a `role`.
 - **Roles on membership rather than on `User`** is the correct call for a multi-desk product and was clearly deliberate.
 
@@ -76,9 +106,9 @@ Legend for **who**: after guard *and* service checks, who can actually succeed.
 | GET /tickets | 24 | `tickets:read` | agent+ ✓svc `visibilityWhere` `:310` |
 | GET /tickets/counts | 32 | `tickets:read` | agent+ ✓svc `:452` |
 | GET /tickets/:id | 39 | `tickets:read` | agent+ in scope ✓svc `loadAndAssert` `:264` |
-| PATCH /tickets/:id | 46 | `tickets:write` | agent+ in scope ✓svc; team-move needs lead `:583-588` ⚠ key bypasses |
-| POST /tickets/:id/assign | 53 | — (human-only) | ✓svc `:675-701`: agent=self only, lead=own team, admin=all |
-| POST /tickets/:id/status | 58 | `tickets:write` | agent+ in scope; **reopen needs lead** `:643` ⚠ key bypasses |
+| PATCH /tickets/:id | 46 | `tickets:write` | agent+ in scope ✓svc; team-move needs lead ~~`:583-588` ⚠ key bypasses~~ **[2026-08-08]** `:584-612`, key confined to its own team ✓ |
+| POST /tickets/:id/assign | 53 | — (human-only) | ✓svc ~~`:675-701`~~ **[2026-08-08]** `:703-747`: agent=self only, lead=own team, admin=all |
+| POST /tickets/:id/status | 58 | `tickets:write` | agent+ in scope; **reopen needs lead** ~~`:643` ⚠ key bypasses~~ **[2026-08-08]** `:663-689`, **no key may reopen** ✓ |
 | POST /tickets/:id/messages | 65 | `tickets:write` | agent+ in scope ✓svc `messages.service.ts:26` |
 | POST /tickets/bulk | 72 | **lead** | lead+ (also `service.ts:709`) |
 | POST /tickets/:id/merge | 78 | **lead** | lead+ (also `service.ts:749`) |
@@ -87,18 +117,30 @@ Legend for **who**: after guard *and* service checks, who can actually succeed.
 | POST /tickets/:id/bot-enabled | 102 | `agent` ⚠ | agent+ — **decorator is a no-op**, `agent` is the floor |
 
 ### users — `src/users/users.module.ts`
-| GET /users | 211 | — | any human; returns `email` for every member |
-| PATCH /users/me | 217 | — | self only ✓svc, DTO has no `role` |
-| GET /users/:id | 222 | — | any human, workspace-scoped `:99-109` |
-| POST /users | 227 | **admin** | admin |
-| PATCH /users/:id | 233 | **admin** | admin ⚠ no self-guard, no last-admin guard, writes global `isActive` |
-| DELETE /users/:id | 239 | **admin** | admin ⚠ no self-guard, no last-admin guard |
+**[2026-08-08]** Line numbers shifted by the last-admin guard (`assertAdminRemains`, `:175-205`).
 
-### organizations — `src/organizations/organizations.module.ts`
-| GET /organizations | 61 | — | any human |
-| GET /organizations/:id | 66 | — ⚠ | any human — returns every customer `name` + `email` `:37` |
-| **POST /organizations** | **71** | **— NONE** ⚠⚠ | **any agent** — no guard, no service check `:43-47` |
-| **PATCH /organizations/:id** | **76** | **— NONE** ⚠⚠ | **any agent** — incl. `domain`, the customer-matching field `:49-53` |
+| method + path | line | gate | who can actually call it |
+|---|---|---|---|
+| GET /users | ~~211~~ 303 | — | any human; returns `email` for every member |
+| PATCH /users/me | ~~217~~ 309 | — | self only ✓svc, DTO has no `role` |
+| GET /users/:id | ~~222~~ 314 | — | any human, workspace-scoped `:99-109` |
+| POST /users | ~~227~~ 319 | **admin** | admin |
+| PATCH /users/:id | ~~233~~ 325 | **admin** | admin ⚠ no self-guard, writes global `isActive` (hole 10, still open) — ~~no last-admin guard~~ **[2026-08-08]** ✓svc `:224-226` on demotion **or** `isActive:false` |
+| DELETE /users/:id | ~~239~~ 331 | **admin** | admin ⚠ no self-guard — ~~no last-admin guard~~ **[2026-08-08]** ✓svc `:260` |
+
+### companies — `src/companies/companies.module.ts`
+**[2026-08-08] Renamed from `organizations`.** The table, both FK columns, the Prisma
+model, the controller path and the frontend client all moved in one migration
+(`20260808120000_rename_organizations_to_companies`) — a `Company` is a *customer's
+employer*, never a tenant. `docs/organization-vs-workspace.md` has the reasoning.
+**Both unguarded write routes are now `@Roles('admin')`** — hole 1, closed.
+
+| method + path | line | gate | who can actually call it |
+|---|---|---|---|
+| GET /companies | 89 | — | any human |
+| GET /companies/:id | 94 | — ⚠ | any human — returns every customer `name` + `email` `:35-40` (**hole 4, still open**) |
+| POST /companies | 99 | **admin** | admin — `:100` |
+| PATCH /companies/:id | 105 | **admin** | admin — `:106`, incl. `domain`, the customer-matching field |
 
 ### teams — `src/teams/teams.module.ts`
 | GET /teams | 125 | — | any human |
@@ -198,13 +240,13 @@ Legend for **who**: after guard *and* service checks, who can actually succeed.
 
 ### Counts — settling the discrepancies
 
-| | value | note |
-|---|---|---|
-| Mutating routes (POST/PATCH/PUT/DELETE) | **58** | verified by count, not 59 |
-| Route-level `@Roles()` | **42** | 34 admin, 7 lead, 1 agent |
-| Mutating routes **with** a role gate | **33** | |
-| Mutating routes **without** one | **25** | 23 correct by design, **2 are holes** (organizations) |
-| `@AllowApiKey` routes | **23** | all 23 carry a `@Scopes` |
+| | value | 2026-08-07 | **[2026-08-08]** | note |
+|---|---|---|---|---|
+| Mutating routes (POST/PATCH/PUT/DELETE) | | **58** | **58** | unchanged — the rename moved paths, not endpoints |
+| Route-level `@Roles()` | | **42** | **44** | 34→**36** admin, 7 lead, 1 agent |
+| Mutating routes **with** a role gate | | **33** | **35** | |
+| Mutating routes **without** one | | **25** | **23** | ~~23 correct by design, **2 are holes** (organizations)~~ → **all 23 correct by design; no unguarded write route remains** |
+| `@AllowApiKey` routes | | **23** | **23** | all 23 carry a `@Scopes` |
 
 The brief's "46 decorators / 35-9-2" counted four non-decorators: the doc comment at `common/decorators/index.ts:10` and three test *names* at `roles.guard.spec.ts:31,38,45`. The real figure is 42.
 
@@ -214,7 +256,28 @@ The brief's "46 decorators / 35-9-2" counted four non-decorators: the doc commen
 
 Ranked by what an invited tester could actually do next week.
 
-### 1. Any agent can create and rename any organization — including its `domain`
+### 1. ~~Any agent can create and rename any organization — including its `domain`~~ — **CLOSED [2026-08-08]**
+
+> **Fixed.** `@Roles('admin')` on both write routes: `companies.module.ts:100` (POST)
+> and `:106` (PATCH). The resource was renamed `organizations` → `companies` in the
+> same change; the paragraphs below are left as written, so read *organization* as
+> *company* throughout.
+>
+> **Gate chosen: `admin`, not `lead`.** The recommendation below said admin and the
+> code was checked rather than assumed: every sibling of this shape gates writes at
+> admin — tags (`tags.module.ts:61,67,73`) and teams (`teams.module.ts:136,142,148`).
+> `lead` appears in teams only on `POST`/`DELETE :id/members` — staffing inside a
+> structure an admin defined. A company *is* that structure, and `domain` decides
+> which customers get filed into it, so it sits with the structure.
+>
+> **Tested**, and this is the part worth noting: `companies.module.spec.ts` drives the
+> real `RolesGuard` with a real `Reflector` against the actual handler functions, so
+> it fails if the decorator is removed. `roles.guard.spec.ts` already proved the
+> guard's *logic* with a stubbed reflector; what had never been tested anywhere in
+> this codebase is whether a decorator is *on a route* — see [§6](#6-what-is-proven-vs-assumed).
+> It also pins the controller path at `companies` and the audit `entityType` at
+> `company`.
+
 `organizations.module.ts:71` (POST) and `:76` (PATCH). No `@Roles`, no `@Scopes`, and `OrganizationsService.create/update` (`:43-53`) go straight to `prisma.organization.create/update`. The `principal` is passed in **only to write the audit row** — it is never checked.
 
 Concretely: an agent can `PATCH /organizations/<id> {"domain":"acme.com"}` and re-point which organization inbound customers get matched into. That is not cosmetic — it silently re-parents customer records. They can also rename every organization on the desk. Every sibling resource of this exact shape (tags, teams, SLA) is `@Roles('admin')`.
@@ -223,7 +286,45 @@ The console exposes no UI for this, so it is not reachable by clicking — but a
 
 **Fix:** add `@Roles('admin')` to both. Two lines.
 
-### 2. The last admin can lock the workspace out of administration — permanently
+### 2. ~~The last admin can lock the workspace out of administration — permanently~~ — **CLOSED [2026-08-08]**
+
+> **Fixed** by `assertAdminRemains` (`users.module.ts:175-205`), called from `update()`
+> at `:224-226` and `deactivate()` at `:260`, both inside the write transaction.
+> All three routes listed below are covered.
+>
+> **Three things about the implementation differ from the fix sketched below**, each
+> because the sketch would not have held:
+>
+> - **A `count` is not enough — it must be `SELECT … FOR UPDATE OF m, u`.** Under READ
+>   COMMITTED two concurrent demotions each read "2 admins", each pass a plain count,
+>   and both commit. The lock is what serialises them: the second caller blocks, and
+>   Postgres re-evaluates the `WHERE` against the committed row once the lock is
+>   granted, so the just-demoted admin drops out and the second caller correctly sees
+>   itself as the last. **Both** tables are locked, because row re-evaluation applies
+>   only to relations named in `FOR UPDATE OF` — locking the membership alone would let
+>   a concurrent global account-disable stay invisible.
+> - **`isActive: false` on `PATCH` is a second path, and it writes to a different
+>   table.** A role-only guard would have missed it, and `{role:'admin', isActive:false}`
+>   would sail through a naive "is the new role admin?" check while producing an admin
+>   who cannot sign in. Both flags are counted (`u.is_active` **and** `m.is_active`),
+>   the same pairing `reports.module.ts:152` already uses.
+> - **Self-demotion is *not* rejected outright**, contrary to the recommendation in
+>   [§5](#5-missing-for-a-real-product). Refusing it would block the legitimate case —
+>   an admin stepping down *after* promoting a successor — while the last-admin check
+>   already covers the dangerous one. The guard refuses only when the target is the
+>   sole live admin, whoever is asking.
+>
+> It also deliberately **allows** edits on a workspace that already has zero admins:
+> this guard is younger than the data, and failing closed there would freeze such a
+> desk behind an error the product gives nobody a way to clear.
+>
+> **Tested:** `users/last-admin.spec.ts`, 16 cases, and mutation-tested — with the
+> guard disabled 11 of the 16 fail, and the 5 that still pass are exactly the
+> "operation should be allowed" cases.
+>
+> **Not closed by this:** hole 10 below (`PATCH` writing global `isActive` with no
+> workspace filter) is a different defect on the same route and remains open.
+
 No guard exists. Grep for `last admin|lastAdmin|sole admin|adminCount|only admin` across `src/` returns three unrelated comments and nothing else.
 
 Three ways to do it, all as the sole admin acting on themselves:
@@ -237,7 +338,45 @@ The only thing standing between this and a locked-out desk today is a hidden but
 
 **Fix:** a `count` on `workspaceMembership where {role:'admin', isActive:true}` inside the `update` and `deactivate` transactions, plus an `id !== actor.id` check on role demotion. ~10 lines in `UsersService`.
 
-### 3. An API key does what a lead cannot — two live bypasses
+### 3. ~~An API key does what a lead cannot — two live bypasses~~ — **CLOSED [2026-08-08]**
+
+> **Both fixed**, and with *different* rules, because they are different questions:
+>
+> - **Team move** (`tickets.service.ts:584-612`) is a **row-scope** question, so it now
+>   mirrors `resolveRouting()` exactly: a bound key is confined to its own team
+>   (`teamId: null` included — unrouting would strand the ticket outside the key's own
+>   `visibilityWhere`), an unbound key stays instance-wide by deliberate grant
+>   (`api-keys.module.ts:47-57` requires an explicit `allowInstanceWide`). This makes
+>   `resolveRouting`'s own docstring — *"The rules match `patch()` exactly"* — true; it
+>   was false when written.
+> - **Reopen** (`:663-689`) is a **capability** question, so **no api\_key may reopen**,
+>   bound or unbound. The scope vocabulary settles it: `API_SCOPES` names no reopen
+>   grant and `roles.guard.ts:28-29` treats scopes as literal with no inheritance, so
+>   `tickets:write` — the same grant used for replying and retagging — cannot stand in
+>   for a lead. The precedent is in-tree: the sibling lead-only actions `bulk` and
+>   `merge` carry `@Roles('lead')` with no `@Scopes`, so `RolesGuard` already rejects
+>   keys there with *"This route is human-only"*. Reopen was reachable only because
+>   `PATCH`/`status` must stay open to machines for ordinary work.
+>
+> **Verified this breaks no legitimate machine flow.** The one real machine reopen — a
+> visitor writing back to a finished conversation — does not go through `patch()`; it
+> is a deliberate direct write in `ChatService.appendMessage` (`chat.module.ts:305-307`,
+> documented at `docs/chatbot-integration.md:230-234`) on the `chat:write` scope.
+> Inbound email does not reopen at all (`email.service.ts:267-271` only bumps `updatedAt`).
+>
+> **Tested:** `tickets.service.spec.ts` — bound key cannot move a ticket out of its team,
+> cannot unroute it, may restate its own team; unbound key may still route; neither may
+> reopen; a key can still make ordinary transitions. The `boundKey`/`unboundKey` fixtures
+> are now shared with the create-routing block, since create and patch apply one rule.
+>
+> **The same shape survives elsewhere** — `bulk()` and `merge()` still read
+> `kind === 'user' &&`, and were annotated rather than changed: there it is narrowing
+> *behind* a human-only route, so it is correct. Hole 7 below is the same pattern and is
+> **still open**. And note a variant this fix does not address: the lead branch reads
+> `dto.teamId && dto.teamId !== actor.teamId`, so **a lead can still unroute a ticket**
+> (`teamId: null`) — hiding it from themselves and every non-admin. Same bug, different
+> principal, not yet fixed.
+
 `tickets.service.ts:583` and `:643` both guard with `actor.kind === 'user' &&`, so for a machine principal **neither branch fires**:
 
 - **Team move** (`:582-592`): a `tickets:write` key — including one *bound to a single team* — can `PATCH /tickets/:id {"teamId":"<any team>"}` and move a ticket anywhere. `resolveRouting` (`:209-220`) correctly confines a bound key on *create*, and its docstring states the invariant; `patch` does not uphold it.
@@ -247,11 +386,15 @@ Both routes are `@AllowApiKey` + `@Scopes('tickets:write')` (`tickets.controller
 
 **Fix:** invert the guards to check the machine case explicitly rather than falling through it.
 
-### 4. Any agent reads the entire customer book — two ways
-- `GET /organizations/:id` (`:66`) has no role gate and `OrganizationsService.get` (`:34-41`) includes `customers: {id, name, email}`. Enumerate org by org, get every customer.
+### 4. Any agent reads the entire customer book — two ways — **STILL OPEN**
+- `GET /organizations/:id` (`:66`) has no role gate and `OrganizationsService.get` (`:34-41`) includes `customers: {id, name, email}`. Enumerate org by org, get every customer. **[2026-08-08]** Now `GET /companies/:id` (`companies.module.ts:94`, service `:35-40`) — **renamed, not fixed.** The two write routes beside it were gated; this read was deliberately left open, because agents legitimately need the company on a ticket. The *nested customer list* is the part worth revisiting, not the route.
 - `GET /customers` / `GET /customers/:id` (`:256`, `:263`) take **no principal at all** — `CustomersService` has no team filter anywhere.
 
 The customers half *matches* `PERMISSIONS.customers.view:'any'`, so it is a deliberate decision, not a slip. The organizations half matches nothing. Either way this is the largest PII surface an agent has, and with outside testers arriving it is worth confirming it is what you meant.
+
+> **[2026-08-08]** The `PERMISSIONS` citation above is now historical — the map is
+> deleted (§4). It does not change the finding: the map recorded the decision, it
+> never enforced it. The behaviour is identical and still unguarded.
 
 ### 5. Any `reports:read` key gets workspace-wide metrics, ignoring its team binding
 `IntegrationsService.metrics()` (`integrations.module.ts:19-41`) takes no principal and applies no team filter — verified, the `where` clauses contain only status and date predicates. Meanwhile `ReportsService.teamScope` (`reports.module.ts:45-50`) explicitly refuses to let a bound key widen its scope, with a comment saying so.
@@ -298,6 +441,21 @@ const min = roles.reduce((lowest, r) => (roleAtLeast(lowest, r) ? r : lowest), r
 
 ## 4. THE PERMISSIONS MATRIX
 
+> **[2026-08-08] Resolved as recommended: the map is deleted, the file is kept.**
+> `permissions.ts` now exports only `ROLE_ORDER`, `roleAtLeast`, `Role`, `API_SCOPES`
+> and `ApiScope` — verified still imported by `roles.guard.ts:4` and
+> `api-keys.module.ts:8` (plus the `Role`/`ApiScope` *types* by `decorators/index.ts`,
+> `workspace-context.service.ts` and `invitations.service.ts`). The self-referential
+> matrix block is gone from `permissions.spec.ts`; the `roleAtLeast` and `API_SCOPES`
+> tests stay, joined by one asserting **no scope names a lead-only ticket action** —
+> the invariant the reopen fix in hole 3 rests on, so that fix now has a test that
+> fails if someone adds a `tickets:reopen` scope.
+>
+> Steps 1 and 3 of the recommendation are done. **Step 2 — the boot-time route-table
+> walk — is not**, and it is the one with lasting value. See [§6](#6-what-is-proven-vs-assumed).
+>
+> The section below is preserved as the reasoning for that decision.
+
 **Is it dead code?** The `PERMISSIONS` map: **yes, completely.** Its only importer is `permissions.spec.ts:1`. No guard, no service, no controller reads it. Its own header comment (`permissions.ts:1-4`) claims *"Guards and services read this, so the doc and the code share one source of truth"* — that sentence is false.
 
 Its test is self-referential: `permissions.spec.ts:29-62` is a list of `expect(PERMISSIONS.x.y).toBe('admin')`. **It would stay green if every `@Roles` in the codebase were deleted.**
@@ -332,9 +490,15 @@ What I would **not** do is leave it. It reads as authoritative, it is imported b
 
 ## 5. MISSING FOR A REAL PRODUCT
 
-### Last-admin protection — **fix before testers arrive**
+### ~~Last-admin protection — **fix before testers arrive**~~ — **DONE [2026-08-08]**
 See [hole #2](#2-the-last-admin-can-lock-the-workspace-out-of-administration--permanently). ~10 lines, no recovery path exists without it, and the frontend already carries a comment admitting the backend doesn't do this.
 **Recommend:** a shared `assertNotLastAdmin(workspaceId, targetId)` called from `update` (on role demotion or `isActive:false`) and `deactivate`, inside the existing transactions. Plus reject self-demotion outright — an admin who wants to step down should be demoted by another admin.
+
+> **[2026-08-08]** Shipped as `assertAdminRemains` — the placement is as recommended
+> (both call sites, inside the transactions), but a plain `count` was not enough and
+> **self-demotion is deliberately still allowed**. Both departures are explained in
+> hole 2. The `Console.jsx:1880` comment quoted below is now out of date: the backend
+> does have the guard, though the hidden button and the *self*-guard gap remain.
 
 ### Role-change auditing — **written, but unreadable**
 The data is already there and correct: `UsersService.update` writes a full `{before, after}` diff (`users.module.ts:155`), `deactivate` writes one (`:175`), `setMembership` writes `member.add`/`member.remove` (`teams.module.ts:112`), invitations write `{email, role, teamId}` (`invitations.service.ts:159`). `GET /audit` exists and is admin-gated (`audit.controller.ts:12-13`). The client method exists — `frontend/lib/api/endpoints.js:205`.
@@ -377,22 +541,74 @@ Meanwhile a lead's *actual* powers — reopen, reassign within team, move team �
 - **`tickets.service.spec.ts`** (Prisma stubbed, header comment `:7`) — assignment authorization ×6, team moves ×3, reopen ×2, bulk-closed-to-agents, merge-closed-to-agents, delete scoping. Genuinely good decision-logic coverage. Two caveats: stubbed Prisma proves *"the query I would send"*, not *"the rows I get"*; and the bulk test guards an endpoint the console never calls.
 - **`roles.guard.spec.ts`** — the hierarchy and the scope algebra, thoroughly (`:30-79`). But it constructs `RolesGuard` with a hand-rolled fake `Reflector`. **It proves the function is right. It proves nothing about which routes carry which decorator.**
 - `team-scope.service.spec.ts` — filter shapes; superseded by the integration suite.
-- `permissions.spec.ts` — asserts the table against itself. Proves nothing about enforcement.
+- ~~`permissions.spec.ts` — asserts the table against itself. Proves nothing about enforcement.~~ **[2026-08-08]** The self-referential block is deleted with the map. What remains tests `roleAtLeast`/`API_SCOPES` — live code — plus the no-reopen-scope invariant behind hole 3.
+
+**[2026-08-08] New — decorator placement, for the first time:**
+- **`companies.module.spec.ts`** (12 tests) — builds the real `RolesGuard` with a real
+  `Reflector` and runs it against the actual handler functions, so it fails if
+  `@Roles('admin')` is removed from either write route. This is the first test in the
+  codebase that proves a decorator is *on a route* rather than that the guard *works*.
+  It is the pattern §6 asks for, at a scale of four routes out of 58 — a template, not
+  a solution.
+- **`users/last-admin.spec.ts`** (16 tests, mutation-tested — 11 fail with the guard
+  disabled) and the API-key cases added to **`tickets.service.spec.ts`**. Both remain
+  mock-level: they prove the decision logic, not the SQL. Specifically, the
+  `FOR UPDATE` race that motivates the whole last-admin design **is not exercised
+  against a real Postgres** — see below.
 - `settings-writes.test.js` (frontend, jsdom, endpoints mocked) — 20 tests, genuinely good on *"never announce an outcome you didn't cause."* `:101` pins `canEdit`/`canDeactivate` for admin/lead/self; `:286` pins that a lead doesn't request admin-only rows.
 
 ### Assumed — nothing at all
 
 - **That `@Roles` is on the routes it should be on.** There is no HTTP-level RBAC test anywhere; `test/health.e2e-spec.ts` is the only e2e file, and `app.module.spec.ts` only checks that Nest can resolve the provider graph. **Delete `@Roles('admin')` from `POST /api-keys`, `PUT /email/inbound-address`, `DELETE /users/:id` or `POST /invitations` and the entire suite stays green.** Given that authorization here lives *entirely* in decorator placement, this is the largest gap in the codebase — larger than any individual hole in §3, because it is the one that lets the next hole in silently.
+
+  > **[2026-08-08] Still true of all four routes named above** — `companies.module.spec.ts`
+  > covers the companies routes only. The sentence to keep is the last one: this is
+  > *still* the largest gap, and it is now the largest by a wider margin, because the
+  > three holes that used to compete with it are closed.
+
+- **[2026-08-08] That the last-admin guard's locking actually serialises.** The race is
+  the entire reason `assertAdminRemains` is a `SELECT … FOR UPDATE OF m, u` rather than
+  a `count`, and the 16 tests around it run against a mocked Prisma — a mock cannot
+  exhibit a lost update. Nothing proves the second transaction blocks and re-evaluates.
+  This wants one `test/integration/` spec: two real concurrent transactions demoting
+  two admins, asserting one wins and one gets the `ConflictException`. Until then the
+  concurrent case rests on the reasoning in the code comment, not on a test.
+- **[2026-08-08] That the rename migration applies.** `20260808120000_rename_organizations_to_companies`
+  has been **reviewed and typechecked but never executed** — see the note at the end of
+  this section.
 - **Reports role scoping.** `reports.module.ts:37` states *"reports-scope.integration.spec.ts asserts that."* **That file does not exist** — I listed `test/integration/`; there are seven specs and none is it. The claim that an agent's report is limited to their own assignments is asserted by nothing. (It *is* correctly implemented at `:45-60` — but the comment cites a proof that isn't there, which is worse than no comment.)
-- Self-deactivation / last-admin — no test, because no behaviour.
-- Organizations authorization — no test, no behaviour.
+- ~~Self-deactivation / last-admin — no test, because no behaviour.~~ **[2026-08-08]** Behaviour and 16 tests now exist; the *concurrency* claim is still untested (above).
+- ~~Organizations authorization — no test, no behaviour.~~ **[2026-08-08]** Gated and tested at the decorator level (`companies.module.spec.ts`).
 - Canned-response `assertManage` (the lead-own-team rule) — no test.
 - `setMembership`'s lead restrictions (`teams.module.ts:98-104`) — no test.
-- The API-key bypasses in `tickets.service.ts:583,643` — no test; the existing reopen tests only exercise human actors, which is precisely why the bypass survived.
+- ~~The API-key bypasses in `tickets.service.ts:583,643` — no test~~ **[2026-08-08]** both fixed and covered in `tickets.service.spec.ts`; the note below stands as the reason they survived so long — *the existing reopen tests only exercised human actors.* Every new case runs both a bound and an unbound key.
 - Console ↔ backend agreement. Nothing checks that `canManageDesk` corresponds to `@Roles('admin')`. The two lists were kept in sync by hand and by comment (`Console.jsx:1879,1893,1931`, `Settings.jsx:118`); API keys and PM-connect are where that hand-sync was dropped.
 
 ### The one test to write
 A boot-time route-table walk asserting every route carries `@Roles`, `@Scopes`, `@Public`, or an explicit opt-out marker. It would have caught organizations on the day it was added, it catches the next one for free, and it is the only test on this list that gets *more* valuable as the codebase grows. Pair it with an HTTP-level spec hitting ~8 representative routes as agent/lead/admin.
+
+> **[2026-08-08] Still the one test to write, and now cheaper than when this was
+> written.** `companies.module.spec.ts` demonstrates the hard part — resolving real
+> decorator metadata off real handlers through a real `Reflector` — for one controller.
+> Generalising it to a walk of the whole route table is the remaining work.
+
+### **[2026-08-08] The rename migration has been reviewed, not run**
+`prisma/migrations/20260808120000_rename_organizations_to_companies` is catalog-only
+(`ALTER TABLE … RENAME`, `RENAME COLUMN`, `RENAME CONSTRAINT`, `ALTER INDEX … RENAME`,
+`ALTER TRIGGER … RENAME` — no table rewrite, no data movement), and it ends in a `DO`
+block asserting the `workspace_isolation` policy still sits on `companies` with RLS
+enabled, that no `organization`-named relation/column/trigger/constraint survives in
+`public`, and that both composite FKs kept `confdeltype='n'` with
+`confdelsetcols = {company_id}`.
+
+Those assertions were **read**, and their premises independently re-verified against
+the migrations they cite — the RLS policy is created per table by OID with a predicate
+naming only `workspace_id` (`20260806140000_row_level_security:73-79`), and the trigger
+and constraint names match the loops that generated them
+(`20260802000000_workspace_tenancy:512,541,562`). **But the migration has not been
+executed against any database.** It needs the CI integration job's real Postgres
+before it goes near production. Until it runs, "the RLS policy survives the rename"
+is a well-founded argument, not an observation.
 
 ---
 
@@ -404,6 +620,6 @@ A boot-time route-table walk asserting every route carries `@Roles`, `@Scopes`, 
 | Mutating routes: 59 vs 58 | **58**, counted. 33 carry a role gate, 25 do not, and 23 of those 25 are correct by design. |
 | `@AllowApiKey` count: 19 vs 13 | **Neither — 23.** Both audits were wrong on the number but right on the substance: every one of the 23 is paired with a `@Scopes` on the following line, so `roles.guard.ts:26` is unreachable today. |
 | Unrouted tickets: "admin-only" vs the doc's "leads and admins" | **Both incomplete.** Admins see them; leads see none; **agents see them when assigned to themselves**, via the `OR` branch at `team-scope.service.ts:92-94`. The doc comment at `:14` is wrong in both directions. |
-| Is `permissions.ts` dead code? | **The map is; the file is not.** `roleAtLeast`/`ROLE_ORDER` are imported by the guard and `API_SCOPES` by the API-keys DTO. Delete `PERMISSIONS` only. |
+| Is `permissions.ts` dead code? | **The map is; the file is not.** `roleAtLeast`/`ROLE_ORDER` are imported by the guard and `API_SCOPES` by the API-keys DTO. Delete `PERMISSIONS` only. **[2026-08-08] Done exactly that way** — both importers re-verified after the deletion (`roles.guard.ts:4`, `api-keys.module.ts:8`). |
 | Whether the ungated ticket routes are a hole | **Not a hole.** All five are fully enforced in the service, per-field and per-row, in ways a decorator cannot express. Confirmed by reading `tickets.service.ts:214-229, 582-592, 643-645, 658-704`. |
 | Console bulk: does the lead gate bind? | **No.** `Console.jsx:675` is `Promise.all(ids.map(id => this.api.patchTicket(id, patch)))` — verified. `POST /tickets/bulk` has no console caller. |

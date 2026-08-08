@@ -280,7 +280,7 @@ export class EmailService {
         subject: cleanSubject(subject),
         channel: 'email',
         customerId: customer.id,
-        organizationId: customer.organizationId,
+        companyId: customer.companyId,
         messages: {
           create: {
             authorType: 'customer',

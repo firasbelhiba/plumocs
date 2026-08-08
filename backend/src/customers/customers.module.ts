@@ -9,7 +9,7 @@ import { AllowApiKey, CurrentUser, Principal, Roles, Scopes } from '../common/de
 class CreateCustomerDto {
   @IsEmail() email!: string;
   @IsString() name!: string;
-  @IsOptional() @IsUUID() organizationId?: string;
+  @IsOptional() @IsUUID() companyId?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() locale?: string;
   @IsOptional() @IsString() timezone?: string;
@@ -30,7 +30,7 @@ function fmtMins(mins: number | null): string | null {
 
 class UpdateCustomerDto {
   @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsUUID() organizationId?: string;
+  @IsOptional() @IsUUID() companyId?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() locale?: string;
   @IsOptional() @IsString() timezone?: string;
@@ -50,14 +50,14 @@ export class CustomersService {
           OR: [
             { name: { contains: q, mode: 'insensitive' as const } },
             { email: { contains: q, mode: 'insensitive' as const } },
-            { organization: { name: { contains: q, mode: 'insensitive' as const } } },
+            { company: { name: { contains: q, mode: 'insensitive' as const } } },
           ],
         }
       : {};
     const [rows, total] = await Promise.all([
       this.prisma.customer.findMany({
         where,
-        include: { organization: { select: { id: true, name: true } } },
+        include: { company: { select: { id: true, name: true } } },
         orderBy: { name: 'asc' },
         skip: offset,
         take: limit,
@@ -100,7 +100,7 @@ export class CustomersService {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
-        organization: true,
+        company: true,
         tickets: {
           select: {
             id: true, number: true, subject: true, status: true, priority: true,
@@ -155,10 +155,10 @@ export class CustomersService {
     if (existing) return existing;
 
     const domain = email.split('@')[1];
-    const org = domain ? await this.prisma.organization.findFirst({ where: { domain } }) : null;
+    const company = domain ? await this.prisma.company.findFirst({ where: { domain } }) : null;
     try {
       return await this.prisma.customer.create({
-        data: { email, name: name || email.split('@')[0], organizationId: org?.id ?? null },
+        data: { email, name: name || email.split('@')[0], companyId: company?.id ?? null },
       });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -173,9 +173,9 @@ export class CustomersService {
    * Find-or-create a visitor a chatbot knows only by its own opaque reference.
    *
    * Anonymous visitors are identified by (chatbot, visitorRef) rather than by a
-   * synthetic email address, because findOrCreateByEmail above infers company
-   * membership from the email domain — so every synthetic visitor would be filed
-   * under a fake organisation.
+   * synthetic email address, because findOrCreateByEmail above infers employer
+   * from the email domain — so every synthetic visitor would be filed under a
+   * fake company.
    */
   async findOrCreateVisitor(apiKeyId: string, visitorRef: string, name?: string) {
     const existing = await this.prisma.customer.findFirst({
@@ -215,13 +215,13 @@ export class CustomersService {
     if (owner && owner.id !== customerId) return owner;
 
     const domain = email.split('@')[1];
-    const org = domain ? await this.prisma.organization.findFirst({ where: { domain } }) : null;
+    const company = domain ? await this.prisma.company.findFirst({ where: { domain } }) : null;
     return this.prisma.customer.update({
       where: { id: customerId },
       data: {
         email,
         ...(name ? { name } : {}),
-        ...(org ? { organizationId: org.id } : {}),
+        ...(company ? { companyId: company.id } : {}),
       },
     });
   }

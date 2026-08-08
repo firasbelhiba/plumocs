@@ -57,7 +57,7 @@ export const tickets = {
   remove: (id) => request(`/tickets/${id}`, { method: 'DELETE' }),
 };
 
-// ---- customers / organizations ----
+// ---- customers / companies ----
 export const customers = {
   list: (params) => request(`/customers${qs(params)}`),
   get: (id) => request(`/customers/${id}`),
@@ -66,11 +66,15 @@ export const customers = {
   anonymize: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
 };
 
-export const organizations = {
-  list: () => request('/organizations'),
-  get: (id) => request(`/organizations/${id}`),
-  create: (body) => request('/organizations', { method: 'POST', body }),
-  patch: (id, body) => request(`/organizations/${id}`, { method: 'PATCH', body }),
+// A customer's employer, the Zendesk sense — NOT a tenant. Called
+// `organizations` until 2026-08-08; the backend routes moved with it.
+// create/patch are admin-only server-side, so the console must not offer them
+// to agents and expect a 403 to be the first anyone hears of it.
+export const companies = {
+  list: () => request('/companies'),
+  get: (id) => request(`/companies/${id}`),
+  create: (body) => request('/companies', { method: 'POST', body }),
+  patch: (id, body) => request(`/companies/${id}`, { method: 'PATCH', body }),
 };
 
 // ---- people & config ----

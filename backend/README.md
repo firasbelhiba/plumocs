@@ -90,10 +90,10 @@ prisma/            schema.prisma, migrations, sql extras, seed
 src/
   main.ts          API bootstrap (HTTP + WS)
   worker.ts        worker bootstrap (BullMQ processors + repeatable jobs)
-  common/          guards, filters, decorators, permissions.ts (the RBAC matrix)
+  common/          guards, filters, decorators, permissions.ts (role hierarchy + API scopes)
   config/          typed config + env validation (boot fails on missing vars)
   queue/           BullMQ registration + the QueueProducer
-  auth/ users/ teams/ organizations/ customers/
+  auth/ users/ teams/ companies/ customers/
   tickets/         core: list/filter, state machine, bulk, assignment
   messages/        replies + internal notes, first-response stamping
   attachments/     presigned upload/download (S3/MinIO)
@@ -110,7 +110,7 @@ REST over HTTPS, versioned `/api/v1`, OpenAPI at `/api/docs`.
 
 - `POST /auth/login|refresh|logout|forgot-password|reset-password`, `GET /auth/me`
 - `POST|GET /tickets` (offset or cursor pagination), `GET|PATCH /tickets/:id`, `POST /tickets/:id/assign|status|messages|merge`, `POST /tickets/bulk`, `GET /tickets/:id/audit`
-- `GET|POST /customers`, `GET|PATCH /customers/:id`, organizations CRUD
+- `GET|POST /customers`, `GET|PATCH /customers/:id`, companies CRUD (a company is a customer's employer, not a tenant — see `docs/organization-vs-workspace.md`)
 - Lead/admin config: `/users /teams /sla-policies /business-hours /canned-responses /tags /webhooks /api-keys`
 - `POST /attachments/presign`, `GET /attachments/:id/url`
 - `GET /search?q=`, `GET /notifications`, `GET /integrations/metrics`, `POST /integrations/export/run`

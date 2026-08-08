@@ -106,10 +106,23 @@ enum WebhookEvent {
 
 // ---- Tables ----------------------------------------------------------------
 
-model Organization {
+/// A CUSTOMER'S EMPLOYER — the Zendesk/Intercom sense of the word. A child row
+/// that lives inside a workspace and cannot exist without one. It is NOT a
+/// tenant and never was; `Workspace` below is the tenant.
+///
+/// Called `Organization` until 2026-08-08. "Organization" is what Plumo PM
+/// calls a tenant, and the collision cost a full investigation
+/// (docs/organization-vs-workspace.md) before anyone was confident the CS
+/// tenancy model was intact. Renaming the smaller thing was cheaper than
+/// re-litigating that reading every time somebody new arrives.
+model Company {
   id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
   name        String
+  /// Email domain. Not cosmetic: findOrCreateByEmail() files a new customer
+  /// under the company whose domain matches their address, so whoever can write
+  /// this decides who sees whose tickets. That is why the write routes on
+  /// CompaniesController are @Roles('admin').
   domain      String?
   externalRef String?    @map("external_ref")
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz()
@@ -117,14 +130,14 @@ model Organization {
   customers   Customer[]
   tickets     Ticket[]
 
-  @@map("organizations")
+  @@map("companies")
 }
 
 model Customer {
   id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId String @default(dbgenerated("app_current_workspace()")) @map("workspace_id") @db.Uuid
-  organizationId String?       @map("organization_id") @db.Uuid
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  companyId      String?       @map("company_id") @db.Uuid
+  company        Company?      @relation(fields: [companyId], references: [id])
   // Nullable since chatbot ingest: an anonymous visitor has no email. Uniqueness
   // is enforced by the partial index customers_email_unique_idx (WHERE email IS
   // NOT NULL), which Prisma cannot express — so there is no @unique here and
@@ -144,7 +157,7 @@ model Customer {
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz()
   tickets        Ticket[]
 
-  @@index([organizationId])
+  @@index([companyId])
   // customers_email_unique_idx, customers_visitor_unique_idx and
   // customers_identity_check are partial/check constraints in the migration and
   // invisible here — `prisma migrate diff` will propose dropping them.
@@ -241,8 +254,8 @@ model Ticket {
   channel            Channel
   customerId         String          @map("customer_id") @db.Uuid
   customer           Customer        @relation(fields: [customerId], references: [id])
-  organizationId     String?         @map("organization_id") @db.Uuid
-  organization       Organization?   @relation(fields: [organizationId], references: [id])
+  companyId          String?         @map("company_id") @db.Uuid
+  company            Company?        @relation(fields: [companyId], references: [id])
   assigneeId         String?         @map("assignee_id") @db.Uuid
   assignee           User?           @relation(fields: [assigneeId], references: [id])
   teamId             String?         @map("team_id") @db.Uuid
@@ -525,8 +538,9 @@ model ChatSession {
 }
 
 
-/// A tenant: one support desk. Distinct from `Organization`, which is a
-/// CUSTOMER's company. Both concepts are real and they are not the same thing.
+/// A tenant: one support desk. Distinct from `Company`, which is a CUSTOMER's
+/// employer. Both concepts are real and they are not the same thing — which is
+/// exactly why `Company` stopped being called `Organization`.
 model Workspace {
   id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   slug         String          @unique @db.Citext

@@ -61,7 +61,7 @@ export class SearchService {
           { email: { contains: q, mode: 'insensitive' } },
         ],
       },
-      select: { id: true, name: true, email: true, organization: { select: { name: true } } },
+      select: { id: true, name: true, email: true, company: { select: { name: true } } },
       take: 5,
     });
 

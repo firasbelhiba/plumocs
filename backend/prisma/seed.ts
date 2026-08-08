@@ -63,17 +63,17 @@ async function main() {
     users[key] = u.id;
   }
 
-  // ---- organizations ----
-  const orgSeeds: Array<[string, string, string]> = [
+  // ---- companies ----
+  const companySeeds: Array<[string, string, string]> = [
     ['o1', 'Northwind Health', 'northwindhealth.com'],
     ['o2', 'HashCare', 'hashcare.io'],
     ['o3', 'Vela Studio', 'velastudio.co'],
     ['o4', 'Bramble Coffee', 'bramblecoffee.com'],
   ];
-  const orgs: Record<string, string> = {};
-  for (const [key, name, domain] of orgSeeds) {
-    const o = await prisma.organization.create({ data: { name, domain } });
-    orgs[key] = o.id;
+  const companies: Record<string, string> = {};
+  for (const [key, name, domain] of companySeeds) {
+    const c = await prisma.company.create({ data: { name, domain } });
+    companies[key] = c.id;
   }
 
   // ---- customers ----
@@ -89,12 +89,12 @@ async function main() {
     ['c9', 'Hana Kim', 'hana.kim@northwindhealth.com', 'o1', 'Asia/Seoul', 'ko-KR', '+82 2 555 0166'],
     ['c10', 'Elliot Shaw', 'elliot@velastudio.co', 'o3', 'Europe/London', 'en-GB', '+44 20 5550 771'],
   ];
-  const customers: Record<string, { id: string; org: string; name: string }> = {};
-  for (const [key, name, email, org, timezone, locale, phone] of custSeeds) {
+  const customers: Record<string, { id: string; company: string; name: string }> = {};
+  for (const [key, name, email, company, timezone, locale, phone] of custSeeds) {
     const c = await prisma.customer.create({
-      data: { name, email, organizationId: orgs[org], timezone, locale, phone },
+      data: { name, email, companyId: companies[company], timezone, locale, phone },
     });
-    customers[key] = { id: c.id, org: orgs[org], name };
+    customers[key] = { id: c.id, company: companies[company], name };
   }
 
   // ---- business hours + SLA policies ----
@@ -262,7 +262,7 @@ async function main() {
         priority,
         channel,
         customerId: cust.id,
-        organizationId: cust.org,
+        companyId: cust.company,
         assigneeId,
         teamId: teamId[team],
         slaPolicyId: policyFor[priority],

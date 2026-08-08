@@ -1,9 +1,16 @@
-import { API_SCOPES, PERMISSIONS, roleAtLeast, ROLE_ORDER, type Role } from './permissions';
+import { API_SCOPES, roleAtLeast, ROLE_ORDER, type Role } from './permissions';
 
 /**
- * The policy map is the single source of truth the doc and the guards share
- * (§8.3). These tests pin the rules the matrix calls out explicitly, so a
- * careless edit to the map fails here rather than in production.
+ * Covers the two things in this file that something else actually imports:
+ * the role hierarchy roles.guard.ts ranks callers with, and the scope list
+ * api-keys.module.ts validates key grants against.
+ *
+ * The block that used to sit below these — a page of
+ * `expect(PERMISSIONS.x.y).toBe('admin')` — was deleted with the map it
+ * described. It asserted a table against itself and passed no matter what the
+ * API allowed, so it reported the model was intact while two API-key bypasses
+ * lived in tickets.service.ts. Authorisation is tested where it is enforced:
+ * tickets.service.spec.ts, roles.guard.spec.ts, team-scope.integration.spec.ts.
  */
 describe('permissions policy', () => {
   describe('roleAtLeast', () => {
@@ -24,55 +31,6 @@ describe('permissions policy', () => {
     });
   });
 
-  describe('matrix invariants from the spec', () => {
-    it('deletion and export are admin-only', () => {
-      expect(PERMISSIONS.tickets.delete).toBe('admin');
-      expect(PERMISSIONS.tickets.export).toBe('admin');
-      expect(PERMISSIONS.customers.delete).toBe('admin');
-    });
-
-    it('agents cannot reassign others, but can self-assign', () => {
-      expect(PERMISSIONS.tickets.assign_others).toBe('lead-team');
-      expect(PERMISSIONS.tickets.assign_self).toBe('team');
-    });
-
-    it('reopening, bulk actions, merging and team moves need a lead', () => {
-      for (const action of ['reopen', 'bulk', 'merge', 'move_team'] as const) {
-        expect(PERMISSIONS.tickets[action]).toBe('lead-team');
-      }
-    });
-
-    it('instance config is admin-only', () => {
-      expect(PERMISSIONS.webhooks.manage).toBe('admin');
-      expect(PERMISSIONS.api_keys.manage).toBe('admin');
-      expect(PERMISSIONS.email_config.manage).toBe('admin');
-      expect(PERMISSIONS.tags.manage).toBe('admin');
-      expect(PERMISSIONS.sla.manage).toBe('admin');
-      expect(PERMISSIONS.users.manage).toBe('admin');
-    });
-
-    it('reports widen by role: own → team → instance', () => {
-      expect(PERMISSIONS.reports.own).toBe('any');
-      expect(PERMISSIONS.reports.team).toBe('lead-team');
-      expect(PERMISSIONS.reports.instance).toBe('admin');
-    });
-
-    it('global audit search is admin-only, per-ticket trails are not', () => {
-      expect(PERMISSIONS.audit.global).toBe('admin');
-      expect(PERMISSIONS.audit.ticket_trail).toBe('team');
-    });
-
-    it('every rule is one of the four known kinds', () => {
-      const valid = new Set(['any', 'team', 'lead-team', 'admin']);
-      for (const [resource, actions] of Object.entries(PERMISSIONS)) {
-        for (const [action, rule] of Object.entries(actions)) {
-          expect({ resource, action, rule }).toMatchObject({ rule: expect.any(String) });
-          expect(valid.has(rule)).toBe(true);
-        }
-      }
-    });
-  });
-
   describe('api scopes', () => {
     it('grants nothing over users, teams, roles or keys — human-admin only by construction', () => {
       for (const forbidden of ['users', 'teams', 'roles', 'api_keys', 'sla']) {
@@ -82,6 +40,15 @@ describe('permissions policy', () => {
 
     it('uses the documented resource:action shape', () => {
       for (const scope of API_SCOPES) expect(scope).toMatch(/^[a-z]+:[a-z]+$/);
+    });
+
+    it('names no lead-only ticket action — reopen, merge and bulk have no machine grant', () => {
+      // TicketsService refuses a key the reopen on exactly this basis: scopes
+      // are literal and never inherit, so `tickets:write` — the everyday
+      // reply-and-retag grant — cannot be read as standing in for a lead.
+      for (const action of ['reopen', 'merge', 'bulk', 'move']) {
+        expect(API_SCOPES.some((s) => s.endsWith(`:${action}`))).toBe(false);
+      }
     });
   });
 });

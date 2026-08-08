@@ -1,74 +1,22 @@
 /**
- * The permission matrix (§8.3 of the backend doc) as a single policy map —
- * resource → action → rule. Guards and services read this, so the doc and
- * the code share one source of truth.
+ * There is no permission matrix here any more, and there should not be one.
  *
- * Rules:
- *   'any'        — any authenticated human
- *   'team'       — agent: own team or assigned-to-self; lead: own team; admin: all
- *   'lead-team'  — lead within own team, admin everywhere; agents denied
- *   'admin'      — admin only
+ * A `PERMISSIONS` map used to sit at the top of this file — resource → action →
+ * rule, with a header claiming guards and services read it. Nothing did. Its
+ * only importer was its own spec, which asserted the table against itself and
+ * would have stayed green with every @Roles decorator in the codebase deleted.
+ * A table that looks like the authorisation model and governs nothing is worse
+ * than no table: it is the first thing a reader trusts, and it drifts silently.
+ *
+ * The real matrix is the @Roles decorators on the controllers, plus the
+ * row-level rules in TeamScopeService and the per-field checks in the services
+ * (assignment, team moves, reopen). docs/rbac-audit.md walks the whole surface
+ * route by route and is the document to read — and to correct — instead.
+ *
+ * What IS live below: ROLE_ORDER/roleAtLeast, the hierarchy roles.guard.ts
+ * imports, and API_SCOPES, which api-keys.module.ts validates key grants
+ * against. Both are load-bearing; the file stays for them.
  */
-export type PermissionRule = 'any' | 'team' | 'lead-team' | 'admin';
-
-export const PERMISSIONS: Record<string, Record<string, PermissionRule>> = {
-  tickets: {
-    view: 'team',
-    create: 'any',
-    reply: 'team',
-    note: 'team',
-    transition: 'team',
-    reopen: 'lead-team',
-    edit: 'team', // priority / tags / subject
-    assign_self: 'team',
-    assign_others: 'lead-team',
-    move_team: 'lead-team',
-    bulk: 'lead-team',
-    merge: 'lead-team',
-    delete: 'admin',
-    export: 'admin',
-  },
-  customers: {
-    view: 'any',
-    create: 'any',
-    edit: 'any',
-    delete: 'admin',
-  },
-  canned_responses: {
-    use: 'any',
-    manage_team: 'lead-team',
-    manage_global: 'admin',
-  },
-  tags: {
-    apply: 'any',
-    manage: 'admin',
-  },
-  sla: {
-    view: 'any',
-    manage: 'admin',
-  },
-  reports: {
-    own: 'any',
-    team: 'lead-team',
-    instance: 'admin',
-  },
-  users: {
-    view: 'any',
-    manage: 'admin',
-  },
-  teams: {
-    view: 'any',
-    edit_membership: 'lead-team',
-    manage: 'admin',
-  },
-  webhooks: { manage: 'admin' },
-  api_keys: { manage: 'admin' },
-  email_config: { manage: 'admin' },
-  audit: {
-    ticket_trail: 'team',
-    global: 'admin',
-  },
-};
 
 /** Machine scopes (§8.5) — literal grants, no inheritance. */
 export const API_SCOPES = [

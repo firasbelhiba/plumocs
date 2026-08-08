@@ -22,7 +22,7 @@ const ticketDto = (over = {}) => ({
   priority: 'urgent',
   channel: 'email',
   customerId: 'c-1',
-  customer: { id: 'c-1', name: 'Ines Duarte', email: 'ines@nw.com', timezone: 'Europe/Lisbon', locale: 'pt-PT', organization: { id: 'o-1', name: 'Northwind Health' } },
+  customer: { id: 'c-1', name: 'Ines Duarte', email: 'ines@nw.com', timezone: 'Europe/Lisbon', locale: 'pt-PT', company: { id: 'o-1', name: 'Northwind Health' } },
   assigneeId: 'u-2',
   teamId: 't-1',
   tags: ['account', 'urgent'],
@@ -164,6 +164,29 @@ describe('thread mapping', () => {
     expect(t.thread[1].side).toBe('agent');
   });
 
+  // The byline under a customer's message is their COMPANY name, read straight
+  // off the wire as `customer.company.name` (renamed from `organization` on
+  // 2026-08-08). It falls back to '' when absent, so reading the wrong key does
+  // not throw and does not blank a screen — it silently drops the company from
+  // every customer message in every thread. Pin the mapping so the fallback
+  // cannot quietly become the only behaviour.
+  it('labels a customer message with their company, not an empty string', async () => {
+    api.tickets.get.mockResolvedValue(ticketDto({
+      messages: [{ id: 'm1', authorType: 'customer', authorId: 'c-1', body: 'help', isInternalNote: false, createdAt: ISO, attachments: [] }],
+    }));
+    const t = await adapter.getTicket(TICKET_ID);
+    expect(t.thread[0].role).toBe('Northwind Health');
+  });
+
+  it('falls back to an empty byline when the customer has no company', async () => {
+    api.tickets.get.mockResolvedValue(ticketDto({
+      customer: { id: 'c-1', name: 'Ines Duarte', email: 'ines@nw.com', timezone: 'Europe/Lisbon', locale: 'pt-PT' },
+      messages: [{ id: 'm1', authorType: 'customer', authorId: 'c-1', body: 'help', isInternalNote: false, createdAt: ISO, attachments: [] }],
+    }));
+    const t = await adapter.getTicket(TICKET_ID);
+    expect(t.thread[0].role).toBe('');
+  });
+
   it('formats attachment sizes for display', async () => {
     api.tickets.get.mockResolvedValue(ticketDto({
       messages: [{ id: 'm1', authorType: 'customer', authorId: 'c-1', body: 'see attached', isInternalNote: false, createdAt: ISO, attachments: [{ id: 'a1', filename: 'receipt.pdf', sizeBytes: 86_016 }] }],
@@ -243,7 +266,7 @@ describe('search results', () => {
   it('normalizes ticket numbers, status and org names', async () => {
     api.search.mockResolvedValue({
       tickets: [{ id: 'tk1', number: 1042, subject: 'key', status: 'on_hold' }],
-      customers: [{ id: 'c1', name: 'Ines', email: 'i@n.com', organization: { name: 'Northwind' } }],
+      customers: [{ id: 'c1', name: 'Ines', email: 'i@n.com', company: { name: 'Northwind' } }],
     });
     const res = await adapter.search('key');
     expect(res.tickets[0]).toMatchObject({ num: 1042, status: 'on-hold' });
@@ -255,7 +278,7 @@ describe('customer profile', () => {
   it('maps stats and ticket history into the shapes the screen reads', async () => {
     api.customers.get.mockResolvedValue({
       id: 'c-1', name: 'Ines Duarte', email: 'ines@nw.com', phone: '+351', timezone: 'Europe/Lisbon',
-      organization: { id: 'o-1', name: 'Northwind Health' },
+      company: { id: 'o-1', name: 'Northwind Health' },
       tickets: [{ id: 'tk1', number: 1042, subject: 'key', status: 'on_hold', priority: 'urgent', createdAt: ISO, updatedAt: ISO }],
       stats: { total: 1, open: 1, avgResolution: '5h 48m', lastSeen: ISO },
     });

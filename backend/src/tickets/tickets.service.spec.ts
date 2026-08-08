@@ -13,6 +13,12 @@ describe('TicketsService', () => {
   const admin: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-admin', role: 'admin', teamId: 't1' };
   const lead: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-lead', role: 'lead', teamId: 't1' };
   const agent: Principal = { kind: 'user', workspaceId: 'w1', id: 'u-agent', role: 'agent', teamId: 't1' };
+  // Machine principals: scopes and no role, which is the whole point — the
+  // privileged branches used to be written `actor.kind === 'user' && …` and so
+  // never ran for these. Shared with the create-routing block below, because
+  // create and patch are supposed to apply the same routing rule.
+  const boundKey: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k1', scopes: ['tickets:write'], teamId: 't1' };
+  const unboundKey: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k2', scopes: ['tickets:write'], teamId: null };
 
   const baseTicket = {
     id: 'tk-1',
@@ -150,6 +156,32 @@ describe('TicketsService', () => {
       const { service } = makeService();
       await expect(service.patch('tk-1', { teamId: 't2' }, admin)).resolves.toBeDefined();
     });
+
+    // regression: the guard read `actor.kind === 'user' && actor.role === …`,
+    // so a machine principal — scopes, no role — fell past both branches and
+    // any tickets:write key could move any ticket into any team. These cases
+    // are the reason the human-only cases above are not enough.
+    it('refuses a bound key moving a ticket out of its team', async () => {
+      const { service } = makeService();
+      await expect(service.patch('tk-1', { teamId: 't2' }, boundKey)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('refuses a bound key unrouting a ticket', async () => {
+      // teamId: null would strand the ticket outside the key's own visibility
+      const { service } = makeService();
+      await expect(service.patch('tk-1', { teamId: null }, boundKey)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lets a bound key restate its own team', async () => {
+      const { service } = makeService();
+      await expect(service.patch('tk-1', { teamId: 't1' }, boundKey)).resolves.toBeDefined();
+    });
+
+    it('still lets an unbound key route deliberately, exactly as create() does', async () => {
+      const { service, updateSpy } = makeService();
+      await expect(service.patch('tk-1', { teamId: 't2' }, unboundKey)).resolves.toBeDefined();
+      expect(updateSpy.mock.calls[0][0].data.team).toEqual({ connect: { id: 't2' } });
+    });
   });
 
   describe('assign() distinguishes absent from null', () => {
@@ -191,6 +223,28 @@ describe('TicketsService', () => {
       expect(data.status).toBe('open');
       expect(data.resolvedAt).toBeNull();
       expect(data.closedAt).toBeNull();
+    });
+
+    // regression: the reopen guard was `… && actor.kind === 'user' && role ===
+    // 'agent'`, so a tickets:write key reopened closed work that no agent and
+    // only an in-team lead could. A key has no role and no scope stands in for
+    // one; the chatbot's own reopen-on-visitor-reply does not come through here.
+    it('an API key cannot reopen a closed conversation', async () => {
+      const { service, updateSpy } = makeService({ ...baseTicket, status: 'closed' });
+      await expect(service.patch('tk-1', { status: 'open' }, boundKey)).rejects.toThrow(ForbiddenException);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('an instance-wide key cannot reopen either — it is a capability, not a row scope', async () => {
+      const { service } = makeService({ ...baseTicket, status: 'closed' });
+      await expect(service.patch('tk-1', { status: 'open' }, unboundKey)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('a key may still make ordinary transitions', async () => {
+      // the fix must not cost machines the everyday work tickets:write is for
+      const { service, updateSpy } = makeService();
+      await service.patch('tk-1', { status: 'resolved' }, boundKey);
+      expect(updateSpy.mock.calls[0][0].data.status).toBe('resolved');
     });
 
     it('moving to pending pauses the SLA clock', async () => {
@@ -236,8 +290,8 @@ describe('TicketsService', () => {
     // so a machine caller's own team was discarded, dto.teamId was taken on
     // trust, and only agents were checked. A chatbot key bound to one team could
     // file tickets into another and then not be able to read them back.
-    const boundKey: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k1', scopes: ['tickets:write'], teamId: 't1' };
-    const unboundKey: Principal = { kind: 'api_key', workspaceId: 'w1', id: 'k2', scopes: ['tickets:write'], teamId: null };
+    // boundKey / unboundKey are the shared fixtures at the top of the file —
+    // the same two principals the team-move tests use, on purpose.
 
     function makeCreateService(users: Record<string, unknown> = {}) {
       const created: Record<string, unknown>[] = [];
@@ -285,7 +339,7 @@ describe('TicketsService', () => {
         { write: jest.fn().mockResolvedValue(undefined) } as never,
         { deliverWebhooks: jest.fn(), indexTicket: jest.fn(), notify: jest.fn() } as never,
         { computeDueTimes: jest.fn().mockResolvedValue({ policyId: null, firstResponseDueAt: null, resolutionDueAt: null }) } as never,
-        { findOrCreateByEmail: jest.fn().mockResolvedValue({ id: 'c1', organizationId: null }) } as never,
+        { findOrCreateByEmail: jest.fn().mockResolvedValue({ id: 'c1', companyId: null }) } as never,
         new TeamScopeService(prisma as never),
         { publish: jest.fn() } as never,
       );

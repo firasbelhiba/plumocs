@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { Body, Controller, Delete, Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, ConflictException, Controller, Delete, Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import * as argon2 from 'argon2';
@@ -130,6 +130,80 @@ export class UsersService {
     return { ...user, role: dto.role, teamId: dto.teamId ?? null, availability: 'available', isMember: true };
   }
 
+  /**
+   * Refuse anything that would leave this desk with no administrator.
+   *
+   * There is no in-product way back from that state: every route that could
+   * promote somebody is itself `@Roles('admin')`, so a workspace that loses its
+   * last admin needs a hand on the database. The paths that get there are
+   * ordinary — an admin demoting a colleague, or (the likely one) an admin
+   * offboarding themselves on their last day.
+   *
+   * WHY IT COUNTS MEMBERSHIPS AND NOT USERS. Role lives on the membership, so
+   * one human can be an admin of this desk and an agent on another. Counting
+   * `users` would let the admin of a different workspace hold this one open.
+   *
+   * WHY BOTH ACTIVE FLAGS. `m.is_active` is "still on this desk" and
+   * `u.is_active` is "may authenticate at all" — same pairing the roster report
+   * uses. An admin whose account is globally disabled cannot sign in, so
+   * counting them would hand the desk to somebody who cannot open it.
+   *
+   * WHY `FOR UPDATE` AND NOT A COUNT. This is the whole point of the guard. Two
+   * admins demoting each other at the same moment both read "2 admins", both
+   * pass a plain count, and both commit — nobody is left. The lock is what
+   * serialises them: the second transaction blocks on the same rows, and under
+   * READ COMMITTED Postgres re-evaluates the WHERE clause against the committed
+   * version once the lock is granted, so the demoted admin drops out of the
+   * result and the second caller correctly sees itself as the last one.
+   *
+   * Both tables are locked, not just the membership. Row re-evaluation only
+   * happens for relations named in `FOR UPDATE OF`, so locking `m` alone would
+   * miss a concurrent `is_active = false` on `users` — the re-check would still
+   * see the stale, enabled user row and wave the demotion through. That is the
+   * exact pair of requests (`PATCH` disabling one admin, `PATCH` demoting the
+   * other) this is here to stop.
+   *
+   * `ORDER BY` gives every caller the same lock order, so two of these racing
+   * queue up instead of deadlocking.
+   *
+   * Callers must be inside the request transaction — they are: every HTTP
+   * request runs in one (WorkspaceBindingInterceptor), and PrismaService's
+   * AsyncLocalStorage proxy routes `this.prisma.*` onto it. The explicit
+   * `$transaction` at each call site joins that one rather than opening a
+   * second, and states the requirement for any non-HTTP caller.
+   */
+  private async assertAdminRemains(targetUserId: string, actor: Principal) {
+    const admins = await this.prisma.$queryRaw<Array<{ userId: string }>>(Prisma.sql`
+      SELECT m.user_id AS "userId"
+        FROM workspace_memberships m
+        JOIN users u ON u.id = m.user_id
+       WHERE m.workspace_id = ${actor.workspaceId}::uuid
+         AND m.role = 'admin'
+         AND m.is_active
+         AND u.is_active
+       ORDER BY m.user_id
+         FOR UPDATE OF m, u
+    `);
+
+    // Somebody else still holds the role — an ordinary demotion, not the last
+    // one. This guard is only about the floor of one.
+    if (admins.some((a) => a.userId !== targetUserId)) return;
+    // The target is not a live admin here, so the operation removes no
+    // administrator at all. This is also what keeps a desk that ALREADY has
+    // none (possible: this guard is younger than the data) editable, instead of
+    // freezing every user edit on it behind an error nobody can clear.
+    if (!admins.some((a) => a.userId === targetUserId)) return;
+
+    const isSelf = actor.kind === 'user' && actor.id === targetUserId;
+    throw new ConflictException(
+      (isSelf
+        ? 'You are the last active administrator of this workspace.'
+        : 'This is the last active administrator of this workspace.') +
+        ' Promote another member to admin first — a desk left with no administrator' +
+        ' cannot be repaired from inside the product.',
+    );
+  }
+
   async update(id: string, dto: UpdateUserDto, actor: Principal) {
     const ws = actor.workspaceId;
     const before = await this.get(id, actor); // also asserts they are a member here
@@ -138,6 +212,18 @@ export class UsersService {
     // to whichever table happens to accept it.
     const { name, avatarUrl, isActive, role, teamId, availability } = dto;
     await this.prisma.$transaction(async () => {
+      // Two ways this request can cost the desk an administrator, and they are
+      // written to different tables: a role that is no longer `admin`, and
+      // `isActive: false`, which disables the ACCOUNT globally and so takes
+      // away the admin's ability to sign in anywhere. `role: 'admin'` with
+      // `isActive: false` still counts — they would end up an admin who cannot
+      // log in, which is the lockout this guard exists to prevent.
+      //
+      // Inside the transaction and ahead of the writes: checking outside it
+      // would be the plain-count race the guard documents.
+      if ((role !== undefined && role !== 'admin') || isActive === false) {
+        await this.assertAdminRemains(id, actor);
+      }
       if (name !== undefined || avatarUrl !== undefined || isActive !== undefined) {
         await this.prisma.user.update({
           where: { id },
@@ -167,9 +253,15 @@ export class UsersService {
    */
   async deactivate(id: string, actor: Principal) {
     await this.get(id, actor); // 404s if they are not a member here
-    await this.prisma.workspaceMembership.update({
-      where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: id } },
-      data: { isActive: false },
+    // Deactivating the last admin — usually themselves, on the way out — is the
+    // most direct route to a desk nobody can administer, so the check and the
+    // write share a transaction. See assertAdminRemains.
+    await this.prisma.$transaction(async () => {
+      await this.assertAdminRemains(id, actor);
+      await this.prisma.workspaceMembership.update({
+        where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: id } },
+        data: { isActive: false },
+      });
     });
     await this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
     await this.audit.write({ actor, entityType: 'user', entityId: id, action: 'deactivate' });

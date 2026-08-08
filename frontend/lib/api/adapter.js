@@ -97,6 +97,13 @@ class Adapter {
   meta = { orgName: (idOrName) => this.#orgs.get(idOrName) ?? idOrName ?? '—' };
 
   currentUser = null; // { id, email, name, role, teamId, availability }
+  // The API renamed this relation `organization` -> `company` on 2026-08-08 (the
+  // Plumo PM/CS name collision — see backend/docs/organization-vs-workspace.md).
+  // Only the WIRE key moved. The console's own vocabulary — `#orgs`, `orgName`,
+  // `org`, `customerOrg` — is unchanged, because it is read by Console.jsx,
+  // Customers.jsx and Header.jsx and renaming it buys nothing the user can see.
+  // So every read below is `c.company` while every field emitted stays `org*`.
+  // That asymmetry is deliberate; do not "fix" one half of it.
   #orgs = new Map();
   #failNext = false;
   #socket = null;
@@ -312,13 +319,13 @@ class Adapter {
 
   #ingestCustomers(rows) {
     this.customers = rows.map((c) => {
-      if (c.organization) this.#orgs.set(c.organization.id, c.organization.name);
+      if (c.company) this.#orgs.set(c.company.id, c.company.name);
       return {
         id: c.id,
         name: c.name,
         email: c.email,
-        org: c.organization?.id ?? null,
-        orgName: c.organization?.name ?? '—',
+        org: c.company?.id ?? null,
+        orgName: c.company?.name ?? '—',
         tz: c.timezone ?? '—',
         locale: c.locale ?? '—',
         phone: c.phone ?? '—',
@@ -398,7 +405,7 @@ class Adapter {
   }
 
   #mapTicketRow(t, seen = seenMap()) {
-    if (t.customer?.organization) this.#orgs.set(t.customer.organization.id, t.customer.organization.name);
+    if (t.customer?.company) this.#orgs.set(t.customer.company.id, t.customer.company.name);
     const updatedAt = ms(t.updatedAt);
     const lastMsg = t.messages?.[0];
     return {
@@ -416,7 +423,7 @@ class Adapter {
       tags: (t.tags ?? []).filter((x) => !isMarkerTag(x)),
       customerId: t.customerId,
       customerName: t.customer?.name,
-      customerOrg: t.customer?.organization?.name,
+      customerOrg: t.customer?.company?.name,
       assigneeId: t.assigneeId,
       teamId: t.teamId,
       createdAt: ms(t.createdAt),
@@ -476,11 +483,11 @@ class Adapter {
     const customer = t.customer
       ? {
           id: t.customer.id, name: t.customer.name, email: t.customer.email,
-          org: t.customer.organization?.id ?? null, tz: t.customer.timezone ?? '—',
+          org: t.customer.company?.id ?? null, tz: t.customer.timezone ?? '—',
           locale: t.customer.locale ?? '—', av: av(t.customer.id),
         }
       : null;
-    if (t.customer?.organization) this.#orgs.set(t.customer.organization.id, t.customer.organization.name);
+    if (t.customer?.company) this.#orgs.set(t.customer.company.id, t.customer.company.name);
 
     const thread = (t.messages ?? []).map((m) => this.#mapMessage(m, t));
     return {
@@ -518,7 +525,7 @@ class Adapter {
       role: agent
         ? (agent.role === 'lead' ? 'team lead' : agent.role === 'admin' ? 'admin' : 'support')
         : isBot ? 'AI assistant'
-        : isCustomer ? (ticket.customer?.organization?.name ?? '')
+        : isCustomer ? (ticket.customer?.company?.name ?? '')
         : 'system',
       at: ms(m.createdAt),
       body: m.body,
@@ -599,12 +606,12 @@ class Adapter {
 
   async getCustomer(id) {
     const c = await api.customers.get(id);
-    if (c.organization) this.#orgs.set(c.organization.id, c.organization.name);
+    if (c.company) this.#orgs.set(c.company.id, c.company.name);
     return {
       id: c.id,
       name: c.name,
       email: c.email,
-      orgName: c.organization?.name ?? '—',
+      orgName: c.company?.name ?? '—',
       phone: c.phone ?? '—',
       tz: c.timezone ?? '—',
       av: av(c.id),
@@ -629,7 +636,7 @@ class Adapter {
     return {
       tickets: res.tickets.map((t) => ({ id: t.id, num: t.number, subject: t.subject, status: uiStatus(t.status) })),
       customers: res.customers.map((c) => ({
-        id: c.id, name: c.name, email: c.email, orgName: c.organization?.name ?? '—',
+        id: c.id, name: c.name, email: c.email, orgName: c.company?.name ?? '—',
       })),
     };
   }
