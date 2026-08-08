@@ -890,9 +890,39 @@ was left. Worth a line in item 47 or a follow-up.
 ### BATCH 5 — Overlays, feedback, motion
 *Depends on Batch 1 item 3.*
 
+**STATUS 2026-08-08:** items 22–28 all **DONE**, commit `bd9b4dd`. Build clean,
+87 tests green. Most of this batch *was* seen in a browser — see the per-item
+notes — but the ticket screen itself was not, because there is no backend on
+this machine.
+
+*Recovery note, same day.* The agent that ran this batch died mid-run and the
+tree it left behind did not work. Four defects were found and fixed before the
+commit; they are worth knowing because three of them would have passed a build:
+
+- **`Sidebar.jsx` used `<Dropdown>`/`<DropdownItem>` without importing them.**
+  `next build` passes — an unbound identifier in JSX is a runtime
+  `ReferenceError`, and `.jsx` files are outside `tsc`'s reach. The sidebar
+  renders on every in-app screen, so the whole console was a white page. Found
+  by *running* it, not by building it. (Item 28's own error route is what
+  reported it, which is the item verifying itself.)
+- **`Overlays.jsx` still rendered the hand-rolled toast and confirm** against
+  `V.toasts` / `V.hasConfirm`, which item 22 and item 26 had already deleted
+  from `renderVals()`. `V.toasts.map` on `undefined` — a crash on first render.
+- **Five setters had been called with a value and left reading an event.**
+  `Queue.jsx` and `Ticket.jsx` were converted to `V.setSort(o.id)` etc.;
+  `Console.jsx` still had `setSort = (e) => e.currentTarget.dataset.v`. Every
+  status, priority, team, tag and sort change would have thrown on click.
+- **`V.statusMenuRef` / `V.tagMenuRef` were referenced and never defined**, and
+  the ticket overflow menu still had an "add a tag" row that could no longer
+  open anything.
+
+Items 23 (Header's two panels), 27 (the `loading` half), 28 (all of it) and the
+copy consequences below had not been started at all and were finished in the
+same pass.
+
 ---
 
-#### 22. Replace the hand-rolled toast with `react-hot-toast` — **L**
+#### 22. Replace the hand-rolled toast with `react-hot-toast` — **L** ✅ DONE 2026-08-08
 
 **CS** — hand-rolled. State + 3600ms timer at `components/Console.jsx:475-479`; render at
 `components/screens/Overlays.jsx:12-25`. `react-hot-toast` is **not** in
@@ -925,9 +955,30 @@ while PM is React 18.3 / Next 14.2. **Install `^2.6.0` or later, not PM's pinned
 Verify hydration is clean before pushing.
 **Check:** trigger a success and an error; confirm top-right, 4s, icon, theme-aware background.
 
+**DONE 2026-08-08.** `react-hot-toast@^2.6.0`, per the note above — not PM's `^2.4.1`.
+`components/layout/RootLayoutClient.jsx` is PM's `RootLayout.tsx:50-97` minus the three
+services CS has no equivalent of (i18n, achievements, changelog); the `<Toaster>` options are
+PM's `:57-94` verbatim. The `<Toaster>` lives there rather than in `app/layout.jsx` as this
+item guessed, because `DialogProvider` has to wrap `{children}` and both belong in the same
+client boundary — which is also where PM puts them.
+
+`Console.toast(text, tone)` **survives as a method** rather than ~40 call sites becoming
+`toast.success(...)` / `toast.error(...)` directly. It is one line (`tone === 'bad'` → error,
+else success), it keeps the console's two-tone vocabulary at the call sites, and — the reason
+that matters — the test suites replace `c.toast` with a log to assert what was said. Forty
+direct library calls would have taken that seam away. `state.toasts`, the 3600ms timer and
+`Overlays.jsx:12-25` are all deleted.
+
+**Check performed, in Chrome.** Success and error toasts, measured on the live DOM: container
+`top: 16px; right: 16px; z-index: 9999`; toast `max-width: 350px`, `padding: 10px 14px`,
+`border-radius: 6px`, `shadow-modal`; success `background: --success-soft` / `color:
+--success` → `rgb(62,204,142)`, error `--danger-soft` / `--danger` → `rgb(240,138,122)`.
+Both resolve through tokens in the dark theme, so **the toast is theme-aware and green, and
+the navy is gone.** Duration 4000 is configured but not sat through.
+
 ---
 
-#### 23. Adopt the shared `Dropdown` primitive — **L**
+#### 23. Adopt the shared `Dropdown` primitive — **L** ✅ DONE 2026-08-08
 
 **CS** ships `components/common/Dropdown.tsx` byte-identical to PM's and **imports it zero
 times.** Three inline menu systems instead.
@@ -958,9 +1009,58 @@ not a restyle.
 **Check:** Escape closes; click-outside closes; Tab reaches items; the entry animation is a
 150ms shrink from the top.
 
+**DONE 2026-08-08.** `Dropdown` went from 0 imports to 7 instances: the queue sort menu, the
+sidebar user card, and the ticket header's status, priority, team, overflow and tag menus.
+The eight `V.*Open` flags and seven `openXMenu` handlers this item predicted could be retired
+are retired; `state.menu` now carries only `assignee`, `canned`, `notif` and `search`.
+
+**Five of the twelve instances stayed hand-rolled, deliberately, and this is the shape of the
+answer rather than a shortfall.** The assignee picker and the canned-response list each have a
+search field, and `Dropdown` has no room for one — PM hand-rolls its own searchable popovers
+(`AssigneePopover`) for exactly this reason. `Header.jsx`'s two panels are not menus at all:
+one is a grouped search-result list, the other has a header row and a "mark all read" action.
+What all five give up is their *own chrome*: a shared `PANEL` constant in each file supplies
+`top-full mt-2` (8px, not the 7/8/9px they each picked), `z-dropdown` (10, not `z-popover` 60),
+`shadow-card` (not `shadow-modal`), and `animate-dropdown`. They also gain `role="menu"` /
+`role="menuitem"` and `focus-visible:bg-surface-2`.
+
+Two consequences that are user-visible and that a reader should not rediscover the hard way:
+
+- **`Dropdown` does not close when you pick an item.** It closes on outside `mousedown`, or on
+  Escape while the trigger has focus. That is PM's behaviour — `IssueSidebar.tsx:194` picks a
+  status the same way — and `Dropdown.tsx` is byte-identical to PM's, so it was copied rather
+  than improved, the same call item 14 made about the `w-8` oval. The old CS menus all closed
+  on select (`patch()` set `menu: null`), so this *is* a regression in feel, and it is the
+  first thing likely to be questioned. Fixing it is a one-line change in the primitive and
+  belongs to the owner, not to a batch.
+- **One menu can no longer open another.** The ticket overflow menu's "add a tag" row opened
+  the same menu the rail's `+ add` chip opens, via `state.menu`. With the open state inside the
+  primitive there is no way to reach it, so **that row is gone**; the rail chip is the single
+  entry point.
+
+Also load-bearing: **five console setters now take a value, not an event.** `setSort`,
+`setStatus`, `setPriority`, `setTeam` and `addTag` were `(e) => e.currentTarget.dataset.v`, and
+`DropdownItem` hands `onClick` no element to read. PM calls them the same way
+(`IssueSidebar.tsx:194`, `onClick={() => onStatusChange(opt.id)}`). The three that still read
+the dataset — `setAssignee`, `setAssigneeFilter`, the facet toggles — are the panels that
+stayed hand-rolled. The split is commented in `Console.jsx`.
+
+Triggers are `<span>` carrying `buttonVariants(...)`, not `<Button>` — `Dropdown` renders its
+own `<button>` and nesting one inside it is invalid markup. PM's real call sites do the same
+(`IssueHeader.tsx:136`, `ProjectToolbar.tsx:859`); only PM's Storybook story nests a `<Button>`.
+
+**Check performed, in Chrome, on the live queue sort menu.** `animation: dropdown-in 0.15s`,
+`transform-origin: top`, `z-index: 10`, `min-width: 200px`, panel `padding: 4px 0`, items
+`padding: 8px 16px` at `14px` — PM's column of the table above, value for value. Escape and
+outside-click both close it. Selecting an item ran `setSort('priority')` with no error and
+updated the trigger label, which is the fix for the dead handler described in the recovery
+note. The sidebar card was confirmed to open *upward* (`mb-2`, `mt-0`) via the wrapper
+override. **The ticket header's five menus were not clicked** — no backend — but they are the
+same primitive with the same call shape.
+
 ---
 
-#### 24. Retire the `[data-anim]` motion vocabulary — **S**
+#### 24. Retire the `[data-anim]` motion vocabulary — **S** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:300-306` — `@keyframes cs-in / cs-shimmer / cs-spin / cs-breathe` and
 `[data-anim="in"|"sk"|"spin"]`, driven by `--plumo-dur-moment` (400ms) and `--plumo-ease`
@@ -978,9 +1078,22 @@ Question F.
 they will double-animate.
 **Risk:** low. **Check:** every menu now animates once, at 150ms.
 
+**DONE 2026-08-08.** `@keyframes cs-in`, `cs-shimmer` and `cs-spin` are deleted along with all
+three `[data-anim]` rules; `cs-breathe` stays, as specified, and is still the mascot idle in
+`Overlays.jsx`. Every `data-anim` attribute went with them — the ~10 menu/popover ones with
+item 23, the toast with item 22, `Queue.jsx`'s spinner with item 27, and the last two
+(`Reports.jsx:51` drill panel, `Settings.jsx:466` API-key reveal) here. Neither of those two is
+a menu, so both took `.animate-fade-in` — PM's `fade-in var(--dur) var(--ease-out) both` —
+rather than a dropdown animation. `grep 'data-anim' components/` returns nothing.
+
+**Check performed.** The queue sort menu's computed `animation-name` is `dropdown-in` and its
+`animation-duration` is `0.15s`, with no second animation on the element. Item 3's warning
+about double-animating between items 3 and 24 never applied: they landed in different batches
+and nothing shipped in between with both.
+
 ---
 
-#### 25. Add a drawer primitive — **M**
+#### 25. Add a drawer primitive — **M** ✅ DONE 2026-08-08
 
 **CS** — **MISSING entirely.** `grep 'fixed top-0 right-0 h-full\|translate-x-full\|
 animate-slide-in-right'` over `plumocs/frontend` returns nothing. CS's nearest thing is
@@ -1005,9 +1118,31 @@ drawer and a ticket-preview drawer later.
 **Depends on item 4** (`slide-in` keyframe) **and item 3**.
 **Risk:** low. **Check:** the shortcuts sheet gets a header and a close button.
 
+**DONE 2026-08-08.** `components/common/Drawer.tsx` is `DayDetailDrawer:73-118` generalised:
+same backdrop (`bg-black/40 backdrop-blur-[1px] animate-fade-in`, the lighter blur), same
+`w-full sm:w-[420px]` panel at `z-modal` with `border-l` and `shadow-modal`, same 48px header
+with the 10px mono `tracking-[0.14em]` eyebrow over a 14px semibold title and a `size={16}`
+close glyph, same `flex-1 overflow-y-auto` body, same window-keydown Escape, backdrop click and
+`useBodyScrollLock(open)`. `.animate-slide-in-right` and its keyframe were copied byte-for-byte
+from PM `globals.css:685-706`; note they live *outside* the tailwind `animation` map in PM too,
+so item 4's `slide-in` entry is a different class and this item did not need it after all.
+
+The shortcuts sheet is the first caller. Its hand-drawn 17px title and subtitle became the
+drawer's eyebrow and title, and **the two shortcut groups stack instead of sitting in
+`grid-cols-2`** — two columns inside 420px would have been about 190px each, which the
+`<Kbd>j</Kbd><Kbd>k</Kbd>move through the list` rows do not fit.
+
+**Check performed, in Chrome.** Opened it and measured: `position: fixed`, `width: 420px`, full
+viewport height, right-anchored, `animation: slide-in-right 0.3s`, close button present with
+`aria-label="Close"`, `aria-modal="true"`, `document.body` overflow `hidden` while open and
+`visible` after. Escape closed it. **The animation itself could not be watched** — the browser
+pane was not compositing frames, so `getAnimations()[0].currentTime` stayed at 0 and every
+animated element measured mid-flight. That is a harness limit, not a defect; the end state is
+correct because the keyframe's `to` is the element's natural state and needs no fill mode.
+
 ---
 
-#### 26. Replace ad-hoc confirms with a dialog service — **M**
+#### 26. Replace ad-hoc confirms with a dialog service — **M** ✅ DONE 2026-08-08
 
 **CS** `components/Console.jsx:1948-1950` projects component state into
 `components/screens/Overlays.jsx:27-42`. No `prompt` equivalent exists.
@@ -1026,9 +1161,38 @@ Also note `components/common/ConfirmDeleteModal.tsx` is byte-identical in CS and
 **Blast radius:** ~8 confirm call sites in `Console.jsx`.
 **Risk:** low. **Check:** "mark as spam" shows a red confirm button.
 
+**DONE 2026-08-08.** `contexts/DialogContext.tsx` is byte-identical to PM's (`diff
+--strip-trailing-cr` returns nothing), mounted inside `RootLayoutClient`. Six call sites, not
+eight: `navTo`'s unsaved-draft guard, `bulkClose`, `askDelete`, `askSpam`, `revokeInvite`,
+`askDeactivate`. All six became `async` — awaiting a promise instead of stashing an `action`
+callback is what this item actually is, and `state.confirm`, `confirmOk`, `confirmCancel`,
+`askMock` and five `V.confirm*` keys are gone with it.
+
+**`this.confirm` is a prop, not context.** `Console` is a class and spends its one
+`contextType` on the theme (item 12), so `app/page.jsx` reads `useConfirm()` and passes it
+down. `Console.confirm` falls back to `Promise.resolve(false)` when the prop is absent, which
+is both the safe default and what lets the suites construct `new Console({})` and drive the
+handlers directly.
+
+**The `warn` → `danger` mapping is per call site, on PM's rule, not blanket.** PM sets `danger`
+for what cannot be undone and omits it for what can — `users/page.tsx:426` (remove user) vs
+`:454` (reactivate). So: delete, mark-as-spam, revoke, deactivate and the unsaved-draft guard
+are `danger: true`; **`bulkClose` is not**, because closing conversations is reversible and its
+own copy says "they can reopen anytime — nothing is final here". A first pass had all six red.
+
+`cancelLabel: 'keep it as is'` is passed at every call site. Without it the provider's default
+is PM's `'Cancel'`, which would have read as `Cancel` beside `mark spam` in the same footer.
+Copy voice is batch 9's decision; this only avoids introducing a mixed footer here.
+
+**Check performed, in Chrome.** Drove the live provider with the "mark as spam" options: the
+dialog rendered with the title and body, the confirm button computed to `background:
+rgb(240,138,122)` — `--danger`, **red, which is the bug this item names** — and the cancel
+button to a transparent outline. Clicking cancel resolved the promise `false` and unmounted the
+dialog. `ConfirmDeleteModal.tsx` is still a dead port; it stays with item 45 as written.
+
 ---
 
-#### 27. Unify the spinners and use `Button loading` — **S**
+#### 27. Unify the spinners and use `Button loading` — **S** ✅ DONE 2026-08-08
 
 **CS** — `components/common/LoadingSpinner.tsx` is byte-identical to PM's (16/32/48px SVG,
 `r=7 strokeWidth=2`, `animate-spin` = 1s linear, `text-[color:var(--primary)]`) and is
@@ -1045,9 +1209,29 @@ and the spinner markup are already in CS's `Button.tsx:56-77`.
 **Blast radius:** 1 spinner site + ~6 async buttons.
 **Risk:** none. **Check:** click "send reply" on a slow connection.
 
+**DONE 2026-08-08.** `Queue.jsx:91`'s 11px CSS ring is `<LoadingSpinner size="sm" />` — the
+16px SVG at 1s that CS had ported and never rendered. That was the last `data-anim="spin"`, so
+`cs-spin` went with it under item 24, exactly as this item predicted.
+
+`loading` is passed for the first time in CS, at five buttons: the reply composer's three sends
+(`send`, `send & set pending`, `send & resolve` — `V.sending` had existed since the composer
+was written and *nothing displayed it*), the invite submit, and the record-editor submit.
+`loading` also disables, so a second click cannot post the same reply twice.
+
+**PM's shape for this is a still label plus a spinner** (`EditProjectMemberTagModal.tsx:154`,
+and 20-odd more), not a label that changes. So the two Settings buttons that read
+`{V.inviteBusy ? 'sending…' : 'send the invitation'}` now read `send the invitation` with the
+spinner beside it. **That is a small copy loss, taken on purpose** — the words no longer move
+under the cursor.
+
+**Two sites deliberately not converted.** `Settings.jsx`'s `generate key` and `save inbound
+address` are raw `<button className={primaryBtn()}>`, part of the ~30 that item 47 owns; and
+the new-conversation submit has no busy flag in the console to pass. **`send reply` on a slow
+connection was not clicked** — no backend.
+
 ---
 
-#### 28. Add the boot loader and the error routes — **M**
+#### 28. Add the boot loader and the error routes — **M** ✅ DONE 2026-08-08
 
 Two gaps, both "nothing renders":
 
@@ -1078,6 +1262,50 @@ card, no badge chip, no details panel.**
 **Blast radius:** 3 new route files + `LogoLoader` + the `!booted` branch in `Console.jsx`.
 **Risk:** low. **Check:** throw in a screen; you should get `ErrorScreen`, not a white page.
 **Open Question F** covers whether the mascots survive.
+
+**DONE 2026-08-08, both halves.**
+
+**(a)** `components/common/LogoLoader.tsx` carries PM's structure: the masked 48px grid wash,
+the `w-[260px]` stack, the 44/56/72px `primary-soft` tile with a `primary-soft-border` hairline,
+the 10px mono `tracking-[0.14em]` uppercase status line with its pulsing dot, and the 4px rail
+on `--surface-3` driven by `.plumo-loader-progress-bar` (copied byte-for-byte from PM
+`globals.css:295-310`). `renderVals()` gained `isBooting`, and `isLogin` / `inApp` are now both
+gated on `booted` — before this the console *guessed* "signed in" and drew the whole shell
+against empty data while the bootstrap was in flight.
+
+**Two adaptations, not ports.** PM's loader reads the tenant's uploaded logo out of
+`WorkspaceContext` with a localStorage cache and falls back to `PlumoAnimatedIcon`; CS is one
+desk with one mark, so it renders `/assets/marks/mark-primary.svg` directly — and the mark is
+the logo, which is the one thing parity exempts. PM's `fullPage` variant portals over the app;
+CS shows the loader *instead of* the shell, so there is nothing to portal above, and the
+`createPortal` branch is not ported. The workspace-name line is omitted rather than filled with
+a constant.
+
+**(b)** `app/error.jsx`, `app/not-found.jsx` and `app/global-error.jsx`, all three from PM's
+originals, all three rendering `ErrorScreen` (which is now rendered for the first time).
+`EdgeScreens.jsx` is untouched and stays — it is the in-shell "this conversation is gone" /
+"that action failed" pair, which is a different thing from a route that never resolved. The
+`24px/500` vs `22px/600` comparison above is therefore still open and belongs with whatever
+item eventually reconciles the two; these routes are `ErrorScreen`'s geometry as shipped.
+
+**Colour, and why the illustrations are not PM's.** PM's `public/brand/empty-states/plumo-404.svg`
+and `plumo-500.svg` are drawn in `#60A5FA` / `#EFF6FF` / `#1E3A8A`. Copying them would have put
+PM's accent blue on a full-screen surface — the one mistake the owner sees instantly. The
+routes use CS's own mascots instead (`mascot-05-waiting` for 404, `mascot-03-empathetic` for
+500, matching what `EdgeScreens.jsx` already chose). `global-error.jsx` is the one file in the
+tree that legitimately needs literal hex — it renders when the layout that imports
+`globals.css` is the thing that failed, so no custom property is guaranteed to resolve — and it
+uses `#4C9F6E` and `#1F4A2E` where PM writes `#2563EB` and `#1E3A8A`.
+
+**Check performed, in Chrome, and this one verified itself.** Forcing the shell to render
+against a null adapter threw, and **`app/error.jsx` caught it and rendered `ErrorScreen`** —
+500 badge, CS copy, both actions, and the collapsible details panel, which is how the missing
+`Dropdown` import in `Sidebar.jsx` was found in the first place. The card measured
+`max-width: 480px`, `border-radius: 6px`, `h1` 22px/600, buttons on `--primary` green. The boot
+loader was driven by forcing `booted: false`: 56px tile at `--primary-soft` with a
+`--primary-soft-border` hairline, 10px mono uppercase at `letter-spacing: 1.4px`, 4px rail on
+`--surface-3`, bar `--primary` green running `plumo-loader-progress 3.6s forwards`. No blue
+anywhere. `global-error.jsx` was **not** exercised — it needs the root layout itself to throw.
 
 ---
 
@@ -1728,6 +1956,14 @@ Different illustration family, roughly a third the size, plus an idle animation 
 analogue for. **If the mascots are CS's brand identity they are exempt and items 28 and 41
 shrink to a size change. If they are not, they go.** This is the biggest open question by
 blast radius.
+**ANSWERED 2026-08-08 by the owner — mascots are distinct from the logo, and CS adopts PM's.**
+**One hard constraint discovered while doing item 28, which the answer has to survive:
+PM's error illustrations are blue.** `public/brand/empty-states/plumo-404.svg` and
+`plumo-500.svg` are drawn in `#60A5FA`, `#EFF6FF` and `#1E3A8A` — copying either puts PM's
+accent blue on a full-screen surface, which the palette exemption forbids outright. So item 28
+shipped CS's own mascots on the three new error routes, and **adopting PM's illustration family
+means re-tinting these two files to green first, not copying them.** Whoever picks up item 41
+should check every `/brand/empty-states/` asset the same way before importing it.
 
 **G. Is the copy voice in scope?**
 CS's lowercase-with-`✿` register is a deliberate, consistent authorial choice — 20 flower
