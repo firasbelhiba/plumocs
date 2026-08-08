@@ -670,21 +670,32 @@ model PmOAuthClient {
 ///
 /// The code_verifier is kept server-side deliberately — putting it in a cookie
 /// would hand the browser the one secret PKCE exists to keep out of it.
+///
+/// NOT TENANT DATA, and deliberately carries no `workspace_id` to say so. A row
+/// here belongs to a handshake, not to a desk: it is created before anybody is
+/// signed in and read back by a @Public() callback on a connection with no
+/// workspace bound. `workspace_id = app_current_workspace()` would be NULL
+/// rather than true for every one of those reads, so the standard policy would
+/// refuse every PM sign-in rather than isolate anything. What protects a row is
+/// the unguessable single-use `state`, the ten-minute expiry, and `consumedAt`.
 model PmOAuthState {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  state        String    @unique
-  codeVerifier String    @map("code_verifier")
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state             String    @unique
+  codeVerifier      String    @map("code_verifier")
   /// Who began the flow. The link is applied to THIS user, so a stolen callback
   /// cannot attach a PM identity to an account the caller does not control.
   /// Set for a link (apply to this user); NULL for a sign-in (resolve the user
   /// from the PM subject). The null is the distinction between the two flows.
-  userId       String?   @map("user_id") @db.Uuid
-  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspaceId  String?   @map("workspace_id") @db.Uuid
-  returnTo     String?   @map("return_to")
-  expiresAt    DateTime  @map("expires_at") @db.Timestamptz()
-  consumedAt   DateTime? @map("consumed_at") @db.Timestamptz()
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  userId            String?   @map("user_id") @db.Uuid
+  user              User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The desk to map to a PM workspace if this flow comes back as a LINK — a
+  /// hint carried across the round trip, not the tenant that owns the row.
+  /// NULL for a sign-in, which starts at the login screen with no desk known.
+  linkWorkspaceId   String?   @map("link_workspace_id") @db.Uuid
+  returnTo          String?   @map("return_to")
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz()
+  consumedAt        DateTime? @map("consumed_at") @db.Timestamptz()
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
 
   @@index([expiresAt])
   @@map("pm_oauth_states")

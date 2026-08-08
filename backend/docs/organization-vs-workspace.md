@@ -260,9 +260,19 @@ Two further traps in the retro-link path, relevant if you use it to fix the data
 
 ### One more tenancy hole, unrelated to Organization
 
-`pm_oauth_states` **has a `workspace_id` column with a real FK to `workspaces`** —
+> **[08-08] CLOSED, and not the way this section proposed.** The column is now
+> **`pm_oauth_states.link_workspace_id`** (`20260808130000_pm_oauth_state_link_workspace_id`).
+> It never held a tenant — it holds a hint carried across the OAuth redirect, naming the desk
+> to map if the flow comes back as a *link*, and NULL when it is a *sign-in*. So it gets no
+> policy, no immutability trigger and no `app_current_workspace()` default, because all three
+> would refuse every PM sign-in: the callback is `@Public()` and runs with no workspace bound,
+> where `workspace_id = app_current_workspace()` is NULL rather than true. Renaming it is what
+> made the invariant true again with nothing exempted — see the reasoning below on Priority 2.
+> The schema-wide assertion this section asked for ships in that migration.
+
+`pm_oauth_states` **had a `workspace_id` column with a real FK to `workspaces`** —
 `20260807020000_pm_oauth_client/migration.sql:58`, `schema.prisma:669` — but it was created
-*after* the RLS migration, so the self-deriving loop never saw it. It has **no
+*after* the RLS migration, so the self-deriving loop never saw it. It had **no
 `workspace_isolation` policy, no immutability trigger, and no `app_current_workspace()`
 default.**
 
@@ -375,13 +385,35 @@ Do **both**:
   with Plumo" actually reaches your desk. Confirm the slugs match on both sides first — the
   linker matches on slug alone (`pm-identity.module.ts:74-76`) and fails silently otherwise.
 
-**Priority 2 — this week.** A small migration for `pm_oauth_states`: give it the
+~~**Priority 2 — this week.** A small migration for `pm_oauth_states`: give it the
 `workspace_isolation` policy, the immutability trigger, and the
 `DEFAULT app_current_workspace()`; or drop the `workspace_id` column if the desk can be
-recovered from the state row another way. Add a schema-wide assertion, modelled on
+recovered from the state row another way.~~ Add a schema-wide assertion, modelled on
 `20260807190000:257-263`, that raises if **any** table in `public` has a `workspace_id`
-without a policy — so the next post-RLS table cannot escape silently. Fix the wrong comment
-at `20260807020000:70-71` while you are there.
+without a policy — so the next post-RLS table cannot escape silently. ~~Fix the wrong comment
+at `20260807020000:70-71` while you are there.~~
+
+**[08-08] Done — `20260808130000_pm_oauth_state_link_workspace_id`, and both struck-through
+options were wrong.** The policy would have refused every PM sign-in: rows are written before
+anyone is signed in and read back by an `@Public()` callback on an unbound connection, where
+`workspace_id = app_current_workspace()` evaluates to NULL rather than true. The immutability
+trigger and the `DEFAULT` fail for the same reason. And dropping the column loses a live
+value — `pm-identity.service.ts` writes it at the start of a link and
+`pm-identity.module.ts` reads it back to decide which desk to map.
+
+The third option is the one that was taken: **rename it to `link_workspace_id`.** The column
+was never a tenant key, it was a hint carried through a redirect, and the name was the only
+thing claiming otherwise. With it renamed, "has a `workspace_id` column" means exactly "is
+tenant data", the `RLS_EXEMPT_TABLES` list in `db-roles.integration.spec.ts` is **deleted**
+rather than emptied, and the assertion is the bare `expect(unprotected).toEqual([])`. The
+schema-wide assertion asked for above is assertion (4) of that migration; two new assertions
+in the spec keep the *reason* RLS stays off executable, so it cannot be undone by a migration
+that looks like tightening.
+
+The wrong comment at `20260807020000:70-71` is **deliberately left alone**. Editing an
+applied migration changes its checksum and rewrites history that was true when it ran; the
+correction belongs in the file that changes the fact, and it is in the header of
+`20260808130000`.
 
 **Priority 3 — when you have a quiet afternoon.** The `Organization` → `Company` rename
 above, plus the four small defects from §2 (lock down the two write routes, decide whether

@@ -144,7 +144,7 @@ export class PmIdentityController {
   async start(@CurrentUser() principal: Principal, @Query('returnTo') returnTo?: string) {
     const { url } = await this.pm.beginAuthorization({
       userId: principal.id,
-      workspaceId: principal.workspaceId,
+      linkWorkspaceId: principal.workspaceId,
       returnTo: returnTo ?? null,
     });
     return { authorizationUrl: url };
@@ -191,7 +191,7 @@ export class PmIdentityController {
     try {
       const { url, state } = await this.pm.beginAuthorization({
         userId: null,
-        workspaceId: null,
+        linkWorkspaceId: null,
         returnTo: null,
       });
       reply.header('set-cookie', this.pm.signInBindingCookie(state));
@@ -313,9 +313,9 @@ export class PmIdentityController {
       // LINK: apply the identity to the user who started the flow, and nobody
       // else — the state row named them before the redirect.
       const linked = await this.link.apply({
-        actor: { kind: 'user', id: result.userId, workspaceId: result.workspaceId ?? '' } as Principal,
+        actor: { kind: 'user', id: result.userId, workspaceId: result.linkWorkspaceId ?? '' } as Principal,
         userId: result.userId,
-        workspaceId: result.workspaceId,
+        workspaceId: result.linkWorkspaceId,
         info: result.userInfo,
       });
       return back({

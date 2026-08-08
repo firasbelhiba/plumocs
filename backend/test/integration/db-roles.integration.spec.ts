@@ -80,40 +80,6 @@ describe('database role separation', () => {
     }
   });
 
-  /**
-   * Tables that carry a workspace_id and are deliberately NOT under the
-   * workspace_isolation policy. Exactly one, and it has to be argued for.
-   *
-   * pm_oauth_states — the in-flight half of the "sign in with Plumo" handshake:
-   * one row per authorization attempt, holding a PKCE code_verifier, addressed
-   * by `state` (32 random bytes, UNIQUE, consumed on use) and deleted after a
-   * ten-minute expiry. Its workspace_id is live, not vestigial — written by
-   * pm-identity.service.ts and read back by the link flow in
-   * pm-identity.module.ts to decide which desk to map — but it is a routing hint
-   * for a handshake, not tenant data, and it is nullable by design: a SIGN-IN
-   * starts at the login screen where no workspace is known yet, so it passes
-   * null.
-   *
-   * The standard predicate CANNOT be applied here. `workspace_id =
-   * app_current_workspace()` is NULL, not true, for a NULL workspace_id, and the
-   * OAuth callback necessarily runs unbound — there is no session yet, that is
-   * what the handshake is for. Enabling RLS would not tighten anything; it would
-   * refuse every PM sign-in.
-   *
-   * (Mechanically it was missed because the tenancy migration derives its table
-   * list at run time from "has a workspace_id column", and this table was
-   * created a day after that migration ran. The derivation is right; this table
-   * is the exception to it.)
-   *
-   * What protects a row here is not tenancy: it is the unguessable single-use
-   * secret, the expiry, and consumed_at. Adding this table to the list below is
-   * a decision somebody has to make in a diff — which is the point.
-   *
-   * Keep sorted; the assertion below compares it against a catalogue query
-   * ordered by table name.
-   */
-  const RLS_EXEMPT_TABLES = ['pm_oauth_states'];
-
   it('every table carrying workspace_id has row-level security ON and a policy', async () => {
     // Two failures, one query. `relrowsecurity` false means the policy is there
     // and inert; a missing policy on an RLS-enabled table means the table is
@@ -121,10 +87,27 @@ describe('database role separation', () => {
     // notices, and a new tenant table arriving without either is the likeliest
     // way this regresses — nothing in the application would change.
     //
-    // The invariant is "every table holding TENANT DATA is isolated", which is
-    // not quite the same as "every table with a workspace_id column" — see
-    // RLS_EXEMPT_TABLES. Stating it precisely is the fix; the alternative was to
-    // relax it to something that no longer catches the regression it exists for.
+    // THERE IS NO EXEMPTION LIST, AND THAT IS THE ASSERTION. There was one, of
+    // exactly one entry: pm_oauth_states, the in-flight half of the "sign in
+    // with Plumo" handshake, which carried a workspace_id it could not put a
+    // policy on — rows are created before anybody is signed in and read back by
+    // a @Public() callback that necessarily runs unbound, where
+    // `workspace_id = app_current_workspace()` is NULL rather than true, so the
+    // standard policy would have refused every PM sign-in rather than isolated
+    // anything.
+    //
+    // The list was argued for, pinned in both directions, and still the wrong
+    // shape: a table whose column claims to be a tenant key and is not is a
+    // problem in the SCHEMA, and an array here was a place to answer it in the
+    // test instead. 20260808130000_pm_oauth_state_link_workspace_id renamed the
+    // column to link_workspace_id — which is what it always was, a hint carried
+    // across a redirect — and the invariant then held with nothing subtracted.
+    //
+    // So the query below is the whole rule, and `[]` is the whole expectation.
+    // Nothing is left to edit: the next table that cannot take the policy has
+    // to earn its way out in the schema, in a migration, by not calling its
+    // column workspace_id — which is a claim a reviewer can check — rather than
+    // by being added to a literal here, which is a claim only this file makes.
     const unprotected = await prisma.$queryRaw<{ table: string; rlsEnabled: boolean; policies: bigint }[]>`
       SELECT c.relname::text AS "table",
              c.relrowsecurity AS "rlsEnabled",
@@ -142,30 +125,10 @@ describe('database role separation', () => {
                WHERE p.polrelid = c.oid AND p.polname = 'workspace_isolation'))
       ORDER BY c.relname
     `;
-    // The exemptions are subtracted in TypeScript rather than in the WHERE
-    // clause on purpose: the query stays the plain catalogue question, and the
-    // full row — table, rlsEnabled, policies — is still in hand for the second
-    // assertion when this fails.
-    const gaps = unprotected.filter((g) => !RLS_EXEMPT_TABLES.includes(g.table));
-    expect(gaps).toEqual([]);
-
-    // THE EXEMPTION LIST MUST NOT GROW SILENTLY. The line above passes for a
-    // list of any length; this one pins the list to exactly what has been argued
-    // for, in both directions:
-    //
-    //   - a new tenant table shipped without a policy lands in `unprotected`,
-    //     fails the line above, and cannot be waved through by editing one
-    //     array — the literal here has to change too, in the same diff, where a
-    //     reviewer sees it next to the reasoning;
-    //   - an exemption that has stopped being true — the table got a policy, or
-    //     was dropped — falls out of `unprotected` and fails here, so a stale
-    //     entry cannot sit around waiting to cover some future table that
-    //     happens to take the name.
-    //
-    // A skipped test would have been the cheap way out of pm_oauth_states. This
-    // is the expensive way, and it is the one that still fails on the next gap.
-    expect(unprotected.map((g) => g.table)).toEqual(RLS_EXEMPT_TABLES);
-    expect(RLS_EXEMPT_TABLES).toEqual(['pm_oauth_states']);
+    // The whole row — table, rlsEnabled, policies — comes back rather than just
+    // the name, so a failure says WHICH of the two halves is missing without a
+    // second query against a database the reporter no longer has.
+    expect(unprotected).toEqual([]);
 
     // ...and there are tenant tables at all. Without this the assertion above is
     // satisfied by a database where the tenancy migration never ran.
@@ -175,20 +138,53 @@ describe('database role separation', () => {
     expect(Number(n)).toBeGreaterThanOrEqual(17);
   });
 
-  it('users is deliberately NOT under a workspace policy', async () => {
+  it('the pre-workspace tables are deliberately NOT under a workspace policy', async () => {
     // The exclusion is as load-bearing as the inclusions. Login has to find a
     // user by email BEFORE any workspace is known, so a workspace predicate here
     // would not leak anything — it would make logging in impossible, for
     // everybody, at the next deploy. Same for the sessions hanging off a person.
+    //
+    // pm_oauth_states is here for the same reason and is the newest member: it
+    // is the in-flight half of the PM handshake, written before anybody is
+    // signed in and read back by a @Public() callback on an unbound connection.
+    // A policy here refuses every PM sign-in.
+    //
+    // THIS IS WHERE THAT ARGUMENT NOW LIVES. It used to be a comment on an
+    // exemption in the test above, which the link_workspace_id rename made
+    // unnecessary — but "no policy" stopped being asserted anywhere the moment
+    // the exemption went, and an unasserted reason is one somebody undoes with a
+    // migration that looks like tightening. Asserting the absence keeps the cost
+    // of getting it wrong at a red test rather than at a broken login.
     const covered = await prisma.$queryRaw<{ table: string }[]>`
       SELECT c.relname::text AS "table"
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public'
-        AND c.relname IN ('users', 'refresh_tokens', 'password_resets', 'workspaces')
+        AND c.relname IN ('users', 'refresh_tokens', 'password_resets', 'workspaces', 'pm_oauth_states')
         AND c.relrowsecurity
     `;
     expect(covered).toEqual([]);
+  });
+
+  it('the PM handshake table carries no column claiming to be a tenant key', async () => {
+    // The other half of the same argument, and the reason the exemption list
+    // could go: pm_oauth_states must not be readable only by a bound
+    // connection, AND it must not look like it should be. `link_workspace_id`
+    // says what the value is — the desk to map if this flow returns as a link —
+    // where `workspace_id` claimed a tenancy the row does not have and put the
+    // table permanently at odds with the catalogue-wide invariant above.
+    //
+    // Named columns rather than a LIKE '%workspace%' sweep: the point is not
+    // that the word is forbidden, it is that this one exact name is a
+    // declaration, and only the exact name makes it.
+    const cols = await prisma.$queryRaw<{ column: string }[]>`
+      SELECT column_name::text AS "column"
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'pm_oauth_states'
+        AND column_name IN ('workspace_id', 'link_workspace_id')
+      ORDER BY column_name
+    `;
+    expect(cols).toEqual([{ column: 'link_workspace_id' }]);
   });
 
   it('the runtime cannot delete a workspace', async () => {

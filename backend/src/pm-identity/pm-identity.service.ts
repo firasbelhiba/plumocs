@@ -186,7 +186,13 @@ export class PmIdentityService {
   async beginAuthorization(input: {
     /** Set to link this PM identity to that CS user; null to sign in with it. */
     userId: string | null;
-    workspaceId?: string | null;
+    /**
+     * The desk to map to a PM workspace when this comes back as a LINK. A hint
+     * carried across the round trip, not a tenant key — the state row it lands
+     * in belongs to a handshake and is outside RLS entirely. Null for a
+     * sign-in, which begins at the login screen with no desk known.
+     */
+    linkWorkspaceId?: string | null;
     returnTo?: string | null;
   }): Promise<{ url: string; state: string }> {
     this.assertEnabled();
@@ -204,7 +210,7 @@ export class PmIdentityService {
         state,
         codeVerifier,
         userId: input.userId ?? null,
-        workspaceId: input.workspaceId ?? null,
+        linkWorkspaceId: input.linkWorkspaceId ?? null,
         returnTo: input.returnTo ?? null,
         // Long enough to read a consent screen, short enough that an abandoned
         // flow is not a standing credential.
@@ -344,7 +350,8 @@ export class PmIdentityService {
     userInfo: PmUserInfo;
     /** Null when this was a sign-in rather than a link. */
     userId: string | null;
-    workspaceId: string | null;
+    /** The desk named at the start of a link; null for a sign-in. */
+    linkWorkspaceId: string | null;
     returnTo: string | null;
   }> {
     this.assertEnabled();
@@ -396,7 +403,7 @@ export class PmIdentityService {
       // Null here means the flow began at the login screen, with nobody signed
       // in — the caller resolves the user from the PM subject instead.
       userId: row.userId ?? null,
-      workspaceId: row.workspaceId,
+      linkWorkspaceId: row.linkWorkspaceId,
       returnTo: row.returnTo,
     };
   }
