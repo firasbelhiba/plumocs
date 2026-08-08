@@ -37,6 +37,29 @@ const GoogleMark = () => (
   </svg>
 );
 
+/**
+ * The Plumo blob, for the "Continue with Plumo" button.
+ *
+ * A federated button shows the PROVIDER's brand, the way the Google button
+ * carries Google's own four colours — so this is PM's blue, not Plumo CS's
+ * green. Green would read as "continue with the product you are already
+ * looking at", which is the opposite of what the button does.
+ *
+ * 17px to sit on Google's optical size rather than the 15px of the outline
+ * icons next to it: a filled shape reads larger than a stroked one at the same
+ * box, and matching the number would make this look bigger than the G.
+ */
+const PlumoMark = () => (
+  <svg width="17" height="17" viewBox="0 0 80 80" aria-hidden="true">
+    <path
+      d="M 40 4 C 60 2, 75 18, 73 38 C 81 48, 73 65, 56 66 C 51 76, 32 76, 23 68 C 5 71, -2 52, 8 40 C 0 22, 20 4, 40 4 Z"
+      fill="#2563EB"
+    />
+    <path d="M 22 34 Q 28 27, 34 34" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" />
+    <path d="M 46 34 Q 52 27, 58 34" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" />
+  </svg>
+);
+
 const ShieldIcon = () => (
   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 3l7.5 3v5.5c0 4.6-3.1 8.3-7.5 9.5-4.4-1.2-7.5-4.9-7.5-9.5V6z" />
@@ -167,7 +190,7 @@ export default function Login({ V }) {
                 Continue with Google
               </Federated>
               {V.pmSignInAvailable && (
-                <Federated provider="plumo" icon={<ShieldIcon />} onClick={V.signInWithPm}>
+                <Federated provider="plumo" icon={<PlumoMark />} onClick={V.signInWithPm}>
                   {V.pmSignInBusy ? 'Redirecting…' : 'Continue with Plumo'}
                 </Federated>
               )}
