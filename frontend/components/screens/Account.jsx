@@ -2,7 +2,9 @@
 
 import { Button, Input, Segment, Switch, UserAvatar } from '../common';
 
-const CARD = 'rounded-token bg-surface border border-[color:var(--border)] shadow-card p-5 flex flex-col gap-3.5';
+/* Flat and bordered at PM's `p-4` — PM's card carries no shadow 3 times in 4,
+   and `shadow-card` is kept for the things that actually float. */
+const CARD = 'rounded-token bg-surface border border-[color:var(--border)] p-4 flex flex-col gap-3.5';
 const CARD_TITLE = 'text-[14px] font-medium';
 /** The shared notification-preference row, verbatim. */
 const PREF_ROW =
@@ -10,7 +12,11 @@ const PREF_ROW =
 
 export default function Account({ V }) {
   return (
-    <div data-scroll className="flex-1 min-h-0 overflow-y-auto px-6 py-[22px] flex flex-col gap-4 max-w-[760px]">
+    // `max-w-[720px] mx-auto` is PM's settings-page width (7 pages use it, e.g.
+    // `settings/profile/page.tsx:368`); CS had 760px and never centred it. The
+    // responsive padding lands on PM's `p-8` from md up, which is exactly what
+    // PM's settings pane gives its pages (`settings/layout.tsx:343`).
+    <div data-scroll className="flex-1 min-h-0 overflow-y-auto w-full max-w-[720px] mx-auto p-4 md:p-8 flex flex-col gap-4">
       <div className="flex items-center gap-3.5">
         <span className="relative flex-none">
           <UserAvatar firstName={V.me.first} lastName={V.me.last} size="xl" />

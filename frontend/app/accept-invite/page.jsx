@@ -21,6 +21,7 @@ import React from 'react';
 import { invitations } from '@/lib/api/endpoints';
 import { setSession } from '@/lib/api/client';
 import { Button, Input } from '@/components/common';
+import { BlobHappy } from '@/components/brand';
 
 const WASH = {
   '--wash-lilac': '#A78BFA',
@@ -336,12 +337,8 @@ export default function AcceptInvitePage() {
 
         {(phase === 'confirm' || (phase === 'joining' && !invite?.needsPassword)) && (
           <div className="flex flex-col items-center gap-3.5 text-center">
-            <img
-              src="/assets/mascots/mascot-07-first-response.svg"
-              alt=""
-              className="w-[84px] h-auto block"
-              style={{ animation: 'cs-breathe 5.5s ease-in-out infinite' }}
-            />
+            {/* PM's mascot at PM's default size — see components/brand/Blobs.tsx. */}
+            <BlobHappy />
             <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">
               You&apos;ve been added to {desk} ✿
             </h1>

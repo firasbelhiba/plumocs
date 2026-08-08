@@ -44,7 +44,20 @@ export default function Settings({ V }) {
         <button onClick={V.setSettingsTab} data-v="email" data-on={String(V.tabEmail)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>email &amp; channels</button>
       </aside>
 
-      <div data-scroll className={sx('flex:1;min-width:0;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:16px')}>
+      {/* PM's settings pages cap their content at 720px and centre it (7 pages,
+          e.g. `settings/profile/page.tsx:368`); this pane was full-bleed, which
+          at 1920px stretched every form field the width of the screen. PM puts
+          the cap on the page inside a full-bleed scroll container; here the
+          pane is the scroll container, so the cap sits on it directly.
+
+          The padding is PM's too. This div is the direct analogue of PM's
+          settings content pane (`settings/layout.tsx:343`, `px-8 py-8`) — the
+          very pane item 37 said CS had nothing to inherit from, which is true
+          of Account but not of here. It is flat 32px in PM, with no breakpoint,
+          so it is flat 32px here. Left at 22/24 it would have been the one
+          720px settings surface in CS not sharing Account's padding, and the
+          two were identical before this batch. */}
+      <div data-scroll className={sx('flex:1;min-width:0;max-width:720px;margin-inline:auto;overflow-y:auto;padding:32px;display:flex;flex-direction:column;gap:16px')}>
         <Breadcrumb
           items={[{ label: 'Home' }, { label: 'Settings' }].concat(
             V.settingsTabLabel ? [{ label: V.settingsTabLabel }] : [],

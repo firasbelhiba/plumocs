@@ -18,6 +18,7 @@
 import React from 'react';
 import { auth } from '@/lib/api/endpoints';
 import { Button, Input } from '@/components/common';
+import { BlobHappy } from '@/components/brand';
 
 /* The login panel's background, verbatim — this is the same moment in the same
    product, and a different wash would read as a different site at exactly the
@@ -219,12 +220,8 @@ export default function ResetPasswordPage() {
 
         {phase === 'done' && (
           <div className="flex flex-col items-center gap-3.5 text-center">
-            <img
-              src="/assets/mascots/mascot-07-first-response.svg"
-              alt=""
-              className="w-[84px] h-auto block"
-              style={{ animation: 'cs-breathe 5.5s ease-in-out infinite' }}
-            />
+            {/* PM's mascot at PM's default size — see components/brand/Blobs.tsx. */}
+            <BlobHappy />
             <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">That&apos;s done ✿</h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[34ch] m-0">
               your new password is saved and every other session has been signed out. sign in whenever

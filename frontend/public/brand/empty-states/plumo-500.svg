@@ -1,0 +1,106 @@
+<!-- Ported from plumo PM (public/brand/empty-states) with the one palette
+     substitution the CS pillar is exempt on. PM draws these in the blue
+     triad, which would put the accent blue on a full-screen surface in a
+     green product, so each blue is mapped to its CS counterpart and
+     nothing else is changed:
+       1E3A8A (plumo night, ink and strokes) becomes 1F4A2E (cs forest)
+       EFF6FF (plumo mist, soft fill)        becomes EDF4EE (cs soft)
+       60A5FA (plumo sky)                    becomes 7CC098, which is
+              hsl(145 35% 62%) : the CS primary in dark, exactly where
+              PM binds its own dark primary to plumo sky.
+     The peach and butter accents are shared by both pillars and are
+     copied verbatim. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" shape-rendering="geometricPrecision">
+  <title>Plumo 500 — something is on fire (kindly)</title>
+  <defs>
+    <filter id="ss-500" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+      <feOffset dx="0" dy="2"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Big wobbling 500 in background -->
+  <g transform="translate(180 120)">
+    <g>
+      <animateTransform attributeName="transform" type="rotate"
+        values="-1.5; 1.5; -0.5; 1; -1.5"
+        keyTimes="0; 0.25; 0.5; 0.75; 1"
+        dur="2.8s" repeatCount="indefinite"/>
+      <text x="0" y="22" text-anchor="middle"
+            font-family="Inter, sans-serif" font-size="120" font-weight="500"
+            fill="#EDF4EE" stroke="#1F4A2E" stroke-width="2.5"
+            letter-spacing="-6">500</text>
+    </g>
+
+    <!-- chaotic floating bits — more than 404, faster -->
+    <circle cx="-130" cy="-40" r="3" fill="#FFD4B8">
+      <animate attributeName="cy" values="-40; -52; -40" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="135" cy="-50" r="2.5" fill="#FFE8A3">
+      <animate attributeName="cy" values="-50; -62; -50" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="-110" cy="50" r="2.5" fill="#1F4A2E" opacity="0.3">
+      <animate attributeName="cy" values="50; 60; 50" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="125" cy="62" r="2.5" fill="#FFD4B8">
+      <animate attributeName="cy" values="62; 72; 62" dur="2.6s" repeatCount="indefinite"/>
+    </circle>
+    <!-- broken squiggle -->
+    <path d="M -148 -10 q 4 -4 8 0 t 8 0" fill="none" stroke="#FFD4B8" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M 142 5 q 4 -4 8 0 t 8 0" fill="none" stroke="#7CC098" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Frazzled blob — bigger sweat, eyes wider, body shaking gently -->
+  <g filter="url(#ss-500)" transform="translate(140 100)">
+    <g>
+      <!-- nervous shake — faster than 404 -->
+      <animateTransform attributeName="transform" type="rotate"
+        values="-3; 3; -2; 2; -3"
+        keyTimes="0; 0.25; 0.5; 0.75; 1"
+        dur="1.4s" repeatCount="indefinite"
+        additive="sum"/>
+
+      <path d="M 40 4 C 60 2, 75 18, 73 38 C 81 48, 73 65, 56 66 C 51 76, 32 76, 23 68 C 5 71, -2 52, 8 40 C 0 22, 20 4, 40 4 Z"
+            fill="#FFD4B8" stroke="#1F4A2E" stroke-width="2.5" stroke-linejoin="round"/>
+
+      <!-- WIDE worried eyes — bigger circles than usual -->
+      <circle cx="28" cy="34" r="4" fill="#1F4A2E"/>
+      <circle cx="52" cy="34" r="4" fill="#1F4A2E"/>
+      <!-- tiny white highlights inside the eyes (panicked stare) -->
+      <circle cx="29" cy="33" r="1" fill="#FFD4B8"/>
+      <circle cx="53" cy="33" r="1" fill="#FFD4B8"/>
+
+      <!-- very flushed cheeks, pulsing fast -->
+      <ellipse cx="18" cy="48" rx="6.5" ry="3.5" fill="#FFAB85" opacity="0.7">
+        <animate attributeName="opacity" values="0.5; 0.9; 0.5" dur="1.2s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse cx="62" cy="48" rx="6.5" ry="3.5" fill="#FFAB85" opacity="0.7">
+        <animate attributeName="opacity" values="0.5; 0.9; 0.5" dur="1.2s" repeatCount="indefinite"/>
+      </ellipse>
+
+      <!-- TWO sweat drops — left and right -->
+      <path d="M 6 22 Q 4 27 6 30 Q 8 27 6 22 Z" fill="#7CC098" stroke="#1F4A2E" stroke-width="1" opacity="0">
+        <animate attributeName="opacity"
+          values="0; 1; 1; 0.4; 0"
+          keyTimes="0; 0.3; 0.7; 0.9; 1"
+          dur="2.2s" repeatCount="indefinite"/>
+        <animateTransform attributeName="transform" type="translate"
+          values="0 0; 0 3; 0 8"
+          keyTimes="0; 0.4; 1"
+          dur="2.2s" repeatCount="indefinite"/>
+      </path>
+      <path d="M 73 22 Q 71 27 73 30 Q 75 27 73 22 Z" fill="#7CC098" stroke="#1F4A2E" stroke-width="1" opacity="0">
+        <animate attributeName="opacity"
+          values="0; 1; 1; 0.4; 0"
+          keyTimes="0.1; 0.4; 0.7; 0.9; 1"
+          dur="2.2s" repeatCount="indefinite"/>
+        <animateTransform attributeName="transform" type="translate"
+          values="0 0; 0 3; 0 8"
+          keyTimes="0.1; 0.5; 1"
+          dur="2.2s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  </g>
+</svg>

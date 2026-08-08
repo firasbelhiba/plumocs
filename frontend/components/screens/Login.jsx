@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Button, CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, Input } from '../common';
+import { BlobHappy } from '../brand';
 
 /* ---- background ---------------------------------------------------------
    The same wide, low-contrast mesh the project-management sign-in uses,
@@ -306,12 +307,11 @@ export default function Login({ V }) {
 
         {V.isSent && (
           <div className="flex flex-col items-center gap-3.5 text-center">
-            <img
-              src="/assets/mascots/mascot-07-first-response.svg"
-              alt=""
-              className="w-[84px] h-auto block"
-              style={{ animation: 'cs-breathe 5.5s ease-in-out infinite' }}
-            />
+            {/* PM's mascot, from the `Blobs.tsx` CS already ships byte-identical
+                and imported nowhere. It fills with `var(--primary)`, so it is
+                green here and blue there with no forked asset. At PM's own
+                default size (80). */}
+            <BlobHappy />
             <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">It&apos;s on its way ✿</h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[34ch] m-0">
               check {V.loginEmail} whenever you&apos;re ready. if it hasn&apos;t landed in a few minutes,

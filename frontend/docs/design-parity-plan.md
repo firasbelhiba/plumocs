@@ -1575,9 +1575,14 @@ a lowercase UI. Deliberate, and item 43 sweeps them up with everything else.
 
 ### BATCH 7 — Layout rhythm, cards, tables
 
+**STATUS 2026-08-08:** items 37–41 all **DONE**. Item 41 was no longer blocked —
+Open Question F is answered — and applying that answer in full took it past the
+four call sites its blast radius names; see under it. Nothing was seen in a
+browser beyond the 404 route (no backend), so the in-app checks below are owed.
+
 ---
 
-#### 37. Add responsive page padding — **S**
+#### 37. Add responsive page padding — **S** ✅ DONE 2026-08-08
 
 **CS** — a single fixed value on all four page screens: `px-6 py-[22px]` — `Reports.jsx:28`,
 `Customers.jsx:5` (`PAGE`), `Account.jsx:12`.
@@ -1589,9 +1594,29 @@ a lowercase UI. Deliberate, and item 43 sweeps them up with everything else.
 **Note:** this is the first item that introduces Tailwind breakpoints into CS screen code,
 which currently has **zero** — see item 42.
 
+**DONE 2026-08-08.** `px-6 py-[22px]` is gone from all three constants; all four screens now
+carry PM's reports recipe `p-4 md:p-8` (`reports/page.tsx:313`). **`components/screens/` has
+its first Tailwind breakpoints** — `md:` ×3, where it had zero. Reports and Customers are a
+verbatim copy of that page, padding and width together (item 38).
+
+**Account is a reconciliation, and it is the one value here that is not a straight copy.**
+Its PM counterpart is a settings page, and PM's settings pages get their padding from the
+layout's content pane (`settings/layout.tsx:343`, `px-8 py-8`) — a flat, non-responsive `p-8`
+that CS has nowhere to inherit from, since CS has no settings layout. `p-4 md:p-8` resolves to
+exactly PM's `p-8` from `md` up and degrades below it, which is what this item asks for.
+
+**A fifth site, added on review: Settings' content pane.** This item's CS list has three
+constants, so the first pass changed three and left `Settings.jsx:52` on `padding:22px 24px`.
+That left CS with two 720px settings surfaces — Account and Settings — on **different**
+padding, where before this batch they matched exactly (`px-6 py-[22px]` and `22px 24px` are the
+same 24/22). It is also the one place the "nothing to inherit from" argument above does not
+hold: this div *is* PM's settings content pane (`settings/layout.tsx:343`), and PM pads it a
+flat `px-8 py-8` with no breakpoint. Copied literally: `padding:32px`. Account and Settings now
+agree at `md` and up, both on PM's number.
+
 ---
 
-#### 38. Add page content max-widths — **S**
+#### 38. Add page content max-widths — **S** ✅ DONE 2026-08-08
 
 **CS** — **zero** page-level `mx-auto` wrappers; every screen is full-bleed. The only `max-w`
 values sit on inner elements (`max-w-[520px]` search, `max-w-[42ch]` copy). `Account.jsx:12`
@@ -1604,9 +1629,21 @@ has `max-w-[760px]` but is **not centred**.
 **Blast radius:** 4 screens. **Risk:** none — but at 1920px this is very visible. Show him
 before pushing.
 
+**DONE 2026-08-08.** `max-w-[1400px] mx-auto` on Reports and on Customers' `PAGE` (which is
+both the list and the profile, so 3 screens for 2 constants); `max-w-[720px] mx-auto` on
+Account — it was 760px and **not centred** — and on Settings' content pane. CS had zero
+page-level `mx-auto` before this; it now has four.
+
+**One structural deviation, deliberate.** PM caps a plain `<div>` *inside* a full-bleed scroll
+container. In CS the page element *is* the scroll container (`data-scroll flex-1 min-h-0
+overflow-y-auto`), so the cap sits on it directly and the scrollbar rides the right edge of
+the capped column rather than the right edge of the viewport. Matching PM exactly would mean
+wrapping each screen's whole body in a new div — a ~150-line reindent per screen for a
+scrollbar's x-position. The content geometry is identical either way.
+
 ---
 
-#### 39. Move the tables onto the shared row utilities — **M**
+#### 39. Move the tables onto the shared row utilities — **M** ✅ DONE 2026-08-08
 
 **CS** `screens/Customers.jsx:7-13` (`THEAD` / `TROW`), `screens/Reports.jsx:6-7`,
 `screens/Queue.jsx:207, 270`.
@@ -1634,9 +1671,33 @@ times**. `tracking-[1.4px]` is nearly 3× PM's — the most visible of these.
 1080p — row count per page.
 **Depends on item 13** (retire `--cs-rowpy` / `--cs-fs` here).
 
+**DONE 2026-08-08.** Six definitions, not five — Reports had a second, inline row recipe for
+the per-agent table that the count missed; it is now a `TROW` constant alongside `THEAD`, and
+Queue's skeleton row (`h-[46px]`) went with the real rows. **`h-row` / `h-row-header` go from
+0 uses to 6.** Every row in the difference table is now PM's: `bg-surface-2` not `bg-bg`,
+`font-semibold`, `px-3` not `px-4`, `text-[13px]` not `13.5`, and **`tracking-wider` in place
+of `tracking-[1.4px]` — 0.55px against 1.4px**, measured in the browser, which was the most
+visible of the set. Queue's selected row gets `bg-[color:var(--primary-soft)]`; Customers and
+Reports have no selection to indicate, so PM's rule reaches the one table that does.
+
+`--cs-rowpy` is **deleted from `globals.css`**, declaration and both density overrides — item
+13 left it as the last piece of console-specific vertical rhythm and this was the item that
+was supposed to take it. `--cs-fs` survives, but only on `body`; no table reads it any more.
+Verified: `h-row` computes 44 / 37.39 / 50.59px across the three densities, `--cs-rowpy` is
+undefined.
+
+**One thing this hands us, flagged not fixed** — same shape as the `w-8` oval under item 14.
+PM's rows are single-line, so `h-row` as a fixed `height` is safe there. **CS's queue row is
+two-line** (subject over snippet). At the inherited `line-height: 1.65` that is 21.45 + 2 +
+20.63 = **44.08px inside a 44px box** — it fits to within a rounding error at `comfortable`
+and has room at `relaxed`, and at `compact` the snippet already collapses inline
+(`globals.css`, `[data-snip]`). Copying PM's utility is correct and that is what is committed,
+but PM's value encodes "one line of text" and CS's row is not that. **First thing to look at
+when the queue is finally seen in a browser.**
+
 ---
 
-#### 40. Drop `shadow-card` from the panel constant — **S**
+#### 40. Drop `shadow-card` from the panel constant — **S** ✅ DONE 2026-08-08
 
 **CS** `screens/Reports.jsx:5` and `screens/Customers.jsx:6` —
 `PANEL = 'rounded-token bg-surface border border-[color:var(--border)] shadow-card'`.
@@ -1652,9 +1713,18 @@ the minority case.
 **Blast radius:** 3 constants → every card and table panel in CS.
 **Risk:** none. **Check:** side-by-side with PM's projects list.
 
+**DONE 2026-08-08.** Four sites, not three — Customers' profile header card is a fourth,
+written out by hand rather than through `PANEL`. `shadow-card` is gone from all four and `p-5`
+went to PM's `p-4` in the three that carried padding (`Account`'s `CARD`, Reports' drill-down
+panel, the profile header). **Every card and table panel in CS is now flat and bordered.**
+
+`shadow-card` survives in exactly the places PM keeps it — things that float above the page:
+Header's search popover, Ticket's two menus and its composer, and Queue's hover quick-actions.
+That is the 25% minority the item describes, and it is now the only thing wearing it.
+
 ---
 
-#### 41. Fix the `EmptyState` illustration scale — **S**
+#### 41. Fix the `EmptyState` illustration scale — **S** ✅ DONE 2026-08-08
 
 **CS** never uses the `illustration` preset prop; it passes mascot SVGs through the raw `icon`
 prop at **84px** — `screens/Queue.jsx:236-256` (`/assets/mascots/mascot-05-waiting.svg`,
@@ -1669,6 +1739,60 @@ analogue for.
 **Blast radius:** 2 empty states in `Queue.jsx`, plus the mascots in `Login.jsx:315`,
 `EdgeScreens.jsx:14,36`, `Overlays.jsx:112`.
 **Blocked on Open Question F** — whether the mascots count as "the logo".
+
+**DONE 2026-08-08. Not blocked any more — F is answered, and this is the item that spends the
+answer.** CS's mascots are gone from the tree: `grep 'assets/mascots' components/ app/` returns
+nothing.
+
+**The four `/brand/empty-states/` assets are imported and re-tinted.** Per F's note, every one
+was checked for blue first, and all four are drawn in PM's blue triad. **The colour mapping —
+the only thing changed inside the files:**
+
+| PM | CS | why that value |
+|---|---|---|
+| `#1E3A8A` `--plumo-night` (ink, strokes, eyes) | `#1F4A2E` `--cs-forest` | the mapping `app/global-error.jsx` already used |
+| `#EFF6FF` `--plumo-mist` (soft fill) | `#EDF4EE` `--cs-soft` | CS binds `--primary-soft` here where PM binds `--plumo-mist` |
+| `#60A5FA` `--plumo-sky` | `#7CC098` = `hsl(145 35% 62%)` | CS's dark `--primary`, which is exactly where PM's dark `--primary` is `var(--plumo-sky)` |
+
+The peach and butter accents (`#FFD4B8`, `#FFAB85`, `#FFE8A3`) are shared between the pillars
+and are copied byte-for-byte. Each file carries the mapping as a header comment.
+
+**This also repaired a live break, in the same shape as item 2.** CS ships `EmptyState.tsx`
+byte-identical to PM's, and `BRAND_ILLUSTRATIONS` points at
+`/brand/empty-states/plumo-no-results.svg` and `plumo-no-permissions.svg` — **CS's `public/`
+had no `brand/` directory at all**, so `illustration="no-results"` would have rendered a broken
+image. Both presets now resolve.
+
+**Call sites.** Queue's two empty states drop the raw 84px `icon` for PM's presets —
+`illustration="error"` (the `state-critical` chip) and `illustration="no-results"` (the blob at
+280×187). `EdgeScreens`' in-shell 404 and Oops take `plumo-404.svg` / `plumo-500.svg` at 280px
+instead of a 96px mascot.
+
+**Three files past the named blast radius, deliberately:** `app/error.jsx`,
+`app/not-found.jsx`, `app/global-error.jsx`. Item 28 shipped CS mascots there *because* PM's
+404/500 were blue, and F's answer explicitly handed the re-tint to whoever picked up 41. They
+are the same two screens as `EdgeScreens`; leaving them would have left CS with two different
+404 illustrations.
+
+**The four decorative mascots have no PM call site to copy, so the source is PM's component,
+not a PM screen.** Login's "it's on its way", accept-invite's and reset-password's confirmations
+and the shortcuts drawer now render **`BlobHappy` from `components/brand/Blobs.tsx` — PM's own
+mascot, byte-identical in CS since before this plan and imported zero times.** It fills with
+`var(--primary)`, so it is green here and blue there off one file with no fork. Sizes are PM's
+default 80, except the drawer's, which sits inline beside a 12.5px caption at 40.
+`BlobCelebrating` reads better on a success screen, but it carries a `#60A5FA` confetti dot —
+the palette exemption forbids that outright, and re-tinting would fork a file that currently
+diffs clean against PM.
+
+`cs-breathe` is **deleted**: it was the idle on CS's mascots, PM's illustrations carry their own
+SMIL, and with the swap done it had no callers. `/public/assets/mascots/*` is now unreferenced;
+the files are left on disk for item 46's sweep.
+
+**One trap worth writing down.** The first draft of the provenance header spelled the tokens
+`--plumo-night` / `--cs-forest`. **XML comments may not contain `--`**, so all four SVGs became
+unparseable and every one of them silently failed to load — `complete: true`, `naturalWidth: 0`,
+no console error. Rewritten without double hyphens; all four now parse and load at 360×240,
+confirmed in Chrome, and the 404 route renders the green blob at its 360×240 box.
 
 ---
 
@@ -2058,6 +2182,11 @@ accent blue on a full-screen surface, which the palette exemption forbids outrig
 shipped CS's own mascots on the three new error routes, and **adopting PM's illustration family
 means re-tinting these two files to green first, not copying them.** Whoever picks up item 41
 should check every `/brand/empty-states/` asset the same way before importing it.
+**CLOSED 2026-08-08 by item 41.** All four assets were blue, all four are re-tinted (mapping
+table under item 41), and the three error routes now carry them. The decorative mascots — two
+success screens, an invite confirmation and the shortcuts drawer — have no PM call site to copy,
+so they render PM's `BlobHappy` component instead; it fills with `var(--primary)` and needs no
+fork. CS's own mascot files are unreferenced.
 
 **G. Is the copy voice in scope?**
 CS's lowercase-with-`✿` register is a deliberate, consistent authorial choice — 20 flower

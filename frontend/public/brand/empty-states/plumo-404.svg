@@ -1,0 +1,114 @@
+<!-- Ported from plumo PM (public/brand/empty-states) with the one palette
+     substitution the CS pillar is exempt on. PM draws these in the blue
+     triad, which would put the accent blue on a full-screen surface in a
+     green product, so each blue is mapped to its CS counterpart and
+     nothing else is changed:
+       1E3A8A (plumo night, ink and strokes) becomes 1F4A2E (cs forest)
+       EFF6FF (plumo mist, soft fill)        becomes EDF4EE (cs soft)
+       60A5FA (plumo sky)                    becomes 7CC098, which is
+              hsl(145 35% 62%) : the CS primary in dark, exactly where
+              PM binds its own dark primary to plumo sky.
+     The peach and butter accents are shared by both pillars and are
+     copied verbatim. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" shape-rendering="geometricPrecision">
+  <title>Plumo 404 — aïe aïe, the blob is sorry</title>
+
+  <defs>
+    <filter id="soft-shadow-404" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+      <feOffset dx="0" dy="2" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ============ BIG 404 (background, behind the blob) ============ -->
+  <!-- soft mist fill, navy outline, slightly tilted to feel "fallen" -->
+  <g transform="translate(180 120)">
+    <!-- the 404 itself, slightly wobbling like it's unsure -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate"
+        values="-1; 1.2; -0.6; 1; -1"
+        keyTimes="0; 0.25; 0.5; 0.75; 1"
+        dur="3.6s" repeatCount="indefinite"/>
+      <text x="0" y="22" text-anchor="middle"
+            font-family="Inter, sans-serif" font-size="120" font-weight="500"
+            fill="#EDF4EE" stroke="#1F4A2E" stroke-width="2.5"
+            letter-spacing="-6">404</text>
+    </g>
+
+    <!-- floating crumbs around the 404 — pieces that "fell off" -->
+    <circle cx="-130" cy="-50" r="3" fill="#FFD4B8" opacity="0.9">
+      <animate attributeName="cy" values="-50; -56; -50" dur="3.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.9; 0.5; 0.9" dur="3.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="135" cy="-58" r="2.5" fill="#FFE8A3" opacity="0.85">
+      <animate attributeName="cy" values="-58; -64; -58" dur="2.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.85; 0.4; 0.85" dur="2.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="-110" cy="55" r="2" fill="#1F4A2E" opacity="0.25">
+      <animate attributeName="cy" values="55; 62; 55" dur="3.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="125" cy="62" r="2.2" fill="#FFE8A3" opacity="0.7">
+      <animate attributeName="cy" values="62; 70; 62" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.7; 0.35; 0.7" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <!-- tiny squiggle line, like a bit of broken page -->
+    <path d="M -150 0 q 4 -3 8 0 t 8 0" fill="none" stroke="#FFD4B8" stroke-width="2" stroke-linecap="round" opacity="0.7">
+      <animate attributeName="opacity" values="0.7; 0.3; 0.7" dur="2.8s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 142 -10 q 4 -3 8 0 t 8 0" fill="none" stroke="#7CC098" stroke-width="2" stroke-linecap="round" opacity="0.6">
+      <animate attributeName="opacity" values="0.6; 0.25; 0.6" dur="3.4s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- ============ THE EMBARRASSED BLOB (sits in front of the 404) ============ -->
+  <g filter="url(#soft-shadow-404)" transform="translate(140 100)">
+    <!-- subtle nervous sway — left-right tilt like shifting weight -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate"
+        values="-2; 2; -2"
+        keyTimes="0; 0.5; 1"
+        dur="3.4s" repeatCount="indefinite"
+        additive="sum"/>
+
+      <!-- blob body in peach (warm "oops" color, sibling to "high priority") -->
+      <path d="M 40 4 C 60 2, 75 18, 73 38 C 81 48, 73 65, 56 66 C 51 76, 32 76, 23 68 C 5 71, -2 52, 8 40 C 0 22, 20 4, 40 4 Z"
+            fill="#FFD4B8" stroke="#1F4A2E" stroke-width="2.5" stroke-linejoin="round"/>
+
+      <!-- big sympathetic eyes — wider than usual, slightly droopy outer corners -->
+      <!-- left eye: an arc that curves down-and-up (like a worried "u" shape rotated) -->
+      <path d="M 21 36 Q 28 30, 35 36" fill="none" stroke="#1F4A2E" stroke-width="3.2" stroke-linecap="round"/>
+      <!-- right eye: same -->
+      <path d="M 45 36 Q 52 30, 59 36" fill="none" stroke="#1F4A2E" stroke-width="3.2" stroke-linecap="round"/>
+
+      <!-- BIG embarrassed cheek blush — bigger than the celebrating ones,
+           and they pulse softly to feel hot/flushed -->
+      <ellipse cx="18" cy="48" rx="6" ry="3.5" fill="#FFAB85" opacity="0.7">
+        <animate attributeName="opacity" values="0.5; 0.85; 0.5" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="rx" values="5.5; 6.5; 5.5" dur="2s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse cx="62" cy="48" rx="6" ry="3.5" fill="#FFAB85" opacity="0.7">
+        <animate attributeName="opacity" values="0.5; 0.85; 0.5" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="rx" values="5.5; 6.5; 5.5" dur="2s" repeatCount="indefinite"/>
+      </ellipse>
+
+      <!-- small sweat drop on the side of the head — the "yikes" gesture -->
+      <g>
+        <!-- drop appears, slides down a tiny bit, fades, repeats -->
+        <path d="M 73 22 Q 71 27 73 30 Q 75 27 73 22 Z"
+              fill="#7CC098" stroke="#1F4A2E" stroke-width="1" stroke-linejoin="round" opacity="0">
+          <animate attributeName="opacity"
+            values="0; 0; 1; 1; 0.6; 0"
+            keyTimes="0; 0.2; 0.4; 0.7; 0.9; 1"
+            dur="3.2s" repeatCount="indefinite"/>
+          <animateTransform attributeName="transform" type="translate"
+            values="0 0; 0 0; 0 2; 0 5; 0 8"
+            keyTimes="0; 0.2; 0.4; 0.7; 1"
+            dur="3.2s" repeatCount="indefinite"/>
+        </path>
+      </g>
+    </g>
+  </g>
+
+</svg>

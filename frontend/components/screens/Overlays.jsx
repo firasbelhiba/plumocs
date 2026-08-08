@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Drawer, Input, Kbd, Modal, Select, Textarea } from '../common';
+import { BlobHappy } from '../brand';
 
 const SHORTCUT_ROW = 'flex items-center gap-2.5 text-[13px] text-fg-2';
 const EYEBROW = 'text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
@@ -97,12 +98,9 @@ export default function Overlays({ V }) {
       <Drawer open={V.sheet} onClose={V.closeSheet} eyebrow="reference" title="keyboard, if you like keyboards">
         <div className="flex flex-col gap-5 p-4">
           <div className="flex items-center gap-3">
-            <img
-              src="/assets/mascots/mascot-02-ticket-in-hand.svg"
-              alt=""
-              className="w-10 h-auto block flex-none"
-              style={{ animation: 'cs-breathe 5.5s ease-in-out infinite' }}
-            />
+            {/* PM's mascot (`brand/Blobs.tsx`), sized to the row rather than to
+                its 80px default — this one sits inline beside a 12.5px caption. */}
+            <BlobHappy size={40} className="flex-none" />
             <span className="text-[12.5px] text-fg-3">the mouse works just as well ✿</span>
           </div>
 

@@ -25,7 +25,7 @@ export default function ErrorPage({ error, reset }) {
 
   return (
     <ErrorScreen
-      illustration="/assets/mascots/mascot-03-empathetic.svg"
+      illustration="/brand/empty-states/plumo-500.svg"
       badge="500"
       title="that didn't work, and it's on us"
       description={

@@ -2,9 +2,20 @@
 
 import { Button, Progress, StatCard, TonePill, UserAvatar } from '../common';
 
-const PANEL = 'rounded-token bg-surface border border-[color:var(--border)] shadow-card';
+/* PM's dominant card is flat and bordered — 64 shadowless instances against 21
+   with `shadow-card` — so the shadow is reserved for things that float
+   (menus, the queue's hover quick-actions). Padding comes from the caller;
+   PM's padded card is `p-4`. */
+const PANEL = 'rounded-token bg-surface border border-[color:var(--border)]';
+/* Table header and row geometry from PM's reference table
+   (`design-system/page.tsx:495,508`): the shared `h-row-header` / `h-row`
+   utilities rather than fixed padding, `bg-surface-2` rather than the page
+   background, semibold, and `tracking-wider` — CS's `tracking-[1.4px]` was
+   nearly 3× PM's 0.05em. */
 const THEAD =
-  'grid gap-3 px-4 py-2.5 border-b border-[color:var(--border)] bg-bg text-[11px] uppercase tracking-[1.4px] text-fg-3';
+  'grid gap-3 h-row-header px-3 border-b border-[color:var(--border)] bg-surface-2 items-center text-[11px] font-semibold uppercase tracking-wider text-fg-3';
+const TROW =
+  'grid gap-3 h-row px-3 border-b border-[color:var(--border)] last:border-b-0 items-center text-[13px] text-fg';
 const AGENT_COLS = 'minmax(200px,1fr) 100px 110px 120px';
 const EYEBROW = 'text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 
@@ -25,7 +36,11 @@ function BarRow({ label, n, pct }) {
 
 export default function Reports({ V }) {
   return (
-    <div data-scroll className="flex-1 min-h-0 overflow-y-auto px-6 py-[22px] flex flex-col gap-4">
+    // Page padding and width from PM's reports page (`reports/page.tsx:313`):
+    // `p-4 md:p-8 max-w-[1400px] mx-auto`. PM puts those on a plain div inside
+    // a full-bleed scroll container; here the scroll container is the page, so
+    // the cap sits on it directly and the scrollbar rides the 1400px column.
+    <div data-scroll className="flex-1 min-h-0 overflow-y-auto w-full max-w-[1400px] mx-auto p-4 md:p-8 flex flex-col gap-4">
       <div>
         <h1 className="text-[26px] font-semibold tracking-tight text-fg">reports</h1>
         <p className="text-[13px] text-fg-2 mt-1">
@@ -49,7 +64,7 @@ export default function Reports({ V }) {
       </div>
 
       {V.drillOpen && (
-        <div className={PANEL + ' p-5 flex flex-col gap-4 animate-fade-in'}>
+        <div className={PANEL + ' p-4 flex flex-col gap-4 animate-fade-in'}>
           <div className="flex items-start gap-3 flex-wrap">
             <div className="flex-1 min-w-[220px] flex flex-col gap-1">
               <span className={EYEBROW}>last 14 days</span>
@@ -159,7 +174,7 @@ export default function Reports({ V }) {
           return (
             <div
               key={a.id}
-              className="grid gap-3 px-4 py-2.5 border-b border-[color:var(--border)] last:border-b-0 items-center text-[13.5px]"
+              className={TROW}
               style={{ gridTemplateColumns: AGENT_COLS }}
             >
               <span className="flex items-center gap-2.5">

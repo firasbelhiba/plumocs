@@ -14,7 +14,7 @@ export default function NotFoundPage() {
 
   return (
     <ErrorScreen
-      illustration="/assets/mascots/mascot-05-waiting.svg"
+      illustration="/brand/empty-states/plumo-404.svg"
       badge="404"
       title="we can't find that one"
       description={

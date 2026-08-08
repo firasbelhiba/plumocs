@@ -207,8 +207,14 @@ export default function Queue({ V }) {
 
         {/* list */}
         <section className="flex-1 min-w-0 flex flex-col overflow-hidden relative">
+          {/* Header and rows now run on the shared `h-row-header` / `h-row`
+              utilities (PM `design-system/page.tsx:495,508`) instead of fixed
+              padding, so they scale with `--density` like every other control.
+              `bg-surface-2` not the page background, semibold, and PM's
+              `tracking-wider` (0.05em ≈ 0.55px) in place of `tracking-[1.4px]`,
+              which was nearly 3× as wide. */}
           <div
-            className="flex-none grid items-center px-4 py-2 border-b border-[color:var(--border)] bg-bg text-[11px] uppercase tracking-[1.4px] text-fg-3"
+            className="flex-none grid items-center h-row-header px-3 border-b border-[color:var(--border)] bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-fg-3"
             style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)' }}
           >
             <input type="checkbox" checked={V.allSelected} onChange={V.toggleAll} aria-label="select all conversations" className={CHECKBOX} style={CHECKBOX_STYLE} />
@@ -221,7 +227,7 @@ export default function Queue({ V }) {
             {V.loadingRows && V.skeletons.map((s) => (
               <div
                 key={s.id}
-                className="grid items-center px-4 h-[46px] border-b border-[color:var(--border)]"
+                className="grid items-center px-3 h-row border-b border-[color:var(--border)]"
                 style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)' }}
               >
                 <span />
@@ -236,9 +242,13 @@ export default function Queue({ V }) {
               </div>
             ))}
 
+            {/* Both of these hand-fed a mascot through the raw `icon` prop at
+                84px. `EmptyState` ships the presets PM uses — `error` is the
+                state-critical chip, `no-results` is the brand blob at 280×187 —
+                and CS was the only caller of the component not using them. */}
             {V.hasError && (
               <EmptyState
-                icon={<img src="/assets/mascots/mascot-05-waiting.svg" alt="" className="w-[84px] h-auto block" />}
+                illustration="error"
                 title="hmm, we couldn't load the inbox"
                 description="nothing is lost — every conversation is safe. we'll try again whenever you're ready."
                 action={{ label: 'try again', onClick: V.refresh }}
@@ -247,20 +257,18 @@ export default function Queue({ V }) {
 
             {V.isEmpty && (
               <EmptyState
-                icon={
-                  <img
-                    src="/assets/mascots/mascot-01-listening.svg"
-                    alt=""
-                    className="w-[84px] h-auto block"
-                    style={{ animation: 'cs-breathe 5.5s ease-in-out infinite' }}
-                  />
-                }
+                illustration="no-results"
                 title="nothing matches these filters ✿"
                 description="that's allowed to be a good thing. widen the net whenever you like. no rush."
                 action={{ label: 'clear filters', onClick: V.clearFilters }}
               />
             )}
 
+            {/* `h-row` + `text-[13px]` replace `--cs-rowpy` / `--cs-fs`: row height
+                now rides the same `--density` multiplier as every other control
+                rather than a second, steeper padding ramp. A selected row gets
+                PM's `--primary-soft` fill (`design-system/page.tsx:508`), which
+                CS did not indicate at all. */}
             {V.rows.map((row) => {
               const [aFirst, aLast] = splitName(row.assigneeName);
               return (
@@ -271,8 +279,11 @@ export default function Queue({ V }) {
                   onMouseEnter={V.onRowEnter}
                   onMouseLeave={V.onRowLeave}
                   data-id={row.id}
-                  className="relative grid items-center px-4 border-b border-[color:var(--border)] cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2"
-                  style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)', paddingTop: 'var(--cs-rowpy)', paddingBottom: 'var(--cs-rowpy)', fontSize: 'var(--cs-fs)' }}
+                  className={
+                    'relative grid items-center h-row px-3 border-b border-[color:var(--border)] text-[13px] text-fg cursor-pointer transition-colors duration-[var(--dur-instant)] ' +
+                    (row.selected ? 'bg-[color:var(--primary-soft)]' : 'hover:bg-surface-2')
+                  }
+                  style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)' }}
                 >
                   <span data-stop="1" onClick={V.stop} className="flex items-center">
                     <input type="checkbox" checked={row.selected} onChange={V.toggleSel} data-id={row.id} aria-label="select conversation" className={CHECKBOX} style={CHECKBOX_STYLE} />

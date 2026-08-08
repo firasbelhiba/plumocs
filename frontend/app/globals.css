@@ -122,7 +122,7 @@ p { margin: 0; }
   --cs-brand-soft:color-mix(in srgb, var(--cs-brand) 10%, var(--cs-surface));
   --cs-brand-ink:var(--cs-forest);
   --cs-navw:236px; --cs-railw:322px; --cs-filtw:216px;
-  --cs-rowpy:10px; --cs-r-sm:8px; --cs-r-md:12px; --cs-fs:13.5px; --cs-gap:12px; --cs-cardpad:16px;
+  --cs-r-sm:8px; --cs-r-md:12px; --cs-fs:13.5px; --cs-gap:12px; --cs-cardpad:16px;
   --cs-qcols:28px 100px 92px minmax(220px,1fr) 168px 32px 118px 88px 52px;
   --av-bg:var(--cs-soft); --av-fg:var(--plumo-night); --av-border:1px solid transparent;
   --tone-hue:var(--cs-muted); --tone-fg:var(--cs-muted); --tone-fg-dark:#CBD5E1;
@@ -208,12 +208,11 @@ p { margin: 0; }
   --density: 1.15;
 }
 
-/* Row padding is the one piece of console-specific vertical rhythm still on the
-   old namespace; it rides the same two density steps until item 39 moves the
-   tables onto `h-row`. Type size and radius deliberately do NOT re-scale — PM's
-   density switch touches vertical rhythm only. */
-:root[data-density='relaxed'] { --cs-rowpy:17px; }
-:root[data-density='compact'] { --cs-rowpy:4px; }
+/* `--cs-rowpy` is gone: the queue, customer and report tables now size their
+   rows with the shared `h-row` / `h-row-header` utilities, which ride the
+   `--density` multiplier above. Vertical rhythm therefore has one owner, not
+   two ramps of different steepness. Type size and radius deliberately do NOT
+   re-scale — PM's density switch touches vertical rhythm only. */
 
 .dark{
   --cs-canvas:#0B1710; --cs-surface:#12261A; --cs-soft:#1A3324; --cs-warm:#2A2416;
@@ -374,9 +373,9 @@ button,input,textarea,select{font-family:var(--plumo-font)}
    elements. `cs-in`/`[data-anim="in"]` is replaced by `.animate-dropdown`,
    `cs-shimmer`/`[data-anim="sk"]` had no call site at all, and
    `cs-spin`/`[data-anim="spin"]` went with the hand-rolled queue spinner.
-   `cs-breathe` stays: it is the mascot idle, which no item in this batch
-   touches. */
-@keyframes cs-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4px) scale(1.02)}}
+   `cs-breathe` has now gone the same way: it was the idle on CS's own mascots,
+   and PM's illustrations carry their own SMIL animation, so with the mascots
+   replaced the keyframe had no callers left. */
 @media (max-width:1400px){:root{--cs-qcols:28px 96px 88px minmax(200px,1fr) 152px 32px 84px 50px}[data-col="tags"]{display:none}}
 @media (max-width:1180px){:root{--cs-navw:64px;--cs-qcols:26px 92px minmax(180px,1fr) 140px 30px 82px 46px}[data-navlabel]{display:none !important}[data-col="prio"]{display:none}}
 @media (max-width:1080px){:root{--cs-filtw:0px}[data-filterrail]{display:none}}

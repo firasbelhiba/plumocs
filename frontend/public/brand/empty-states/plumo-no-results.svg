@@ -1,0 +1,60 @@
+<!-- Ported from plumo PM (public/brand/empty-states) with the one palette
+     substitution the CS pillar is exempt on. PM draws these in the blue
+     triad, which would put the accent blue on a full-screen surface in a
+     green product, so each blue is mapped to its CS counterpart and
+     nothing else is changed:
+       1E3A8A (plumo night, ink and strokes) becomes 1F4A2E (cs forest)
+       EFF6FF (plumo mist, soft fill)        becomes EDF4EE (cs soft)
+       60A5FA (plumo sky)                    becomes 7CC098, which is
+              hsl(145 35% 62%) : the CS primary in dark, exactly where
+              PM binds its own dark primary to plumo sky.
+     The peach and butter accents are shared by both pillars and are
+     copied verbatim. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" shape-rendering="geometricPrecision">
+  <title>Plumo no results — curious blob with magnifying glass</title>
+  <defs>
+    <filter id="ss-search" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+      <feOffset dx="0" dy="2"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- magnifying glass that floats next to the blob, slowly drifting -->
+  <g transform="translate(240 90)">
+    <g>
+      <animateTransform attributeName="transform" type="translate"
+        values="0 0; 4 -3; 0 0"
+        keyTimes="0; 0.5; 1"
+        dur="4s" repeatCount="indefinite"/>
+      <circle cx="30" cy="30" r="26" fill="#EDF4EE" stroke="#1F4A2E" stroke-width="2.5"/>
+      <path d="M 50 50 L 70 70" stroke="#1F4A2E" stroke-width="4" stroke-linecap="round"/>
+      <!-- one tiny dust mote inside, lonely -->
+      <circle cx="30" cy="30" r="1.5" fill="#1F4A2E" opacity="0.3">
+        <animate attributeName="opacity" values="0.3; 0.6; 0.3" dur="3s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+  </g>
+
+  <!-- The curious blob — eyes wide, looking up-right toward the glass -->
+  <g filter="url(#ss-search)" transform="translate(80 90)">
+    <g>
+      <!-- subtle head tilt right (toward the glass) -->
+      <animateTransform attributeName="transform" type="rotate"
+        values="-1; 2; -1"
+        keyTimes="0; 0.5; 1"
+        dur="4s" repeatCount="indefinite"
+        additive="sum"/>
+      <path d="M 40 4 C 60 2, 75 18, 73 38 C 81 48, 73 65, 56 66 C 51 76, 32 76, 23 68 C 5 71, -2 52, 8 40 C 0 22, 20 4, 40 4 Z"
+            fill="#7CC098" stroke="#1F4A2E" stroke-width="2.5" stroke-linejoin="round"/>
+      <!-- big curious round dot eyes, looking slightly to the right -->
+      <circle cx="30" cy="34" r="3.5" fill="#1F4A2E">
+        <animate attributeName="cx" values="30; 31.5; 30" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="54" cy="34" r="3.5" fill="#1F4A2E">
+        <animate attributeName="cx" values="54; 55.5; 54" dur="4s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+  </g>
+</svg>

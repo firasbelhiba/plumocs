@@ -63,10 +63,10 @@ export default function GlobalErrorPage({ error, reset }) {
 
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
             <img
-              src="/assets/mascots/mascot-03-empathetic.svg"
+              src="/brand/empty-states/plumo-500.svg"
               alt=""
-              width={180}
-              height={180}
+              width={280}
+              height={187}
               style={{ maxWidth: '100%', height: 'auto' }}
             />
           </div>

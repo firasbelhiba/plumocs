@@ -2,12 +2,24 @@
 
 import { Breadcrumb, Button, Input, StatCard, TonePill, UserAvatar } from '../common';
 
-const PAGE = 'flex-1 min-h-0 overflow-y-auto px-6 py-[22px] flex flex-col gap-4';
-const PANEL = 'rounded-token bg-surface border border-[color:var(--border)] shadow-card overflow-hidden';
+/* Page padding and width from PM's reports page (`reports/page.tsx:313`):
+   `p-4 md:p-8 max-w-[1400px] mx-auto`. PM puts those on a plain div inside a
+   full-bleed scroll container; here the scroll container is the page, so the
+   cap sits on it directly and the scrollbar rides the 1400px column. */
+const PAGE =
+  'flex-1 min-h-0 overflow-y-auto w-full max-w-[1400px] mx-auto p-4 md:p-8 flex flex-col gap-4';
+/* Flat and bordered, no `shadow-card` — PM's card is shadowless 3 times in 4,
+   and the shadow is kept for things that actually float. */
+const PANEL = 'rounded-token bg-surface border border-[color:var(--border)] overflow-hidden';
+/* Table header and row geometry from PM's reference table
+   (`design-system/page.tsx:495,508`): the shared `h-row-header` / `h-row`
+   utilities rather than fixed padding, `bg-surface-2` rather than the page
+   background, semibold, and `tracking-wider` — CS's `tracking-[1.4px]` was
+   nearly 3× PM's 0.05em. */
 const THEAD =
-  'grid gap-3 px-4 py-2.5 border-b border-[color:var(--border)] bg-bg text-[11px] uppercase tracking-[1.4px] text-fg-3';
+  'grid gap-3 h-row-header px-3 border-b border-[color:var(--border)] bg-surface-2 items-center text-[11px] font-semibold uppercase tracking-wider text-fg-3';
 const TROW =
-  'grid gap-3 px-4 py-3 border-b border-[color:var(--border)] last:border-b-0 items-center cursor-pointer text-[13.5px] ' +
+  'grid gap-3 h-row px-3 border-b border-[color:var(--border)] last:border-b-0 items-center cursor-pointer text-[13px] text-fg ' +
   'transition-colors duration-[var(--dur-instant)] hover:bg-surface-2';
 
 const LIST_COLS = 'minmax(180px,1.4fr) minmax(200px,1.6fr) minmax(140px,1fr) 84px 84px 110px';
@@ -90,7 +102,7 @@ export function CustomerProfile({ V }) {
         all customers
       </Button>
 
-      <div className="rounded-token bg-surface border border-[color:var(--border)] shadow-card p-5 flex items-start gap-4 flex-wrap">
+      <div className="rounded-token bg-surface border border-[color:var(--border)] p-4 flex items-start gap-4 flex-wrap">
         <UserAvatar firstName={first} lastName={last} size="xl" />
         <div className="flex-1 min-w-[200px] flex flex-col gap-1">
           <span className="text-[20px] font-medium tracking-[-.5px]">{V.cName}</span>
