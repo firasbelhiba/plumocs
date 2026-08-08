@@ -49,7 +49,7 @@ export default function Reports({ V }) {
       </div>
 
       {V.drillOpen && (
-        <div data-anim="in" className={PANEL + ' p-5 flex flex-col gap-4 animate-fade-in'}>
+        <div className={PANEL + ' p-5 flex flex-col gap-4 animate-fade-in'}>
           <div className="flex items-start gap-3 flex-wrap">
             <div className="flex-1 min-w-[220px] flex flex-col gap-1">
               <span className={EYEBROW}>last 14 days</span>

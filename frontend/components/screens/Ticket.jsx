@@ -1,12 +1,24 @@
 'use client';
 
-import { Button, Card, Input, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
+import { Button, Card, Dropdown, DropdownItem, Input, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
+import { buttonVariants } from '../common/Button';
 
 const ON_ROW_STYLE = { background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' };
-const MENU =
-  'absolute top-[calc(100%+7px)] p-1.5 z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in';
+
+/** `Dropdown` renders its own <button> around whatever it is given, so a trigger
+    must not be one itself — nesting buttons is invalid markup. PM's triggers are
+    spans for the same reason; borrowing the Button recipe keeps the geometry. */
+const TRIGGER_SM = buttonVariants({ variant: 'outline', size: 'sm' });
+const TRIGGER_ICON = buttonVariants({ variant: 'outline', size: 'icon' });
+
+/* The two searchable panels below stay hand-rolled — PM hand-rolls its
+   searchable popovers too (`AssigneePopover`) because the shared primitive has
+   no room for a query field. What they no longer keep is their own chrome: the
+   offset, shadow, z-layer, padding and entry animation are `Dropdown`'s. */
+const PANEL =
+  'absolute z-dropdown w-max p-1 rounded-token bg-surface border border-[color:var(--border)] shadow-card animate-dropdown';
 const MENU_ROW =
-  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
+  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-visible:bg-surface-2 focus-ring';
 const RAIL_CARD = 'rounded-token border border-[color:var(--border)] p-4 flex flex-col';
 const RAIL_LABEL = 'text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 const RAIL_KV = 'flex justify-between gap-2.5 text-[12.5px] text-fg-3';
@@ -107,45 +119,59 @@ export default function Ticket({ V }) {
         )}
 
         {/* status */}
-        <div className="relative flex-none">
-          <Button variant="outline" size="sm" onClick={V.openStatusMenu} rightIcon={<Caret />}>
-            <TonePill tone={V.tStatusTone} dot className="!bg-transparent !px-0">{V.tStatus}</TonePill>
-          </Button>
-          {V.statusOpen && (
-            <div data-anim="in" className={MENU + ' left-0 w-[180px]'}>
-              {V.statusOptions.map((o) => (
-                <button key={o.id} onClick={V.setStatus} data-v={o.id} data-on={String(o.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+        <div className="flex-none">
+          <Dropdown
+            align="left"
+            label="status"
+            trigger={
+              <span className={TRIGGER_SM}>
+                <TonePill tone={V.tStatusTone} dot className="!bg-transparent !px-0">{V.tStatus}</TonePill>
+                <Caret />
+              </span>
+            }
+          >
+            {V.statusOptions.map((o) => (
+              <DropdownItem key={o.id} onClick={() => V.setStatus(o.id)}>
+                <span className="flex items-center gap-2.5">
                   <i data-tone={o.tone} className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
-                  <span className="flex-1">{o.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
+                  {o.label}
+                </span>
+              </DropdownItem>
+            ))}
+          </Dropdown>
         </div>
 
         {/* priority */}
-        <div className="relative flex-none">
-          <Button variant="outline" size="sm" onClick={V.openPriorityMenu} rightIcon={<Caret />}>
-            <TonePill tone={V.tPrioTone} glyph={<span className="text-[11px]">{V.tPrioGlyph}</span>} className="!bg-transparent !px-0">
-              {V.tPrio}
-            </TonePill>
-          </Button>
-          {V.prioOpen && (
-            <div data-anim="in" className={MENU + ' left-0 w-[164px]'}>
-              {V.prioOptions.map((o) => (
-                <button key={o.id} onClick={V.setPriority} data-v={o.id} data-on={String(o.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+        <div className="flex-none">
+          <Dropdown
+            align="left"
+            label="priority"
+            trigger={
+              <span className={TRIGGER_SM}>
+                <TonePill tone={V.tPrioTone} glyph={<span className="text-[11px]">{V.tPrioGlyph}</span>} className="!bg-transparent !px-0">
+                  {V.tPrio}
+                </TonePill>
+                <Caret />
+              </span>
+            }
+          >
+            {V.prioOptions.map((o) => (
+              <DropdownItem key={o.id} onClick={() => V.setPriority(o.id)}>
+                <span className="flex items-center gap-2.5">
                   <span data-tone={o.tone} className="w-4 text-center text-[11px]" style={{ color: 'var(--tone-fg)' }}>{o.glyph}</span>
-                  <span className="flex-1">{o.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
+                  {o.label}
+                </span>
+              </DropdownItem>
+            ))}
+          </Dropdown>
         </div>
 
         {/* assignee */}
         <div className="relative flex-none">
           <button
             onClick={V.openAssigneeMenu}
+            aria-haspopup="menu"
+            aria-expanded={V.assigneeOpen}
             className="inline-flex items-center gap-2 pl-1.5 pr-3 h-btn-md rounded-full border border-[color:var(--border)] bg-surface text-fg text-[13px] whitespace-nowrap cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring"
           >
             <UserAvatar firstName={asgFirst} lastName={asgLast} size="sm" />
@@ -155,7 +181,7 @@ export default function Ticket({ V }) {
             <Caret />
           </button>
           {V.assigneeOpen && (
-            <div data-anim="in" className={MENU + ' right-0 w-[262px] !p-2'}>
+            <div role="menu" className={PANEL + ' top-full mt-2 right-0 w-[262px] !p-2'}>
               <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="find an agent…" aria-label="search agents" className="!rounded-full mb-1.5" />
               <Button size="sm" onClick={V.assignMe} className="w-full mb-1 justify-start" variant="outline"
                 style={{ background: 'var(--primary-soft)', color: 'var(--cs-brand-ink)' }}>
@@ -165,7 +191,7 @@ export default function Ticket({ V }) {
                 {V.agentList.map((a) => {
                   const [f, l] = splitName(a.name);
                   return (
-                    <button key={a.id} onClick={V.setAssignee} data-v={a.id} data-on={String(a.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+                    <button key={a.id} role="menuitem" onClick={V.setAssignee} data-v={a.id} data-on={String(a.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
                       <span className="relative flex-none">
                         <UserAvatar firstName={f} lastName={l} size="sm" />
                         <i data-tone={a.availTone} className="absolute -right-px -bottom-px w-2 h-2 rounded-full border-2 border-[color:var(--surface)]" style={{ background: 'var(--tone-hue)' }} />
@@ -176,7 +202,7 @@ export default function Ticket({ V }) {
                   );
                 })}
               </div>
-              <button onClick={V.unassign} className="w-full px-2.5 py-2 mt-1 border-none border-t border-[color:var(--border)] bg-transparent text-fg-3 text-[13px] text-left cursor-pointer hover:text-fg focus-ring">
+              <button onClick={V.unassign} role="menuitem" className="w-full px-2.5 py-2 mt-1 border-none border-t border-[color:var(--border)] bg-transparent text-fg-3 text-[13px] text-left cursor-pointer hover:text-fg focus-visible:bg-surface-2 focus-ring">
                 unassign
               </button>
             </div>
@@ -184,17 +210,18 @@ export default function Ticket({ V }) {
         </div>
 
         {/* team */}
-        <div className="relative flex-none">
-          <Button variant="outline" size="sm" onClick={V.openTeamMenu} rightIcon={<Caret />} className="text-fg-3">{V.tTeam}</Button>
-          {V.teamOpen && (
-            <div data-anim="in" className={MENU + ' right-0 w-[150px]'}>
-              {V.teamList.map((o) => (
-                <button key={o.id} onClick={V.setTeam} data-v={o.id} data-on={String(o.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="flex-none">
+          <Dropdown
+            align="right"
+            label="team"
+            trigger={<span className={TRIGGER_SM + ' text-fg-3'}>{V.tTeam}<Caret /></span>}
+          >
+            {V.teamList.map((o) => (
+              <DropdownItem key={o.id} onClick={() => V.setTeam(o.id)}>
+                {o.label}
+              </DropdownItem>
+            ))}
+          </Dropdown>
         </div>
 
         {/* AI on/off — only for conversations a chatbot opened */}
@@ -222,24 +249,28 @@ export default function Ticket({ V }) {
         )}
 
         {/* overflow */}
-        <div className="relative flex-none">
-          <Button variant="outline" size="icon" onClick={V.openOverflow} aria-label="more actions" className="flex-none">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="5.5" r=".7" /><circle cx="12" cy="12" r=".7" /><circle cx="12" cy="18.5" r=".7" />
-            </svg>
-          </Button>
-          {V.overflowOpen && (
-            <div data-anim="in" className={MENU + ' right-0 w-[190px]'}>
-              <button onClick={V.mergeTicket} className={MENU_ROW}>merge into another conversation</button>
-              <button onClick={V.openTagMenu} className={MENU_ROW}>add a tag</button>
-              <button onClick={V.copyLink} className={MENU_ROW}>copy link</button>
-              <div className="h-px bg-[color:var(--border)] mx-2 my-1.5" />
-              <button onClick={V.askSpam} className={MENU_ROW}>mark as spam</button>
-              <button onClick={V.askDelete} className={MENU_ROW + ' !text-[color:var(--danger)] hover:!bg-[color:var(--danger-soft)]'}>
-                delete this conversation
-              </button>
-            </div>
-          )}
+        <div className="flex-none">
+          <Dropdown
+            align="right"
+            label="more actions"
+            trigger={
+              <span className={TRIGGER_ICON}>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="5.5" r=".7" /><circle cx="12" cy="12" r=".7" /><circle cx="12" cy="18.5" r=".7" />
+                </svg>
+              </span>
+            }
+          >
+            {/* "add a tag" used to live here too and opened the same menu the
+                rail's `+ add` chip opens. `Dropdown` keeps its open state to
+                itself, so one menu can no longer reach into another; the rail
+                chip is the single entry point now. */}
+            <DropdownItem onClick={V.mergeTicket}>merge into another conversation</DropdownItem>
+            <DropdownItem onClick={V.copyLink}>copy link</DropdownItem>
+            <div className="h-px bg-[color:var(--border)] my-1" />
+            <DropdownItem onClick={V.askSpam}>mark as spam</DropdownItem>
+            <DropdownItem variant="danger" onClick={V.askDelete}>delete this conversation</DropdownItem>
+          </Dropdown>
         </div>
 
         <Button variant="outline" size="icon" onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className="flex-none">
@@ -274,7 +305,6 @@ export default function Ticket({ V }) {
         <div className="flex-1 min-w-0 flex flex-col bg-bg">
           {V.remote && (
             <div
-              data-anim="in"
               className="flex-none flex items-center gap-2.5 mx-[18px] mt-3 px-3.5 py-2.5 rounded-full text-[12.5px] animate-slide-up"
               style={{
                 background: 'var(--primary-soft)',
@@ -441,13 +471,13 @@ export default function Ticket({ V }) {
                 </Button>
                 {V.cannedOpen && (
                   <div
-                    data-anim="in"
+                    role="menu"
                     data-scroll
-                    className="absolute bottom-[calc(100%+8px)] left-0 w-[340px] max-h-[330px] overflow-y-auto p-2 z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in"
+                    className={PANEL + ' bottom-full mb-2 left-0 w-[340px] max-h-[330px] overflow-y-auto !p-2'}
                   >
                     <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="search responses…" aria-label="search canned responses" className="!rounded-full mb-1.5" />
                     {V.cannedFiltered.map((r) => (
-                      <button key={r.id} onClick={V.insertCanned} data-v={r.id} className="w-full flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm border-none bg-transparent text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring">
+                      <button key={r.id} role="menuitem" onClick={V.insertCanned} data-v={r.id} className="w-full flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm border-none bg-transparent text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-visible:bg-surface-2 focus-ring">
                         <span className="flex items-center gap-2 w-full">
                           <span className="flex-1 text-[13px] font-medium text-fg">{r.title}</span>
                           <span className="text-[11px] text-fg-3">{r.team}</span>
@@ -461,9 +491,12 @@ export default function Ticket({ V }) {
 
               <Button variant="outline" size="sm" leftIcon={<ClipIcon size={14} />}>attach</Button>
               <span className="flex-1" />
-              <Button variant="outline" size="sm" onClick={V.onSendPending} className="whitespace-nowrap">send &amp; set pending</Button>
-              <Button variant="outline" size="sm" onClick={V.onSendResolved} className="whitespace-nowrap">send &amp; resolve</Button>
-              <Button size="md" onClick={V.onSend} className="whitespace-nowrap">{V.sendLabel}</Button>
+              {/* `V.sending` has existed since the composer was written and
+                  nothing ever showed it. `loading` also disables, so a second
+                  click cannot post the same reply twice. */}
+              <Button variant="outline" size="sm" onClick={V.onSendPending} loading={V.sending} className="whitespace-nowrap">send &amp; set pending</Button>
+              <Button variant="outline" size="sm" onClick={V.onSendResolved} loading={V.sending} className="whitespace-nowrap">send &amp; resolve</Button>
+              <Button size="md" onClick={V.onSend} loading={V.sending} className="whitespace-nowrap">{V.sendLabel}</Button>
             </div>
           </div>
         </div>
@@ -552,23 +585,25 @@ export default function Ticket({ V }) {
                   </button>
                 </TonePill>
               ))}
-              <div className="relative">
-                <button
-                  onClick={V.openTagMenu}
-                  className="inline-flex items-center gap-1 px-3 h-[22px] rounded-full border border-dashed border-[color:var(--border)] bg-transparent text-fg-3 text-[12px] cursor-pointer transition-colors duration-[var(--dur-instant)] hover:text-[color:var(--primary)] hover:border-[color:var(--primary)]"
+              <div>
+                <Dropdown
+                  align="left"
+                  label="add a tag"
+                  trigger={
+                    <span className="inline-flex items-center gap-1 px-3 h-[22px] rounded-full border border-dashed border-[color:var(--border)] bg-transparent text-fg-3 text-[12px] transition-colors duration-[var(--dur-instant)] hover:text-[color:var(--primary)] hover:border-[color:var(--primary)]">
+                      + add
+                    </span>
+                  }
                 >
-                  + add
-                </button>
-                {V.tagOpen && (
-                  <div data-anim="in" className={MENU + ' left-0 w-[170px]'}>
-                    {V.tagAddOptions.map((o) => (
-                      <button key={o.id} onClick={V.addTag} data-v={o.id} className={MENU_ROW}>
+                  {V.tagAddOptions.map((o) => (
+                    <DropdownItem key={o.id} onClick={() => V.addTag(o.id)}>
+                      <span className="flex items-center gap-2.5">
                         <i data-tone={o.tone} className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
                         {o.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                      </span>
+                    </DropdownItem>
+                  ))}
+                </Dropdown>
               </div>
             </div>
           </div>

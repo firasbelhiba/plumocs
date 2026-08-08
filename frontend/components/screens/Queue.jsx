@@ -1,6 +1,14 @@
 'use client';
 
-import { Button, CHECKBOX, CHECKBOX_STYLE, EmptyState, Skeleton, TonePill, UserAvatar } from '../common';
+import {
+  Button, CHECKBOX, CHECKBOX_STYLE, Dropdown, DropdownItem, EmptyState, LoadingSpinner,
+  Skeleton, TonePill, UserAvatar,
+} from '../common';
+import { buttonVariants } from '../common/Button';
+
+/** `Dropdown` wraps its trigger in a <button>, so the trigger itself is a span
+    borrowing the Button recipe rather than a nested <Button>. */
+const TRIGGER_SM = buttonVariants({ variant: 'outline', size: 'sm' });
 
 /** Pill whose on/off colour comes from the console's [data-on] token pair. */
 const ON_PILL_STYLE = {
@@ -86,9 +94,8 @@ export default function Queue({ V }) {
         </div>
 
         <span className="flex items-center gap-1.5 text-[12px] text-fg-3 tabular-nums">
-          {V.loading && (
-            <i data-anim="spin" className="block w-[11px] h-[11px] rounded-full border-[1.5px] border-[color:var(--border)] border-t-[color:var(--primary)]" />
-          )}
+          {/* The shared spinner, not an 11px CSS ring at 1.1s: 16px SVG at 1s. */}
+          {V.loading && <LoadingSpinner size="sm" />}
           updated {V.refreshedRel}
         </span>
 
@@ -113,30 +120,25 @@ export default function Queue({ V }) {
           </svg>
         }>{V.densityLabel}</Button>
 
-        <div className="relative flex-none">
-          <Button variant="outline" size="sm" onClick={V.toggleSort} rightIcon={
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          }>
-            sort: <span className="text-fg">{V.sortLabel}</span>
-          </Button>
-          {V.sortOpen && (
-            <div data-anim="in" className="absolute top-[calc(100%+7px)] right-0 w-[186px] p-1.5 z-dropdown rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in">
-              {V.sortOptions.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={V.setSort}
-                  data-v={o.id}
-                  data-on={String(o.on)}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring"
-                  style={{ background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' }}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="flex-none">
+          <Dropdown
+            align="right"
+            label="sort order"
+            trigger={
+              <span className={TRIGGER_SM}>
+                sort: <span className="text-fg">{V.sortLabel}</span>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            }
+          >
+            {V.sortOptions.map((o) => (
+              <DropdownItem key={o.id} onClick={() => V.setSort(o.id)}>
+                {o.label}
+              </DropdownItem>
+            ))}
+          </Dropdown>
         </div>
       </div>
 
@@ -351,7 +353,6 @@ export default function Queue({ V }) {
 
           {V.hasSelection && (
             <div
-              data-anim="in"
               className="absolute left-1/2 -translate-x-1/2 bottom-[60px] z-fixed flex items-center gap-2 pl-4 pr-2.5 py-2 rounded-full shadow-modal whitespace-nowrap animate-slide-up"
               style={{ background: 'var(--plumo-night)', color: '#fff' }}
             >

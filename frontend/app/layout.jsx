@@ -1,5 +1,6 @@
 import './globals.css';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import RootLayoutClient from '@/components/layout/RootLayoutClient';
 
 export const metadata = {
   title: 'Plumo CS Console',
@@ -30,7 +31,9 @@ export default function RootLayout({ children }) {
     <html lang="en" data-cs-nav="on" data-cs-rail="on" data-cs-filters="on" suppressHydrationWarning>
       <body>
         <script id="cs-theme-boot" dangerouslySetInnerHTML={{ __html: THEME_BOOT_SNIPPET }} />
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <RootLayoutClient>{children}</RootLayoutClient>
+        </ThemeProvider>
       </body>
     </html>
   );

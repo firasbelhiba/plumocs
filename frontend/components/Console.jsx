@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import hotToast from 'react-hot-toast';
 import { adapter } from '@/lib/api/adapter';
 import { ThemeContext } from '@/contexts/ThemeContext';
 import * as api from '@/lib/api/endpoints';
@@ -15,6 +16,7 @@ import Account from './screens/Account';
 import Settings from './screens/Settings';
 import { NotFound, Oops } from './screens/EdgeScreens';
 import Overlays from './screens/Overlays';
+import { LogoLoader } from './common';
 import { sx } from './sx';
 
 /**
@@ -109,7 +111,7 @@ export default class Console extends React.Component {
     customers: [], customer: null, custQ: '',
     settingsTab: 'overview', menu: null, menuQ: '',
     q: '', results: null,
-    toasts: [], confirm: null, sheet: false, newT: false,
+    sheet: false, newT: false,
     newSubject: '', newCustomer: '', newPriority: 'normal', newBody: '', newError: null,
     notifs: [], secret: null,
     loginEmail: '', loginPw: '', loginError: false, pwShown: false, loginView: 'signin', drill: null,
@@ -297,10 +299,6 @@ export default class Console extends React.Component {
   replyRef = React.createRef();
   threadRef = React.createRef();
   mock = (e) => this.toast((e.currentTarget.dataset || {}).msg || 'noted ✿');
-  askMock = (e) => {
-    const d = e.currentTarget.dataset;
-    this.setState({ confirm: { title: d.title, body: d.body, ok: d.ok, tone: d.tone || 'warn', action: () => { this.setState({ confirm: null }); this.toast(d.msg || 'done ✿'); } } });
-  };
   keyBuf = '';
 
   async componentDidMount() {
@@ -483,11 +481,32 @@ export default class Console extends React.Component {
   cust(id) { return (this.api ? this.api.customers.find(c => c.id === id) : null) || { name: '—', org: '', av: 1 }; }
   orgName(id) { return this.api ? this.api.meta.orgName(id) : '—'; }
   agent(id) { return this.api ? this.api.agents.find(a => a.id === id) : null; }
+  /**
+   * The console's one toast seam, now backed by react-hot-toast.
+   *
+   * The library is configured once in `components/layout/RootLayoutClient.jsx`;
+   * all this does is translate the console's two tones into the two
+   * variants that configuration styles. `bad` was already rendered as the
+   * breach colour and `ok` as the met colour, so error/success is the same
+   * distinction with the library's icon and the theme's surface instead of a
+   * hardcoded navy pill.
+   */
   toast(text, tone) {
-    const id = 'ts' + Date.now() + Math.random();
-    this.setState(s => ({ toasts: [...s.toasts, { id, text, tone: tone || 'ok' }] }));
-    setTimeout(() => this.setState(s => ({ toasts: s.toasts.filter(t => t.id !== id) })), 3600);
+    if (tone === 'bad') hotToast.error(text);
+    else hotToast.success(text);
   }
+
+  /**
+   * Promise-based confirm, from the shared DialogProvider.
+   *
+   * `app/page.jsx` reads `useConfirm()` and passes it down — the console is a
+   * class component and already spends its one `contextType` on the theme.
+   * Resolving false without a provider is the safe default: the tests construct
+   * `new Console({})` and drive handlers directly, and a confirm nobody can
+   * answer must not proceed.
+   */
+  confirm = (options) =>
+    this.props && this.props.confirm ? this.props.confirm(options) : Promise.resolve(false);
   dirty() { return this.state.draft.trim().length > 0; }
 
   async loadQueue(opts) {
@@ -521,20 +540,22 @@ export default class Console extends React.Component {
   }
 
   go = (e) => { this.navTo(e.currentTarget.dataset.s); };
-  navTo(screen) {
+  async navTo(screen) {
     if (this.dirty() && this.state.screen === 'ticket') {
-      this.setState({
-        confirm: {
-          title: 'leave this reply behind?', body: "you've written something that hasn't been sent yet. it'll still be here if you stay.",
-          ok: 'leave anyway', tone: 'warn', action: () => { this.setState({ draft: '' }); this.reallyNav(screen); },
-        }
+      const ok = await this.confirm({
+        title: 'leave this reply behind?',
+        message: "you've written something that hasn't been sent yet. it'll still be here if you stay.",
+        confirmLabel: 'leave anyway',
+        cancelLabel: 'keep it as is',
+        danger: true,
       });
-      return;
+      if (!ok) return;
+      this.setState({ draft: '' });
     }
     this.reallyNav(screen);
   }
   reallyNav(screen) {
-    const patch = { screen, menu: null, confirm: null, sel: [] };
+    const patch = { screen, menu: null, sel: [] };
     if (screen === 'settings') patch.settingsTab = 'overview';
     if (screen === 'mine') { patch.screen = 'queue'; patch.view = 'my-open'; }
     else if (screen === 'queue' && this.state.view === 'my-open') patch.view = 'all-open';
@@ -605,8 +626,7 @@ export default class Console extends React.Component {
   };
 
   onView = (e) => { this.setState({ view: e.currentTarget.dataset.v, page: 0, sel: [] }, () => this.loadQueue({ noFail: true })); };
-  toggleSort = () => this.setState(s => ({ menu: s.menu === 'sort' ? null : 'sort' }));
-  setSort = (e) => { this.setState({ sort: e.currentTarget.dataset.v, menu: null }, () => this.loadQueue({ noFail: true })); };
+  setSort = (v) => { this.setState({ sort: v }, () => this.loadQueue({ noFail: true })); };
   cycleDensity = () => { if (this.context) this.context.setDensity(this.DENSITIES[(this.DENSITIES.indexOf(this.density()) + 1) % 3]); };
   toggleTheme = () => { if (this.context) this.context.toggleTheme(); };
   toggleNav = () => this.setState(s => ({ nav: !s.nav }), () => this.syncDoc());
@@ -667,19 +687,23 @@ export default class Console extends React.Component {
     ids.forEach(id => { const r = rows.find(x => x.id === id); if (r) this.api.patchTicket(id, { tags: Array.from(new Set([...r.tags, 'urgent'])) }); });
     this.toast(ids.length + ' flagged for a look ✿');
   };
-  bulkClose = () => {
+  bulkClose = async () => {
     const n = this.state.sel.length;
-    this.setState({
-      confirm: {
-        title: 'close ' + n + ' ' + (n === 1 ? 'conversation' : 'conversations') + '?',
-        body: "the people on the other end will hear it's wrapped up. they can reopen anytime — nothing is final here.",
-        ok: 'close them', tone: 'warn', action: () => this.bulk({ status: 'closed' }, n + ' closed quietly — reopen anytime'),
-      }
+    const ok = await this.confirm({
+      title: 'close ' + n + ' ' + (n === 1 ? 'conversation' : 'conversations') + '?',
+      message: "the people on the other end will hear it's wrapped up. they can reopen anytime — nothing is final here.",
+      confirmLabel: 'close them',
+      cancelLabel: 'keep it as is',
+      // No `danger` — PM reserves the red button for what cannot be undone
+      // (`users/page.tsx:426` remove vs `:454` reactivate). Closing is
+      // reversible, and the sentence above says so.
     });
+    if (!ok) return;
+    return this.bulk({ status: 'closed' }, n + ' closed quietly — reopen anytime');
   };
   async bulk(patch, label) {
     const ids = this.state.sel, prev = this.state.rows;
-    this.setState(s => ({ rows: s.rows.map(r => ids.includes(r.id) ? { ...r, ...patch, updatedAt: Date.now() } : r), sel: [], confirm: null }));
+    this.setState(s => ({ rows: s.rows.map(r => ids.includes(r.id) ? { ...r, ...patch, updatedAt: Date.now() } : r), sel: [] }));
     try {
       if (this.state.failMode) this.api.simulateNextFailure();
       await Promise.all(ids.map(id => this.api.patchTicket(id, patch)));
@@ -695,7 +719,7 @@ export default class Console extends React.Component {
       ticket: s.ticket && s.ticket.id === id
         ? { ...s.ticket, ...applied, sla: { ...s.ticket.sla, paused: patch.status ? (patch.status === 'pending' || patch.status === 'on-hold') : s.ticket.sla.paused } }
         : s.ticket,
-      menu: null, confirm: null,
+      menu: null,
     }));
     try {
       if (this.state.failMode) this.api.simulateNextFailure();
@@ -707,8 +731,14 @@ export default class Console extends React.Component {
       this.toast("hmm, that didn't save. your work is safe — we'll try again in a moment", 'bad');
     }
   }
-  setStatus = (e) => { const v = e.currentTarget.dataset.v; this.patch(this.state.ticket.id, { status: v }, 'status is now ' + v); };
-  setPriority = (e) => { const v = e.currentTarget.dataset.v; this.patch(this.state.ticket.id, { priority: v }, 'priority is now ' + v); };
+  /* The five setters below take a value, not an event. `Dropdown` owns its own
+     open state and hands `DropdownItem` a bare `onClick` with no element to
+     hang `data-v` on, so the id has to come through the argument — which is
+     also how PM calls them (`IssueSidebar.tsx:194`). The three that still read
+     `e.currentTarget.dataset` (`setAssignee`, `setAssigneeFilter`, the facet
+     toggles) are the panels that stayed hand-rolled. */
+  setStatus = (v) => { this.patch(this.state.ticket.id, { status: v }, 'status is now ' + v); };
+  setPriority = (v) => { this.patch(this.state.ticket.id, { priority: v }, 'priority is now ' + v); };
   setAssignee = (e) => {
     const v = e.currentTarget.dataset.v || null;
     const a = this.agent(v);
@@ -716,9 +746,9 @@ export default class Console extends React.Component {
   };
   unassign = () => this.patch(this.state.ticket.id, { assigneeId: null }, 'back to no one');
   assignMe = () => this.patch(this.state.ticket.id, { assigneeId: this.me().id }, 'assigned to you');
-  setTeam = (e) => { const v = e.currentTarget.dataset.v; this.patch(this.state.ticket.id, { teamId: v }, 'handed to another team'); };
-  addTag = (e) => {
-    const v = e.currentTarget.dataset.v, t = this.state.ticket;
+  setTeam = (v) => { this.patch(this.state.ticket.id, { teamId: v }, 'handed to another team'); };
+  addTag = (v) => {
+    const t = this.state.ticket;
     if (!t || t.tags.includes(v)) return;
     this.patch(t.id, { tags: [...t.tags, v] }, 'tagged ' + v);
   };
@@ -774,15 +804,14 @@ export default class Console extends React.Component {
   onSendResolved = () => this.send('resolved');
   reloadTicket = () => { const id = this.state.ticket.id; this.setState({ remote: false }); this.openTicket(id); };
 
+  /* `state.menu` now only drives the panels that `Dropdown` cannot hold: the
+     two with a search field in them (assignee, canned responses) and the two
+     that are not menus at all (notifications, search results). Everything else
+     — status, priority, team, tags, the ticket overflow, the queue sort and the
+     sidebar user card — moved to `Dropdown`, which keeps its own open state. */
   menuTo(name) { return (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState(s => ({ menu: s.menu === name ? null : name, menuQ: '' })); }; }
-  openStatusMenu = this.menuTo('status');
-  openPriorityMenu = this.menuTo('priority');
   openAssigneeMenu = this.menuTo('assignee');
-  openTeamMenu = this.menuTo('team');
-  openOverflow = this.menuTo('overflow');
   openCanned = this.menuTo('canned');
-  openTagMenu = this.menuTo('tag');
-  toggleUser = this.menuTo('user');
   toggleNotif = this.menuTo('notif');
   closeMenu = () => this.setState({ menu: null });
   onMenuQ = (e) => this.setState({ menuQ: e.target.value });
@@ -824,28 +853,35 @@ export default class Console extends React.Component {
       this.loadCounts(); this.openTicket(t.id);
     } catch (e) { this.toast("couldn't create that one — try again in a moment", 'bad'); }
   };
-  confirmOk = () => { const c = this.state.confirm; if (c && c.action) c.action(); else this.setState({ confirm: null }); };
-  confirmCancel = () => this.setState({ confirm: null });
-  askDelete = () => this.setState({
-    menu: null, confirm: {
-      title: 'delete this conversation?', body: "this one can't be undone — the whole thread goes with it. if you're unsure, closing it is gentler; closed conversations can always be reopened.",
-      ok: 'delete it', tone: 'danger',
-      action: () => {
-        const id = this.state.ticket?.id;
-        this.setState({ confirm: null });
-        if (!id) return;
-        this.api.deleteTicket(id)
-          .then(() => { this.toast('deleted'); this.reallyNav('queue'); this.loadCounts(); })
-          .catch((e) => this.toast(e?.status === 403 ? 'deleting needs an admin' : "that didn't work — try again in a moment", 'bad'));
-      },
-    }
-  });
-  askSpam = () => this.setState({
-    menu: null, confirm: {
-      title: 'mark as spam?', body: "we'll move it out of the queue and learn from it. you can pull it back from the spam view.",
-      ok: 'mark spam', tone: 'warn', action: () => { this.setState({ confirm: null }); this.toast('marked as spam'); this.reallyNav('queue'); },
-    }
-  });
+  askDelete = async () => {
+    this.setState({ menu: null });
+    const ok = await this.confirm({
+      title: 'delete this conversation?',
+      message: "this one can't be undone — the whole thread goes with it. if you're unsure, closing it is gentler; closed conversations can always be reopened.",
+      confirmLabel: 'delete it',
+      cancelLabel: 'keep it as is',
+      danger: true,
+    });
+    if (!ok) return;
+    const id = this.state.ticket?.id;
+    if (!id) return;
+    return this.api.deleteTicket(id)
+      .then(() => { this.toast('deleted'); this.reallyNav('queue'); this.loadCounts(); })
+      .catch((e) => this.toast(e?.status === 403 ? 'deleting needs an admin' : "that didn't work — try again in a moment", 'bad'));
+  };
+  askSpam = async () => {
+    this.setState({ menu: null });
+    const ok = await this.confirm({
+      title: 'mark as spam?',
+      message: "we'll move it out of the queue and learn from it. you can pull it back from the spam view.",
+      confirmLabel: 'mark spam',
+      cancelLabel: 'keep it as is',
+      danger: true,
+    });
+    if (!ok) return;
+    this.toast('marked as spam');
+    this.reallyNav('queue');
+  };
   copyLink = () => { this.setState({ menu: null }); this.toast('link copied to your clipboard'); };
   mergeTicket = () => { this.setState({ menu: null }); this.toast('the merge picker opens here in the real app'); };
   onKeyName = (e) => this.setState({ keyName: e.target.value });
@@ -965,25 +1001,23 @@ export default class Console extends React.Component {
     }
   };
 
-  revokeInvite = (e) => {
+  revokeInvite = async (e) => {
     const { id, email } = e.currentTarget.dataset;
-    this.setState({
-      confirm: {
-        title: 'revoke the invitation to ' + email + '?',
-        body: "their link stops working straight away. nothing else changes, and you can invite them again whenever you like.",
-        ok: 'revoke it', tone: 'warn',
-        action: async () => {
-          this.setState({ confirm: null });
-          try {
-            await this.api.revokeInvitation(id);
-            this.setState((s) => ({ invites: s.invites.filter((i) => i.id !== id) }));
-            this.toast('revoked — that link no longer opens anything');
-          } catch (err) {
-            this.toast(err?.message || "couldn't revoke that one — try again in a moment", 'bad');
-          }
-        },
-      },
+    const ok = await this.confirm({
+      title: 'revoke the invitation to ' + email + '?',
+      message: "their link stops working straight away. nothing else changes, and you can invite them again whenever you like.",
+      confirmLabel: 'revoke it',
+      cancelLabel: 'keep it as is',
+      danger: true,
     });
+    if (!ok) return;
+    try {
+      await this.api.revokeInvitation(id);
+      this.setState((s) => ({ invites: s.invites.filter((i) => i.id !== id) }));
+      this.toast('revoked — that link no longer opens anything');
+    } catch (err) {
+      this.toast(err?.message || "couldn't revoke that one — try again in a moment", 'bad');
+    }
   };
 
   /* ---- settings: real writes ---------------------------------------------
@@ -1081,25 +1115,23 @@ export default class Console extends React.Component {
    * instead of lingering. Removing them from the cached list afterwards is the
    * visible half — an admin has to be able to see that it took.
    */
-  askDeactivate = (e) => {
+  askDeactivate = async (e) => {
     const { id, name } = e.currentTarget.dataset;
-    this.setState({
-      confirm: {
-        title: 'deactivate ' + name + '?',
-        body: "they lose access to this desk straight away and are signed out. their replies stay on every ticket, and you can invite them back any time.",
-        ok: 'deactivate', tone: 'danger',
-        action: async () => {
-          this.setState({ confirm: null });
-          try {
-            await api.users.deactivate(id);
-            this.syncAgent(id, null);
-            this.toast(name + ' no longer has access to this desk');
-          } catch (err) {
-            this.toast(this.apiMessage(err, "couldn't deactivate them — nothing changed"), 'bad');
-          }
-        },
-      },
+    const ok = await this.confirm({
+      title: 'deactivate ' + name + '?',
+      message: "they lose access to this desk straight away and are signed out. their replies stay on every ticket, and you can invite them back any time.",
+      confirmLabel: 'deactivate',
+      cancelLabel: 'keep it as is',
+      danger: true,
     });
+    if (!ok) return;
+    try {
+      await api.users.deactivate(id);
+      this.syncAgent(id, null);
+      this.toast(name + ' no longer has access to this desk');
+    } catch (err) {
+      this.toast(this.apiMessage(err, "couldn't deactivate them — nothing changed"), 'bad');
+    }
   };
 
   /**
@@ -1542,7 +1574,7 @@ export default class Console extends React.Component {
     const typing = tag === 'input' || tag === 'textarea' || el.isContentEditable;
     if (e.key === 'Escape') {
       if (typing && el.blur) el.blur();
-      this.setState({ menu: null, sheet: false, newT: false, confirm: null, results: null });
+      this.setState({ menu: null, sheet: false, newT: false, results: null });
       return;
     }
     if (typing) return;
@@ -1746,14 +1778,18 @@ export default class Console extends React.Component {
     const maxCh = Math.max(1, ...rep.byChannel.map(c => c.n));
 
     return {
-      isLogin: !S.loggedIn, inApp: S.loggedIn,
+      // Until the bootstrap resolves we know neither who you are nor whether
+      // you are signed in, so neither branch below is safe to render. `booted`
+      // gates both; before this the console guessed "signed in" and drew the
+      // whole shell against empty data.
+      isBooting: !S.booted, isLogin: S.booted && !S.loggedIn, inApp: S.booted && S.loggedIn,
       loginEmail: S.loginEmail, loginPw: S.loginPw, loginError: S.loginError,
       pwType: S.pwShown ? 'text' : 'password', pwToggleLabel: S.pwShown ? 'hide' : 'show',
       onLoginEmail: this.onLoginEmail, onLoginPw: this.onLoginPw, togglePw: this.togglePw, signIn: this.signIn, forgot: this.forgot,
       onLoginKey: this.onLoginKey, keepSignedIn: S.keepSignedIn, toggleKeepSignedIn: this.toggleKeepSignedIn,
       federated: this.federated, requestAccess: this.requestAccess, serviceUp: S.serviceUp,
 
-      me: meView, go: this.go, signOut: this.signOut, toggleUser: this.toggleUser, userOpen: S.menu === 'user',
+      me: meView, go: this.go, signOut: this.signOut,
       canAdmin: S.role !== 'agent', toggleAvail: this.toggleAvail, openSheet: this.openSheet,
       themeAction: this.theme() === 'dark' ? 'switch to light' : 'switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
 
@@ -1780,8 +1816,8 @@ export default class Console extends React.Component {
       vAll: S.view === 'all-open', vUn: S.view === 'unassigned', vMy: S.view === 'my-open', vBot: S.view === 'bot-handled',
       vBr: S.view === 'breaching', vPd: S.view === 'pending', vRe: S.view === 'resolved',
       onView: this.onView, saveView: this.saveView,
-      sortLabel: (this.SORTS.find(x => x.id === S.sort) || {}).label, sortOpen: S.menu === 'sort',
-      toggleSort: this.toggleSort, setSort: this.setSort, sortOptions: this.SORTS.map(o => ({ id: o.id, label: o.label, on: o.id === S.sort })),
+      sortLabel: (this.SORTS.find(x => x.id === S.sort) || {}).label,
+      setSort: this.setSort, sortOptions: this.SORTS.map(o => ({ id: o.id, label: o.label, on: o.id === S.sort })),
       densityLabel: this.density(), cycleDensity: this.cycleDensity, toggleFilters: this.toggleFilters, refresh: this.refresh,
       refreshedRel: this.rel(S.refreshed), loading: S.load === 'loading',
 
@@ -1829,10 +1865,8 @@ export default class Console extends React.Component {
       botEnabled: t ? t.botEnabled !== false : true,
       toggleBot: this.toggleBot,
       subjEdit: S.subjEdit, subjDraft: S.subjDraft, editSubject: this.editSubject, onSubjDraft: this.onSubjDraft, saveSubject: this.saveSubject, onSubjKey: this.onSubjKey,
-      statusOpen: S.menu === 'status', prioOpen: S.menu === 'priority', assigneeOpen: S.menu === 'assignee',
-      teamOpen: S.menu === 'team', overflowOpen: S.menu === 'overflow', cannedOpen: S.menu === 'canned', tagOpen: S.menu === 'tag',
-      openStatusMenu: this.openStatusMenu, openPriorityMenu: this.openPriorityMenu, openAssigneeMenu: this.openAssigneeMenu,
-      openTeamMenu: this.openTeamMenu, openOverflow: this.openOverflow, openCanned: this.openCanned, openTagMenu: this.openTagMenu,
+      assigneeOpen: S.menu === 'assignee', cannedOpen: S.menu === 'canned',
+      openAssigneeMenu: this.openAssigneeMenu, openCanned: this.openCanned,
       statusOptions: Object.keys(this.STATUS).map(id => ({ id, label: this.STATUS[id].l, tone: this.STATUS[id].t, on: !!(t && t.status === id) })),
       prioOptions: Object.keys(this.PRIO).map(id => ({ id, label: this.PRIO[id].l, tone: this.PRIO[id].t, glyph: this.PRIO[id].g, on: !!(t && t.priority === id) })),
       agentList, menuQ: S.menuQ, onMenuQ: this.onMenuQ,
@@ -1841,7 +1875,7 @@ export default class Console extends React.Component {
       setTeam: this.setTeam, addTag: this.addTag, removeTag: this.removeTag,
       askDelete: this.askDelete, askSpam: this.askSpam, copyLink: this.copyLink, mergeTicket: this.mergeTicket,
 
-      subjNotEdit: !S.subjEdit, threadRef: this.threadRef, mock: this.mock, askMock: this.askMock,
+      subjNotEdit: !S.subjEdit, threadRef: this.threadRef, mock: this.mock,
       composerKey: S.mode === 'note' ? 'note' : 'reply',
       composerPlaceholder: S.mode === 'note' ? 'a note for your team — the customer never sees this…' : 'write something kind and useful…',
       cannedFiltered: (A ? A.cannedResponses : []).filter(r => !S.menuQ || (r.title + r.body).toLowerCase().includes(S.menuQ.toLowerCase())).map(r => ({ id: r.id, title: r.title, team: r.team, snippet: r.body.slice(0, 92) + '…' })),
@@ -1962,11 +1996,6 @@ export default class Console extends React.Component {
       inviteRows, hasInvites: inviteRows.length > 0,
       invitesLoading: S.invitesLoad === 'loading', invitesFailed: S.invitesLoad === 'error',
 
-      toasts: S.toasts.map(x => ({ id: x.id, text: x.text, tone: x.tone === 'bad' ? 'sla-breach' : 'sla-met' })),
-      hasConfirm: !!S.confirm,
-      confirmTitle: S.confirm ? S.confirm.title : '', confirmBody: S.confirm ? S.confirm.body : '',
-      confirmOkLabel: S.confirm ? S.confirm.ok : '', confirmDanger: !!(S.confirm && S.confirm.tone === 'danger'),
-      confirmOk: this.confirmOk, confirmCancel: this.confirmCancel,
       sheet: S.sheet, closeSheet: this.closeSheet,
       newT: S.newT, closeNewTicket: this.closeNewTicket, openNewTicket: this.openNewTicket,
       newSubject: S.newSubject, newBody: S.newBody, newCustomer: S.newCustomer, submitNew: this.submitNew,
@@ -1982,6 +2011,11 @@ export default class Console extends React.Component {
     const V = this.renderVals();
     return (
       <>
+        {V.isBooting && (
+          <div className={sx('height:100vh;display:flex;align-items:center;justify-content:center;background:var(--cs-canvas)')}>
+            <LogoLoader />
+          </div>
+        )}
         {V.isLogin && <Login V={V} />}
         {V.inApp && (
           <div className={sx('height:100vh;display:flex;flex-direction:column;background:var(--cs-canvas);color:var(--cs-text);overflow:hidden')}>

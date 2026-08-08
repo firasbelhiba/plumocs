@@ -1,46 +1,25 @@
 'use client';
 
-import { Button, Input, Kbd, Modal, Select, Textarea } from '../common';
+import { Button, Drawer, Input, Kbd, Modal, Select, Textarea } from '../common';
 
 const SHORTCUT_ROW = 'flex items-center gap-2.5 text-[13px] text-fg-2';
 const EYEBROW = 'text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 
+/**
+ * Two overlays used to live here and no longer do.
+ *
+ * The toast stack was a hand-rolled navy pill in the bottom-right corner with a
+ * magic `zIndex: 120`, no exit and no way to dismiss it. `react-hot-toast` is
+ * configured once in `components/layout/RootLayoutClient.jsx` and renders its
+ * own container, so there is nothing to place here.
+ *
+ * The confirm dialog was component state projected through `renderVals()`. It
+ * is now `contexts/DialogContext.tsx`, which mounts its own `<Modal>` from the
+ * provider — the console awaits a promise instead of stashing a callback.
+ */
 export default function Overlays({ V }) {
   return (
     <>
-      {/* toasts — the console's own affordance, kept as-is */}
-      <div className="fixed right-5 bottom-5 flex flex-col gap-2 items-end pointer-events-none" style={{ zIndex: 120 }}>
-        {V.toasts.map((t) => (
-          <div
-            key={t.id}
-            data-anim="in"
-            data-tone={t.tone}
-            className="flex items-center gap-2.5 px-4 py-3 rounded-full text-[13px] max-w-[420px] shadow-modal animate-slide-up"
-            style={{ background: 'var(--plumo-night)', color: 'var(--plumo-on-night)' }}
-          >
-            <i className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
-            <span>{t.text}</span>
-          </div>
-        ))}
-      </div>
-
-      <Modal
-        isOpen={V.hasConfirm}
-        onClose={V.confirmCancel}
-        title={V.confirmTitle}
-        size="sm"
-        footer={
-          <>
-            <Button variant="outline" size="md" onClick={V.confirmCancel}>keep it as is</Button>
-            <Button variant={V.confirmDanger ? 'danger' : 'primary'} size="md" onClick={V.confirmOk}>
-              {V.confirmOkLabel}
-            </Button>
-          </>
-        }
-      >
-        <p className="text-[13.5px] text-fg-2 leading-relaxed">{V.confirmBody}</p>
-      </Modal>
-
       <Modal
         isOpen={V.newT}
         onClose={V.closeNewTicket}
@@ -110,41 +89,42 @@ export default function Overlays({ V }) {
         </div>
       </Modal>
 
-      <Modal isOpen={V.sheet} onClose={V.closeSheet} size="lg">
-        <div className="flex flex-col gap-4">
+      {/* This was a `<Modal size="lg">` with no `title`, and `Modal.tsx:130`
+          reads a missing title as "no header" — so the sheet shipped with no
+          close button and no way out but Escape. It is a side panel of
+          reference material, which is what a drawer is for; the heading it was
+          drawing by hand is now the drawer's own eyebrow and title. */}
+      <Drawer open={V.sheet} onClose={V.closeSheet} eyebrow="reference" title="keyboard, if you like keyboards">
+        <div className="flex flex-col gap-5 p-4">
           <div className="flex items-center gap-3">
             <img
               src="/assets/mascots/mascot-02-ticket-in-hand.svg"
               alt=""
-              className="w-10 h-auto block"
+              className="w-10 h-auto block flex-none"
               style={{ animation: 'cs-breathe 5.5s ease-in-out infinite' }}
             />
-            <div className="flex-1 flex flex-col">
-              <span className="text-[17px] font-medium tracking-[-.4px]">keyboard, if you like keyboards</span>
-              <span className="text-[12.5px] text-fg-3">the mouse works just as well ✿</span>
-            </div>
+            <span className="text-[12.5px] text-fg-3">the mouse works just as well ✿</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-5">
-            <div className="flex flex-col gap-2.5">
-              <span className={EYEBROW}>the inbox</span>
-              <span className={SHORTCUT_ROW}><Kbd>j</Kbd><Kbd>k</Kbd>move through the list</span>
-              <span className={SHORTCUT_ROW}><Kbd>enter</Kbd>open the one you&apos;re on</span>
-              <span className={SHORTCUT_ROW}><Kbd>e</Kbd>change status</span>
-              <span className={SHORTCUT_ROW}><Kbd>a</Kbd>assign to me</span>
-              <span className={SHORTCUT_ROW}><Kbd>x</Kbd>pick a few at once</span>
-            </div>
-            <div className="flex flex-col gap-2.5">
-              <span className={EYEBROW}>everywhere</span>
-              <span className={SHORTCUT_ROW}><Kbd>r</Kbd>jump to the reply box</span>
-              <span className={SHORTCUT_ROW}><Kbd>n</Kbd>new conversation</span>
-              <span className={SHORTCUT_ROW}><Kbd>/</Kbd>search</span>
-              <span className={SHORTCUT_ROW}><Kbd>g then i</Kbd>go to inbox</span>
-              <span className={SHORTCUT_ROW}><Kbd>?</Kbd>this sheet</span>
-            </div>
+          <div className="flex flex-col gap-2.5">
+            <span className={EYEBROW}>the inbox</span>
+            <span className={SHORTCUT_ROW}><Kbd>j</Kbd><Kbd>k</Kbd>move through the list</span>
+            <span className={SHORTCUT_ROW}><Kbd>enter</Kbd>open the one you&apos;re on</span>
+            <span className={SHORTCUT_ROW}><Kbd>e</Kbd>change status</span>
+            <span className={SHORTCUT_ROW}><Kbd>a</Kbd>assign to me</span>
+            <span className={SHORTCUT_ROW}><Kbd>x</Kbd>pick a few at once</span>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <span className={EYEBROW}>everywhere</span>
+            <span className={SHORTCUT_ROW}><Kbd>r</Kbd>jump to the reply box</span>
+            <span className={SHORTCUT_ROW}><Kbd>n</Kbd>new conversation</span>
+            <span className={SHORTCUT_ROW}><Kbd>/</Kbd>search</span>
+            <span className={SHORTCUT_ROW}><Kbd>g then i</Kbd>go to inbox</span>
+            <span className={SHORTCUT_ROW}><Kbd>?</Kbd>this sheet</span>
           </div>
         </div>
-      </Modal>
+      </Drawer>
     </>
   );
 }

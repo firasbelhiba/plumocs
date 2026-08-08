@@ -23,6 +23,9 @@ export type { TextareaProps } from './Textarea';
 export { Modal } from './Modal';
 export type { ModalProps } from './Modal';
 
+export { Drawer } from './Drawer';
+export type { DrawerProps } from './Drawer';
+
 export { Badge } from './Badge';
 export type { BadgeProps } from './Badge';
 
@@ -30,6 +33,8 @@ export { Dropdown, DropdownItem } from './Dropdown';
 export type { DropdownProps } from './Dropdown';
 
 export { LoadingSpinner } from './LoadingSpinner';
+export { LogoLoader } from './LogoLoader';
+export type { LogoLoaderProps } from './LogoLoader';
 export { Skeleton, SkeletonCard, SkeletonTable } from './Skeleton';
 export { SettingsFormSkeleton } from './SettingsFormSkeleton';
 export { AdminListPageSkeleton } from './AdminListPageSkeleton';

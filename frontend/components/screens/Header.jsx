@@ -8,6 +8,16 @@ const RESULT_ROW =
 
 const GROUP_LABEL = 'px-2.5 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 
+/* Neither panel below is a menu of items, so neither becomes a `Dropdown`:
+   one is a search result list with its own input, the other has a header and
+   its own "mark all read" action. What they do take from the primitive is its
+   chrome — `mt-2` (8px, not 8 and 9), `z-dropdown` rather than `z-popover`,
+   `shadow-card` rather than `shadow-modal`, and `animate-dropdown` in place of
+   the retired `data-anim="in"` overshoot. Same recipe as `Ticket.jsx`'s two
+   hand-rolled panels. */
+const PANEL =
+  'absolute top-full mt-2 z-dropdown rounded-token bg-surface border border-[color:var(--border)] shadow-card animate-dropdown';
+
 /** The shared icon button, with `relative` so the unread pip can hang off it. */
 const IconButton = ({ label, onClick, children, className = '' }) => (
   <Button
@@ -50,9 +60,9 @@ export default function Header({ V }) {
 
         {V.searchOpen && (
           <div
-            data-anim="in"
+            role="listbox"
             data-scroll
-            className="absolute top-[calc(100%+8px)] left-0 right-0 p-2 max-h-[420px] overflow-auto z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in"
+            className={PANEL + ' left-0 right-0 p-2 max-h-[420px] overflow-auto'}
           >
             <div className={GROUP_LABEL}>conversations</div>
             {V.resTickets.map((r) => (
@@ -102,10 +112,7 @@ export default function Header({ V }) {
         </IconButton>
 
         {V.notifOpen && (
-          <div
-            data-anim="in"
-            className="absolute top-[calc(100%+9px)] right-0 w-[320px] overflow-hidden z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in"
-          >
+          <div className={PANEL + ' right-0 w-[320px] overflow-hidden'}>
             <div className="flex items-center justify-between px-3.5 py-3 border-b border-[color:var(--border)]">
               <span className="text-[13.5px] font-medium">what&apos;s new for you</span>
               <Button variant="link" size="sm" onClick={V.readAllNotif} className="text-[12.5px]">

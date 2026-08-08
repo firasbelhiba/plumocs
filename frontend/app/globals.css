@@ -364,13 +364,14 @@ body{
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
 }
 button,input,textarea,select{font-family:var(--plumo-font)}
-@keyframes cs-shimmer{0%{opacity:.55}50%{opacity:.95}100%{opacity:.55}}
-@keyframes cs-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes cs-spin{to{transform:rotate(360deg)}}
+/* The `[data-anim]` vocabulary is gone — it was a second motion system running
+   at 400ms on an overshoot curve alongside PM's 200ms decelerate, on the same
+   elements. `cs-in`/`[data-anim="in"]` is replaced by `.animate-dropdown`,
+   `cs-shimmer`/`[data-anim="sk"]` had no call site at all, and
+   `cs-spin`/`[data-anim="spin"]` went with the hand-rolled queue spinner.
+   `cs-breathe` stays: it is the mascot idle, which no item in this batch
+   touches. */
 @keyframes cs-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4px) scale(1.02)}}
-[data-anim="in"]{animation:cs-in var(--plumo-dur-moment) var(--plumo-ease) both}
-[data-anim="sk"]{animation:cs-shimmer 1.4s var(--plumo-ease) infinite}
-[data-anim="spin"]{animation:cs-spin 1.1s linear infinite}
 @media (max-width:1400px){:root{--cs-qcols:28px 96px 88px minmax(200px,1fr) 152px 32px 84px 50px}[data-col="tags"]{display:none}}
 @media (max-width:1180px){:root{--cs-navw:64px;--cs-qcols:26px 92px minmax(180px,1fr) 140px 30px 82px 46px}[data-navlabel]{display:none !important}[data-col="prio"]{display:none}}
 @media (max-width:1080px){:root{--cs-filtw:0px}[data-filterrail]{display:none}}
@@ -495,6 +496,43 @@ button,input,textarea,select{font-family:var(--plumo-font)}
 }
 .animate-fade-out {
   animation: fade-out var(--dur-fast) var(--ease-in) both;
+}
+
+/* Right-side drawer entry (PM globals.css:685-706). Lives outside the tailwind
+   `animation` map in PM too — the drawer is the only caller. */
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Boot loader progress — a simulated "creep" toward ~92% (never completes;
+   unmount signals done). Pure CSS so the bar animates from the very first
+   painted frame instead of sitting frozen until JavaScript hydrates.
+   transform: scaleX keeps it on the GPU (60fps). PM globals.css:290-310. */
+@keyframes plumo-loader-progress {
+  0% {
+    transform: scaleX(0.06);
+  }
+  55% {
+    transform: scaleX(0.64);
+  }
+  100% {
+    transform: scaleX(0.92);
+  }
+}
+
+.plumo-loader-progress-bar {
+  transform-origin: left center;
+  animation: plumo-loader-progress 3.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
 }
 
 /* Card removal — fade + shrink + slide, then the list reflows. */

@@ -39,7 +39,15 @@ function fakeAdapter() {
   };
 }
 
-/** A Console with synchronous state and a toast log instead of a timer. */
+/**
+ * A Console with synchronous state, a toast log instead of a timer, and a
+ * scripted answer to the confirm dialog.
+ *
+ * `this.confirm` is the seam onto `DialogProvider`: in the app it is a promise
+ * handed down as a prop from `app/page.jsx`, so here it records what was asked
+ * and resolves whatever `answerConfirm` last queued. That the question is asked
+ * at all, and that a "no" changes nothing, is the property these tests pin.
+ */
 function mount(patch = {}) {
   const c = new Console({});
   c.setState = (next, cb) => {
@@ -50,6 +58,10 @@ function mount(patch = {}) {
   c.forceUpdate = () => {};
   c.toasts = [];
   c.toast = (text, tone) => c.toasts.push({ text, tone: tone || 'ok' });
+  c.confirms = [];
+  c.answerConfirm = (yes) => { c.confirmAnswer = yes; };
+  c.confirmAnswer = true;
+  c.confirm = (options) => { c.confirms.push(options); return Promise.resolve(c.confirmAnswer); };
   c.api = fakeAdapter();
   c.state = { ...c.state, role: 'admin', ...patch };
   return c;
@@ -64,11 +76,13 @@ describe('deactivating somebody', () => {
     const c = mount();
     api.users.deactivate.mockResolvedValue({ id: THEM, isMember: false });
 
-    c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
-    expect(c.state.confirm.title).toBe('deactivate Rui Santos?');
-    expect(api.users.deactivate).not.toHaveBeenCalled(); // nothing happens on the dialog alone
+    c.answerConfirm(false);
+    await c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
+    expect(c.confirms[0]).toMatchObject({ title: 'deactivate Rui Santos?', danger: true });
+    expect(api.users.deactivate).not.toHaveBeenCalled(); // declining changes nothing
 
-    await c.state.confirm.action();
+    c.answerConfirm(true);
+    await c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
 
     expect(api.users.deactivate).toHaveBeenCalledWith(THEM);
     expect(c.api.agents.map((a) => a.id)).toEqual([ME]);
@@ -80,8 +94,7 @@ describe('deactivating somebody', () => {
     const c = mount();
     api.users.deactivate.mockRejectedValue(err(403, 'Insufficient role'));
 
-    c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
-    await c.state.confirm.action();
+    await c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
 
     expect(c.toasts).toEqual([{ text: 'that one needs an admin — ask one of yours', tone: 'bad' }]);
     expect(c.api.agents.map((a) => a.id)).toContain(THEM);
@@ -91,8 +104,7 @@ describe('deactivating somebody', () => {
     const c = mount();
     api.users.deactivate.mockRejectedValue(err(0, "can't reach the server"));
 
-    c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
-    await c.state.confirm.action();
+    await c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
 
     expect(c.toasts[0].tone).toBe('bad');
     expect(c.toasts[0].text).toMatch(/nothing was saved/);

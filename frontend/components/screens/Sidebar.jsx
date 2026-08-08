@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Badge, UserAvatar } from '../common';
+import { Badge, Dropdown, DropdownItem, UserAvatar } from '../common';
 
 /** Nav row — active state comes from the console's [data-on] token pair. */
 const NAV_ROW =
@@ -75,62 +75,71 @@ export default function Sidebar({ V }) {
       <div className="mt-auto flex flex-col gap-0.5">
         <div className="h-px bg-[color:var(--border)] mx-0.5 my-2.5" />
 
-        <div className="relative">
-          <button
-            onClick={V.toggleUser}
-            className="w-full flex items-center gap-2.5 p-[9px] rounded-token border border-[color:var(--border)] bg-surface text-left text-fg cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring"
-          >
-            <span className="relative flex-none">
-              <UserAvatar firstName={V.me.first} lastName={V.me.last} size="md" />
-              <i
-                data-tone={V.me.availTone}
-                className="absolute -right-px -bottom-px w-[9px] h-[9px] rounded-full border-2 border-[color:var(--surface)]"
-                style={{ background: 'var(--tone-hue)' }}
-              />
-            </span>
-            <span data-navlabel className="flex-1 min-w-0">
-              <span className="flex flex-col min-w-0">
-                <span className="text-[13px] font-medium truncate">{V.me.name}</span>
-                <span className="text-[11.5px] text-fg-3">{V.me.role} · {V.me.avail}</span>
+        {/* The user card sits at the foot of the rail, so this is the one menu
+            that has to open upward — `bottom-full mb-2` in place of the
+            primitive's `mt-2`. Everything else is `Dropdown`'s. */}
+        <div className="[&_[role=menu]]:bottom-full [&_[role=menu]]:mb-2 [&_[role=menu]]:mt-0 [&>div>button]:w-full">
+          <Dropdown
+            align="left"
+            label="your account"
+            trigger={
+              <span className="w-full flex items-center gap-2.5 p-[9px] rounded-token border border-[color:var(--border)] bg-surface text-left text-fg transition-colors duration-[var(--dur-instant)] hover:bg-surface-2">
+                <span className="relative flex-none">
+                  <UserAvatar firstName={V.me.first} lastName={V.me.last} size="md" />
+                  <i
+                    data-tone={V.me.availTone}
+                    className="absolute -right-px -bottom-px w-[9px] h-[9px] rounded-full border-2 border-[color:var(--surface)]"
+                    style={{ background: 'var(--tone-hue)' }}
+                  />
+                </span>
+                <span data-navlabel className="flex-1 min-w-0">
+                  <span className="flex flex-col min-w-0">
+                    <span className="text-[13px] font-medium truncate">{V.me.name}</span>
+                    <span className="text-[11.5px] text-fg-3">{V.me.role} · {V.me.avail}</span>
+                  </span>
+                </span>
               </span>
-            </span>
-          </button>
-
-          {V.userOpen && (
-            <div
-              data-anim="in"
-              className="absolute bottom-[calc(100%+8px)] left-0 w-[246px] p-1.5 z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in"
-            >
-              <button onClick={V.toggleAvail} className={MENU_ITEM}>
+            }
+          >
+            <DropdownItem onClick={V.toggleAvail}>
+              <span className={MENU_ITEM}>
                 <i data-tone={V.me.availTone} className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
                 <span className="flex-1">{V.me.availAction}</span>
-              </button>
-              <button onClick={V.openAccount} className={MENU_ITEM}>
+              </span>
+            </DropdownItem>
+            <DropdownItem onClick={V.openAccount}>
+              <span className={MENU_ITEM}>
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="flex-none text-fg-3">
                   <path d="M19 20v-1.6a3.4 3.4 0 00-3.4-3.4H8.4A3.4 3.4 0 005 18.4V20" />
                   <circle cx="12" cy="8" r="3.4" />
                 </svg>
                 <span className="flex-1">your account</span>
-              </button>
-              <button onClick={V.toggleTheme} className={MENU_ITEM}>
+              </span>
+            </DropdownItem>
+            <DropdownItem onClick={V.toggleTheme}>
+              <span className={MENU_ITEM}>
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="flex-none text-fg-3">
                   <path d="M20 13.5A8 8 0 1110.5 4a6.5 6.5 0 009.5 9.5z" />
                 </svg>
                 <span className="flex-1">{V.themeAction}</span>
-              </button>
-              <button onClick={V.openSheet} className={MENU_ITEM}>
+              </span>
+            </DropdownItem>
+            <DropdownItem onClick={V.openSheet}>
+              <span className={MENU_ITEM}>
                 <span className="w-[15px] text-center text-fg-3">?</span>
                 <span className="flex-1">keyboard shortcuts</span>
-              </button>
-              <div className="h-px bg-[color:var(--border)] mx-2 my-1.5" />
-              <button onClick={V.signOut} className={MENU_ITEM}>
+              </span>
+            </DropdownItem>
+            <div className="h-px bg-[color:var(--border)] my-1" />
+            <DropdownItem onClick={V.signOut}>
+              <span className={MENU_ITEM}>
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="flex-none text-fg-3">
                   <path d="M15 12H4m3-4l-3 4 3 4M13 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5" />
                 </svg>
                 <span className="flex-1">sign out</span>
-              </button>
-            </div>
-          )}
+              </span>
+            </DropdownItem>
+          </Dropdown>
         </div>
 
       </div>

@@ -186,8 +186,11 @@ export default function Settings({ V }) {
               footer={
                 <>
                   <Button variant="outline" size="md" onClick={V.closeInvite}>not now</Button>
-                  <Button size="md" onClick={V.submitInvite} disabled={V.inviteBusy}>
-                    {V.inviteBusy ? 'sending…' : 'send the invitation'}
+                  {/* PM keeps the label still and puts the progress in the
+                      button's own spinner (`EditProjectMemberTagModal.tsx:154`)
+                      rather than swapping the words out under the cursor. */}
+                  <Button size="md" onClick={V.submitInvite} loading={V.inviteBusy}>
+                    send the invitation
                   </Button>
                 </>
               }
@@ -464,7 +467,7 @@ export default function Settings({ V }) {
               </div>
             </div>
             {V.hasSecret && (
-              <div data-anim="in" data-tone="st-pending" className={sx('display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--cs-r-md);background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));border:1px solid color-mix(in srgb, var(--tone-hue) 30%, transparent);flex-wrap:wrap')}>
+              <div data-tone="st-pending" className={'animate-fade-in ' + sx('display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--cs-r-md);background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));border:1px solid color-mix(in srgb, var(--tone-hue) 30%, transparent);flex-wrap:wrap')}>
                 <div className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px')}>
                   <span className={sx("font-size:12.5px;color:var(--tone-fg);font-weight:500")}>copy this now — we won't show it again</span>
                   <span className={sx('font-family:var(--plumo-font-mono);font-size:13px;color:var(--cs-text);word-break:break-all')}>{V.secret}</span>
@@ -577,8 +580,8 @@ export default function Settings({ V }) {
           footer={
             <>
               <Button variant="outline" size="md" onClick={V.closeEditor}>not now</Button>
-              <Button size="md" onClick={V.submitEditor} disabled={V.editorBusy}>
-                {V.editorBusy ? 'saving…' : V.editorOk}
+              <Button size="md" onClick={V.submitEditor} loading={V.editorBusy}>
+                {V.editorOk}
               </Button>
             </>
           }
