@@ -5,6 +5,7 @@ import {
   Skeleton, TonePill, UserAvatar,
 } from '../common';
 import { buttonVariants } from '../common/Button';
+import { AgentGlyph, SnoozeGlyph } from './glyphs';
 
 /** `Dropdown` wraps its trigger in a <button>, so the trigger itself is a span
     borrowing the Button recipe rather than a nested <Button>. */
@@ -61,7 +62,7 @@ export default function Queue({ V }) {
             title="save this filter set as a view"
             className="flex-none"
           >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 5v14M5 12h14" />
             </svg>
           </Button>
@@ -71,7 +72,7 @@ export default function Queue({ V }) {
       {/* toolbar */}
       <div className="flex-none flex items-center gap-2.5 px-4 py-2.5 border-b border-[color:var(--border)]">
         <Button variant="outline" size="sm" onClick={V.toggleFilters} leftIcon={
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 6h16M7 12h10M10 18h4" />
           </svg>
         }>filters</Button>
@@ -107,7 +108,7 @@ export default function Queue({ V }) {
           title="refresh"
           className="flex-none"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6" />
           </svg>
         </Button>
@@ -115,7 +116,7 @@ export default function Queue({ V }) {
         <div className="w-px h-5 bg-[color:var(--border)]" />
 
         <Button variant="outline" size="sm" onClick={V.cycleDensity} title="row density" className="flex-none" leftIcon={
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
         }>{V.densityLabel}</Button>
@@ -127,7 +128,7 @@ export default function Queue({ V }) {
             trigger={
               <span className={TRIGGER_SM}>
                 sort: <span className="text-fg">{V.sortLabel}</span>
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 9l6 6 6-6" />
                 </svg>
               </span>
@@ -327,13 +328,13 @@ export default function Queue({ V }) {
                     style={{ opacity: 'var(--q-op)', pointerEvents: 'var(--q-pe)' }}
                   >
                     <Button variant="ghost" size="icon" onClick={V.quickAssign} data-id={row.id} title="i'll take this" aria-label="i'll take this">
-                      <img src="/assets/icons/icon-agent.svg" alt="" className="w-[15px] h-[15px] block" />
+                      <AgentGlyph className="w-[15px] h-[15px]" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={V.quickStatus} data-id={row.id} title="wait on them" aria-label="wait on them">
-                      <img src="/assets/icons/icon-snooze.svg" alt="" className="w-[15px] h-[15px] block" />
+                      <SnoozeGlyph className="w-[15px] h-[15px]" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={V.quickOpen} data-id={row.id} title="open conversation" aria-label="open conversation">
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 5h5v5M19 5l-7 7M18 14v4a1.8 1.8 0 01-1.8 1.8H6.8A1.8 1.8 0 015 18V8.8A1.8 1.8 0 016.8 7h4" />
                       </svg>
                     </Button>

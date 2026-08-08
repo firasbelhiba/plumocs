@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Input, StatCard, TonePill, UserAvatar } from '../common';
+import { Breadcrumb, Button, Input, StatCard, TonePill, UserAvatar } from '../common';
 
 const PAGE = 'flex-1 min-h-0 overflow-y-auto px-6 py-[22px] flex flex-col gap-4';
 const PANEL = 'rounded-token bg-surface border border-[color:var(--border)] shadow-card overflow-hidden';
@@ -19,9 +19,9 @@ export function Customers({ V }) {
   return (
     <div data-scroll className={PAGE}>
       <div className="flex items-end gap-4 flex-wrap">
-        <div className="flex flex-col gap-1 flex-1 min-w-[220px]">
-          <h2 className="text-[22px] font-medium tracking-[-.6px]">customers</h2>
-          <p className="text-[13px] text-fg-3">everyone who has written in, and how they&apos;re doing.</p>
+        <div className="flex-1 min-w-[220px]">
+          <h1 className="text-[26px] font-semibold tracking-tight text-fg">customers</h1>
+          <p className="text-[13px] text-fg-2 mt-1">everyone who has written in, and how they&apos;re doing.</p>
         </div>
         <div className="w-[280px]">
           <Input
@@ -66,6 +66,15 @@ export function CustomerProfile({ V }) {
   const [first, last] = splitName(V.cName);
   return (
     <div data-scroll className={PAGE}>
+      {/* `cName` is '' until the customer lands (Console.jsx:1889), and an empty
+          leaf still draws its own chevron — so the leaf is conditional, the same
+          guard the Ticket and Settings crumbs use. */}
+      <Breadcrumb
+        items={[{ label: 'Home' }, { label: 'Customers' }].concat(
+          V.cName ? [{ label: V.cName }] : [],
+        )}
+      />
+
       <Button
         onClick={V.go}
         data-s="customers"
@@ -73,7 +82,7 @@ export function CustomerProfile({ V }) {
         size="sm"
         className="self-start"
         leftIcon={
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 6l-6 6 6 6" />
           </svg>
         }

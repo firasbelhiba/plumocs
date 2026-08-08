@@ -20,9 +20,9 @@ export default function Account({ V }) {
             style={{ background: 'var(--tone-hue)' }}
           />
         </span>
-        <div className="flex flex-col gap-0.5">
-          <h2 className="text-[21px] font-medium tracking-[-.6px]">{V.me.name}</h2>
-          <span className="text-[13px] text-fg-3">{V.me.role} · tier 1 · {V.me.avail}</span>
+        <div className="flex flex-col">
+          <h1 className="text-[26px] font-semibold tracking-tight text-fg">{V.me.name}</h1>
+          <span className="text-[13px] text-fg-2 mt-1">{V.me.role} · tier 1 · {V.me.avail}</span>
         </div>
       </div>
 

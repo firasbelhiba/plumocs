@@ -1,7 +1,8 @@
 'use client';
 
-import { Button, Card, Dropdown, DropdownItem, Input, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
+import { Breadcrumb, Button, Card, Dropdown, DropdownItem, Input, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
 import { buttonVariants } from '../common/Button';
+import { KnowledgeBaseGlyph, SlaGlyph } from './glyphs';
 
 const ON_ROW_STYLE = { background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' };
 
@@ -23,18 +24,18 @@ const RAIL_CARD = 'rounded-token border border-[color:var(--border)] p-4 flex fl
 const RAIL_LABEL = 'text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 const RAIL_KV = 'flex justify-between gap-2.5 text-[12.5px] text-fg-3';
 const Caret = () => (
-  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M6 9l6 6 6-6" />
   </svg>
 );
 const LockIcon = () => (
-  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="5" y="10.5" width="14" height="9" rx="2.2" />
     <path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5" />
   </svg>
 );
 const ClipIcon = ({ size = 13 }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M16 7l-6.5 6.5a2.5 2.5 0 003.5 3.5L20 10a4.5 4.5 0 00-6.5-6.5L6 11a6.5 6.5 0 009 9l5-5" />
   </svg>
 );
@@ -88,10 +89,22 @@ export default function Ticket({ V }) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
+      {/* Breadcrumb — PM puts one above the header block on every detail page
+          (`IssueHeader.tsx:71-93`). CS has no router for the ancestors, so the
+          crumbs above the leaf are labels rather than links; the primitive
+          already renders an href-less item as a span. */}
+      <div className="flex-none px-4 pt-3 bg-surface">
+        <Breadcrumb
+          items={[{ label: 'Home' }, { label: 'Inbox' }].concat(
+            V.tNum ? [{ label: `#${V.tNum}` }] : [],
+          )}
+        />
+      </div>
+
       {/* toolbar */}
       <div className="flex-none flex items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface relative z-sticky">
         <Button variant="outline" size="icon" onClick={V.backToQueue} aria-label="back to the inbox" title="back to the inbox" className="flex-none">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </Button>
@@ -274,7 +287,7 @@ export default function Ticket({ V }) {
         </div>
 
         <Button variant="outline" size="icon" onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className="flex-none">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 5h16v14H4zM15 5v14" />
           </svg>
         </Button>
@@ -287,7 +300,7 @@ export default function Ticket({ V }) {
         style={{ background: 'color-mix(in srgb, var(--tone-hue) 9%, var(--surface))', color: 'var(--tone-fg)' }}
       >
         <span className="inline-flex items-center gap-[7px]">
-          <img src="/assets/icons/icon-sla.svg" alt="" className="w-[15px] h-[15px] block flex-none" />
+          <SlaGlyph className="w-[15px] h-[15px] flex-none" />
           first response {V.frLabel}
         </span>
         <i className="w-px h-3.5 bg-current opacity-25" />
@@ -397,7 +410,7 @@ export default function Ticket({ V }) {
           {/* suggested article */}
           <div className="mx-[18px] mb-3 px-3.5 py-3 rounded-[10px] bg-surface flex gap-2.5 items-start" style={{ border: '1px solid var(--cs-leafsoft)' }}>
             <span className="w-[22px] h-[22px] flex-none rounded-full grid place-items-center" style={{ background: 'var(--cs-leafsoft)' }}>
-              <img src="/assets/icons/icon-knowledge-base.svg" alt="" className="w-[13px] h-[13px] block" />
+              <KnowledgeBaseGlyph className="w-[13px] h-[13px]" />
             </span>
             <div className="flex-1 flex flex-col gap-0.5">
               <span className="text-[12px] font-medium" style={{ color: 'var(--cs-brand-ink)' }}>this article might help</span>
@@ -450,12 +463,12 @@ export default function Ticket({ V }) {
                 <Button variant="ghost" size="icon" aria-label="bold" title="bold" className="text-[13px]">B</Button>
                 <Button variant="ghost" size="icon" aria-label="italic" title="italic" className="text-[13px] italic">i</Button>
                 <Button variant="ghost" size="icon" aria-label="bulleted list" title="list">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 7h11M9 12h11M9 17h11M5 7h.01M5 12h.01M5 17h.01" />
                   </svg>
                 </Button>
                 <Button variant="ghost" size="icon" aria-label="add a link" title="link">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10 13a4 4 0 005.7 0l2.3-2.3a4 4 0 10-5.7-5.7L11 6.3" />
                     <path d="M14 11a4 4 0 00-5.7 0L6 13.3a4 4 0 105.7 5.7L13 17.7" />
                   </svg>
@@ -465,7 +478,7 @@ export default function Ticket({ V }) {
 
               <div className="relative">
                 <Button variant="outline" size="sm" onClick={V.openCanned} leftIcon={
-                  <img src="/assets/icons/icon-knowledge-base.svg" alt="" className="w-[15px] h-[15px] block flex-none" />
+                  <KnowledgeBaseGlyph className="w-[15px] h-[15px] flex-none" />
                 }>
                   canned responses
                 </Button>
@@ -522,7 +535,7 @@ export default function Ticket({ V }) {
               className="flex items-center gap-2 px-2.5 py-[7px] rounded-token-sm border border-[color:var(--border)] bg-bg text-fg text-[12.5px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2"
             >
               <span className="flex-1 truncate">{V.custEmail}</span>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-fg-3">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fg-3">
                 <rect x="9" y="9" width="11" height="11" rx="2" />
                 <path d="M15 5H6a1.8 1.8 0 00-1.8 1.8V15" />
               </svg>

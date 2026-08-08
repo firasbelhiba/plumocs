@@ -41,7 +41,7 @@ const DOTS = {
 };
 
 const LockIcon = () => (
-  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2" />
     <path d="M8 10.5V7.5a4 4 0 018 0v3" />
   </svg>
@@ -49,18 +49,18 @@ const LockIcon = () => (
 
 const EyeIcon = ({ off }) =>
   off ? (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3l18 18M10.6 10.7a2.6 2.6 0 003.7 3.7M6.9 6.9C4 8.6 2 12 2 12s3.6 6.5 10 6.5c1.7 0 3.2-.4 4.5-1M14 5.7A9.6 9.6 0 0012 5.5C5.6 5.5 2 12 2 12" />
     </svg>
   ) : (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
       <circle cx="12" cy="12" r="2.6" />
     </svg>
   );
 
 const WarnIcon = () => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="flex-none mt-px">
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="flex-none mt-px">
     <circle cx="12" cy="12" r="9" />
     <path d="M12 8v4.5M12 16h.01" />
   </svg>

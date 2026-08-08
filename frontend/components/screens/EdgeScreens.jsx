@@ -13,7 +13,7 @@ export function NotFound({ V }) {
     >
       <img src="/assets/mascots/mascot-05-waiting.svg" alt="" className="w-24 h-auto block" />
       <span className={EYEBROW}>404</span>
-      <h2 className="text-[24px] font-medium tracking-[-.7px]">we can&apos;t find that one</h2>
+      <h1 className="text-[24px] font-semibold tracking-tight text-fg">we can&apos;t find that one</h1>
       <p className="text-[14px] text-fg-2 max-w-[40ch] leading-relaxed">
         the link may be old, or the conversation may have been merged into another. nothing is lost — it&apos;s
         just not here.
@@ -34,7 +34,7 @@ export function Oops({ V }) {
     >
       <img src="/assets/mascots/mascot-03-empathetic.svg" alt="" className="w-24 h-auto block" />
       <span className={EYEBROW}>something&apos;s off</span>
-      <h2 className="text-[24px] font-medium tracking-[-.7px]">that didn&apos;t work, and it&apos;s on us</h2>
+      <h1 className="text-[24px] font-semibold tracking-tight text-fg">that didn&apos;t work, and it&apos;s on us</h1>
       <p className="text-[14px] text-fg-2 max-w-[42ch] leading-relaxed">
         your work is safe — nothing you wrote has gone anywhere. we&apos;ll try again in a moment, or you can
         nudge it yourself.

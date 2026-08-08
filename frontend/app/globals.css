@@ -118,7 +118,7 @@ p { margin: 0; }
   --cs-canvas:#F8FAFC; --cs-surface:#FFFFFF; --cs-soft:#EDF4EE;
   --cs-warm:#FFF9E9; --cs-text:#0F172A; --cs-muted:#475569;
   --cs-border:#E2E8F0; --cs-hover:#F1F5F9; --cs-accent-src:#4C9F6E; --cs-brand:var(--cs-accent-src);
-  --cs-forest:#1F4A2E; --cs-leafsoft:#B8CFB4; --cs-btn:#2563EB;
+  --cs-forest:#1F4A2E; --cs-leafsoft:#B8CFB4;
   --cs-brand-soft:color-mix(in srgb, var(--cs-brand) 10%, var(--cs-surface));
   --cs-brand-ink:var(--cs-forest);
   --cs-navw:236px; --cs-railw:322px; --cs-filtw:216px;
@@ -219,7 +219,7 @@ p { margin: 0; }
   --cs-canvas:#0B1710; --cs-surface:#12261A; --cs-soft:#1A3324; --cs-warm:#2A2416;
   --cs-text:#E7F0E9; --cs-muted:#A8BCAE; --cs-border:#26402E; --cs-hover:#173023;
   --cs-brand:color-mix(in srgb, var(--cs-accent-src) 52%, #FFFFFF);
-  --cs-brand-ink:color-mix(in srgb, var(--cs-accent-src) 60%, #FFFFFF); --cs-btn:#3B82F6; color-scheme:dark;
+  --cs-brand-ink:color-mix(in srgb, var(--cs-accent-src) 60%, #FFFFFF); color-scheme:dark;
 
   /* shared layer, dark */
   --surface-2:#173023; --surface-3:#1F3D2C;
@@ -346,7 +346,12 @@ input::-ms-clear {
 .dark [data-av]{--av-bg:color-mix(in srgb, var(--av-fg) 26%, var(--cs-surface));--av-fg:#E7EDF9}
 [data-on="true"]{--cs-onbg:var(--cs-brand-soft);--cs-onfg:var(--cs-brand-ink);--cs-onbd:color-mix(in srgb, var(--cs-brand) 26%, transparent);--cs-onw:500;--cs-onbar:transparent}
 [data-on="false"]{--cs-onbg:transparent;--cs-onfg:var(--cs-muted);--cs-onbd:transparent;--cs-onw:400;--cs-onbar:transparent}
-nav [data-on="true"]{--cs-onbg:color-mix(in srgb, var(--cs-btn) 9%, var(--cs-surface));--cs-onfg:var(--cs-btn);--cs-onbar:var(--cs-btn)}
+/* The `nav [data-on="true"]` override that used to sit here bound the active nav
+   row's tint, label and indicator bar to `--cs-btn` — #2563EB light, #3B82F6
+   dark, i.e. PM's --plumo-blue / --plumo-sky verbatim — so the selected sidebar
+   row was accent blue in a green product. Both the rule and `--cs-btn` are gone;
+   the rail now uses PM's own recipe (`bg-[color:var(--primary-soft)]` +
+   `text-[color:var(--primary)]`, NavLink.tsx:32) directly at the call site. */
 [data-side="customer"]{--msg-bg:var(--cs-soft);--msg-bd:var(--cs-leafsoft);--msg-ml:0;--msg-r:12px 12px 12px 4px}
 [data-side="agent"]{--msg-bg:var(--cs-surface);--msg-bd:var(--cs-border);--msg-ml:auto;--msg-r:12px 12px 4px 12px}
 [data-side="note"]{--msg-bg:var(--cs-warm);--msg-bd:color-mix(in srgb, #E0A82E 40%, transparent);--msg-ml:auto;--msg-r:12px}

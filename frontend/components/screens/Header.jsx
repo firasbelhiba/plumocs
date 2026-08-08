@@ -18,10 +18,15 @@ const GROUP_LABEL = 'px-2.5 pt-1.5 pb-1 text-[11px] font-medium uppercase tracki
 const PANEL =
   'absolute top-full mt-2 z-dropdown rounded-token bg-surface border border-[color:var(--border)] shadow-card animate-dropdown';
 
-/** The shared icon button, with `relative` so the unread pip can hang off it. */
+/** The shared icon button, with `relative` so the unread pip can hang off it.
+    PM's top-bar icon buttons are chromeless — `p-1 rounded text-fg-2
+    hover:bg-surface-2` (`Header.tsx:277-287`), no border and no surface fill —
+    so this is `ghost`, whose colour pair is that string exactly. The box stays
+    the primitive's `size="icon"`; the outlined circle it used to draw is the
+    thing item 32 removes. */
 const IconButton = ({ label, onClick, children, className = '' }) => (
   <Button
-    variant="outline"
+    variant="ghost"
     size="icon"
     onClick={onClick}
     aria-label={label}
@@ -34,12 +39,23 @@ const IconButton = ({ label, onClick, children, className = '' }) => (
 
 export default function Header({ V }) {
   return (
-    <header className="flex-none flex items-center gap-3.5 px-4 py-2 h-topbar relative z-fixed border-b border-[color:var(--border)] bg-[color:color-mix(in_srgb,var(--surface)_86%,transparent)] backdrop-blur-md">
-      <IconButton label="collapse sidebar" onClick={V.toggleNav}>
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </IconButton>
+    <header className="flex-none flex items-center gap-3.5 h-12 md:h-14 px-2 md:px-3 relative z-sticky border-b border-[color:var(--border)] bg-surface">
+      {/* Hamburger + logo, PM's left group (`Header.tsx:133, 176-184`). The mark
+          and wordmark used to live at the top of the left rail; the shell puts
+          them here, at 24px with a 14px wordmark. The artwork itself is the one
+          exempt asset — its place in the shell is not. */}
+      <div className="flex items-center gap-2 md:gap-3 flex-none">
+        <IconButton label="collapse sidebar" onClick={V.toggleNav}>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </IconButton>
+
+        <span className="flex items-center gap-2 ml-4 md:ml-8">
+          <img src="/assets/marks/mark-primary.svg" alt="" className="w-6 h-auto block" />
+          <span className="text-[14px] font-medium tracking-tight text-fg whitespace-nowrap">plumo</span>
+        </span>
+      </div>
 
       <div className="relative flex-1 max-w-[520px]">
         <Input
@@ -51,7 +67,7 @@ export default function Header({ V }) {
           aria-label="search conversations and people"
           className="!rounded-full h-btn-md bg-bg"
           leftIcon={
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="6.5" />
               <path d="M16 16l4 4" />
             </svg>
@@ -90,10 +106,10 @@ export default function Header({ V }) {
 
       <Button
         onClick={V.openNewTicket}
-        size="md"
+        size="sm"
         className="flex-none"
         leftIcon={
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
         }
@@ -103,7 +119,7 @@ export default function Header({ V }) {
 
       <div className="relative flex-none">
         <IconButton label="notifications" onClick={V.toggleNotif}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 9a6 6 0 10-12 0c0 5-2 6-2 6h16s-2-1-2-6M13.7 20a2 2 0 01-3.4 0" />
           </svg>
           {V.hasUnreadNotif && (
@@ -139,7 +155,7 @@ export default function Header({ V }) {
       </div>
 
       <IconButton label="switch light or dark theme" onClick={V.toggleTheme}>
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 13.5A8 8 0 1110.5 4a6.5 6.5 0 009.5 9.5z" />
         </svg>
       </IconButton>

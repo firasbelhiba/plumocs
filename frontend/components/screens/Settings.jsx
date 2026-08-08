@@ -3,7 +3,7 @@
 import { sx } from '../sx';
 import { buttonVariants } from '../common/Button';
 import { cn } from '@/lib/utils';
-import { Button, CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, Input, Modal, Select, Switch, Textarea, UserAvatar } from '../common';
+import { Breadcrumb, Button, CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, Input, Modal, Select, Switch, Textarea, UserAvatar } from '../common';
 
 /* Settings keeps its dense bespoke layout, but every control below borrows the
    shared components' own class strings (buttonVariants) so geometry, colour and
@@ -45,6 +45,12 @@ export default function Settings({ V }) {
       </aside>
 
       <div data-scroll className={sx('flex:1;min-width:0;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:16px')}>
+        <Breadcrumb
+          items={[{ label: 'Home' }, { label: 'Settings' }].concat(
+            V.settingsTabLabel ? [{ label: V.settingsTabLabel }] : [],
+          )}
+        />
+
         {V.tabOverview && (
           <div className={sx('display:flex;flex-direction:column;gap:16px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
@@ -122,7 +128,7 @@ export default function Settings({ V }) {
                     {u.canEdit && <button onClick={V.editUser} data-id={u.id} className={editBtn()}>edit</button>}
                     {u.canDeactivate && (
                       <button onClick={V.askDeactivate} data-id={u.id} data-name={u.name} aria-label={'deactivate ' + u.name} title={'deactivate ' + u.name} className={iconBtn()}>
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
                       </button>
                     )}
                   </span>

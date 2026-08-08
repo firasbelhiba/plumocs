@@ -1924,6 +1924,9 @@ export default class Console extends React.Component {
       drillBreakdown: dd ? dd.breakdown.map(b => ({ label: b.label, n: b.n, wn: Math.round(b.n / Math.max(1, ...dd.breakdown.map(x => x.n)) * 100) })) : [],
       drillTickets: dd ? (dd.tickets ?? []).map(x => ({ num: x.num, subject: x.subject, id: x.id ?? 'tk' + x.num, statusLabel: (this.STATUS[x.status] || {}).l, statusTone: (this.STATUS[x.status] || {}).t })) : [],
       settingsTab: S.settingsTab, setSettingsTab: this.setSettingsTab,
+      // Leaf crumb for the settings breadcrumb. Empty on the overview tab, which
+      // is the section root and so is already named by the crumb above it.
+      settingsTabLabel: (this.SETTINGS_CARDS.find(c => c.v === S.settingsTab) || {}).name || '',
       tabTeam: S.settingsTab === 'team', tabSla: S.settingsTab === 'sla', tabHours: S.settingsTab === 'hours',
       tabCanned: S.settingsTab === 'canned', tabTags: S.settingsTab === 'tags', tabHooks: S.settingsTab === 'hooks',
       tabKeys: S.settingsTab === 'keys', tabEmail: S.settingsTab === 'email',

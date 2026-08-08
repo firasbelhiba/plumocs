@@ -26,9 +26,9 @@ function BarRow({ label, n, pct }) {
 export default function Reports({ V }) {
   return (
     <div data-scroll className="flex-1 min-h-0 overflow-y-auto px-6 py-[22px] flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-[22px] font-medium tracking-[-.6px]">reports</h2>
-        <p className="text-[13px] text-fg-3">
+      <div>
+        <h1 className="text-[26px] font-semibold tracking-tight text-fg">reports</h1>
+        <p className="text-[13px] text-fg-2 mt-1">
           last 7 days, across both teams. no targets to beat — just a look at how it&apos;s going.
         </p>
       </div>

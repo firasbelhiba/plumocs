@@ -1314,7 +1314,7 @@ anywhere. `global-error.jsx` was **not** exercised — it needs the root layout 
 
 ---
 
-#### 29. Fix the blue active nav state — **S**
+#### 29. Fix the blue active nav state — **S** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:134` — `--cs-btn: #2563EB` (literally PM's `--plumo-blue`);
 `:279` — `nav [data-on="true"]{ --cs-onbg: color-mix(--cs-btn 9%, surface); --cs-onfg:
@@ -1331,9 +1331,17 @@ item 30.
 
 **Blast radius:** every nav row. **Risk:** none. **Check:** the active nav row is green.
 
+**SHIPPED 2026-08-08.** Took the "or better" branch: `--cs-btn` and the `nav [data-on="true"]`
+override are both deleted, and the rail no longer reads `[data-on]` at all — item 30 puts PM's
+pair at the call site. **Checked in the browser, both themes:** active row resolves to
+`#EDF4EE` on `#4C9F6E` in light and `rgba(46,96,67,.38)` on `#7CC098` in dark. A sweep of every
+computed `color`/`background`/`fill`/`stroke` on the logged-in console found no blue-dominant
+value in either theme; the one that trips a naive filter is `rgb(61,39,104)`, a `UserAvatar`
+hue from the pre-existing avatar ramp.
+
 ---
 
-#### 30. Rebuild the nav item on PM's geometry — **M**
+#### 30. Rebuild the nav item on PM's geometry — **M** ✅ DONE 2026-08-08
 
 **CS** `screens/Sidebar.jsx:7-16, 26`. **PM** `src/components/layout/Sidebar/NavLink.tsx:29-44`.
 
@@ -1363,9 +1371,26 @@ differs: PM `ProjectsSection.tsx:65` `text-[10px] font-semibold uppercase tracki
 **Risk:** low technically; the rail gets ~60px taller. **Check:** at 900px viewport height the
 user card must still be reachable.
 
+**SHIPPED 2026-08-08.** Every row of the table above, plus the structural change: the two
+section headings are gone and the rows sit in PM's `flex-1 overflow-y-auto py-2` +
+`px-2 space-y-0.5` pair (`Sidebar.tsx:446,461`). `SECTION` and `NAV_ROW_STYLE` deleted. The
+trailing count `Badge` is **kept** — PM's badge in that slot is a red `--danger` pip and would
+mis-signal an ordinary inbox count. **Measured in the browser at 1280×900:** rows 38px tall /
+14px / 500 / `px-3` / `gap-3` / 6px radius, 2px apart, active pill 3×20 at the row's left edge;
+the nav's scroll region is 765px against a 765px scrollHeight and the user card lands at
+821–900, i.e. fully on screen. At ≤1180px the labels, the count and the pill all go with
+`[data-navlabel]` and the rail sits at 64px.
+
+*Measuring note for whoever verifies the next batch:* the Browser pane reports
+`document.visibilityState === 'hidden'`, so CSS transitions never advance and
+`getComputedStyle` returns the pre-transition value for anything carrying `transition-colors`
+or `transition-[width]`. The rail reads 64px wide and the wrong theme's colours until you
+inject `*{transition:none !important}`. That is an instrumentation artifact, not a defect —
+don't file it as one.
+
 ---
 
-#### 31. Replace the `<img>` nav icons with inline `currentColor` SVG — **S**
+#### 31. Replace the `<img>` nav icons with inline `currentColor` SVG — **S** ✅ DONE 2026-08-08
 
 **CS** `screens/Sidebar.jsx:38` — `<img src="/assets/icons/*.svg" className="w-[18px] h-[18px]">`.
 Verified in `public/assets/icons/icon-ticket.svg` and `icon-customer.svg`: the files hardcode
@@ -1380,9 +1405,17 @@ product.
 **Blast radius:** 7 assets referenced from `Sidebar.jsx`, `Queue.jsx`, `Ticket.jsx`.
 **Risk:** none. **Check:** hover a nav row; the icon should change colour with the label.
 
+**SHIPPED 2026-08-08.** All seven live in `components/screens/glyphs.jsx` as inline SVG at
+`strokeWidth="2"` on `currentColor`; all nine `<img src="/assets/icons/*">` call sites across
+`Sidebar.jsx`, `Queue.jsx` and `Ticket.jsx` converted. The `.svg` files stay in `public/` as
+the source artwork. One literal kept on purpose: the agent glyph's accent bead keeps its
+`--cs-leafsoft` fill and `#5A7856` stroke — those were already green, only the navy outline
+was the defect. **Verified in the browser:** the active row's icon resolves to `--primary`
+and an idle row's to `--fg-3`, i.e. the icon now tracks the row rather than sitting at navy.
+
 ---
 
-#### 32. Bring the top bar to PM's spec — **M**
+#### 32. Bring the top bar to PM's spec — **M** ◐ PARTLY DONE 2026-08-08
 
 **CS** `screens/Header.jsx:28` and `:11-23, 29, 36-50, 82-93`.
 **PM** `src/components/layout/Header.tsx:129-131, 189-214, 241-243, 277-287, 291, 302`.
@@ -1406,9 +1439,27 @@ touching it. The height, padding, background, z-layer, icon-button and create-bu
 safe to do now.
 **Check:** header height must match PM's when both are open side by side.
 
+**SHIPPED 2026-08-08 — the six safe rows only.** Height, padding, background, z-layer, icon
+buttons and create button are done. **Measured in the browser:** header 56px at desktop, solid
+`bg-surface`, `backdrop-filter: none`, `z-index: 20`, `padding-left: 12px`; icon buttons at
+`border-width: 0` on a transparent fill in `--fg-2`; create button 28px tall. The icon buttons
+went to `variant="ghost"` — PM's `p-1 rounded text-fg-2 hover:bg-surface-2` colour pair
+exactly — while the box stays the primitive's `size="icon"` per item 14.
+
+**Still open, and why:**
+- **The search row.** Untouched, including `RESULT_ROW` / `GROUP_LABEL`. Blocked on Open
+  Question E, as this item instructs.
+- **The "menu width" and "menu item" rows.** Not in this item's "safe to do now" list, and
+  **there is a defect in those two table cells.** `w-[246px]` no longer exists — item 23 folded
+  that menu into `Dropdown`'s `min-w-[200px]`. And `w-[320px]` is our **notification panel**,
+  which the table maps onto PM's *user menu* (`w-48` = 192px). PM's actual notification
+  counterpart is `NotificationDropdown.tsx:140` — **`w-[360px]`**, i.e. **wider** than ours,
+  not 128px narrower. Applying the row literally would ship a cramped panel PM does not have.
+  Left at `w-[320px]` pending an owner call on which PM surface it should match.
+
 ---
 
-#### 33. Move the logo to the top bar — **S**
+#### 33. Move the logo to the top bar — **S** ✅ DONE 2026-08-08
 
 **CS** `screens/Sidebar.jsx:46-51` — mark 26px + wordmark `text-[16px] font-medium
 tracking-[-.4px]`, at the **top of the sidebar**.
@@ -1421,9 +1472,16 @@ of the screen, and 16px vs 14px wordmark.
 **Blast radius:** 2 files. **Risk:** none — but it changes the first thing anyone sees.
 **Check:** side-by-side screenshot.
 
+**SHIPPED 2026-08-08.** In the header's left group beside the hamburger, with PM's
+`gap-2 md:gap-3` and `ml-4 md:ml-8`. **Measured:** mark 24px, wordmark 14px/500, and no mark
+left in the sidebar. Kept a non-interactive `<span>`: PM's is a `<Link href=/dashboard>` and
+we have no such route, so making it clickable would be a feature add. The side-by-side
+screenshot is still owed — the Browser pane would not composite frames this session, so every
+check above is a computed-style read rather than an image.
+
 ---
 
-#### 34. Adopt PM's page-header pattern — **S**
+#### 34. Adopt PM's page-header pattern — **S** ✅ DONE 2026-08-08
 
 **CS** `screens/Reports.jsx:30-31`, `Customers.jsx:23-24`, `Account.jsx:23`.
 **PM** `src/app/(authenticated)/[workspace]/users/page.tsx:625-626`.
@@ -1452,9 +1510,18 @@ while every in-app title uses `font-medium` at 21–22px. Standardising on PM re
 
 **Blast radius:** 4 screens. **Risk:** none.
 
+**SHIPPED 2026-08-08.** `Reports.jsx`, `Customers.jsx`, `Account.jsx`: `<h1>` at
+`text-[26px] font-semibold tracking-tight text-fg`, subtitle `text-[13px] text-fg-2 mt-1`, and
+the wrapper's `gap-1`/`gap-0.5` dropped so `mt-1` is the only rhythm — PM's `users/page.tsx`
+header has no gap. `EdgeScreens.jsx:16,37` per the CORRECTED note: `font-medium` and
+`tracking-[-.7px]` deleted, `<h1>` + `font-semibold tracking-tight text-fg`, **size left at
+24px**, which is PM's other page-title size and what the correction calls them.
+**Measured in the browser on all three in-app screens:** `H1`, 26px, weight 600, letter-spacing
+−0.65px, colour `--fg`; subtitle 13px `--fg-2` at `margin-top: 4px`.
+
 ---
 
-#### 35. Normalise icon stroke width — **S**
+#### 35. Normalise icon stroke width — **S** ✅ DONE 2026-08-08
 
 **CS** — `strokeWidth="1.75"` in **40** hand-drawn inline SVGs across `components/`.
 **PM** — `strokeWidth={2}` **288×**, `1.8` 71×.
@@ -1466,9 +1533,16 @@ while every in-app title uses `font-medium` at 21–22px. Standardising on PM re
 **Risk:** none. **Check:** the Ticket toolbar icons should read at the same weight as PM's.
 Does not affect `components/common/icons/registry.generated.ts`, which is already identical.
 
+**SHIPPED 2026-08-08.** Exactly **40** edits across 9 files (`Customers`, `Header`, `Login`,
+`Queue`, `Settings`, `Sidebar`, `Ticket`, `app/accept-invite/page.jsx`,
+`app/reset-password/page.jsx`). `components/common/StatusPill.tsx` is **deliberately not
+touched**: `diff` against `dbwork/frontend/src/components/common/StatusPill.tsx` returns clean,
+so its nine `1.75`s are PM's own and changing them would break parity rather than restore it.
+That is also the arithmetic that makes the plan's count of 40 exact.
+
 ---
 
-#### 36. Wire in the breadcrumb — **S**
+#### 36. Wire in the breadcrumb — **S** ✅ DONE 2026-08-08
 
 **CS** — `components/common/Breadcrumb.tsx` is byte-identical to PM's, exported at
 `components/common/index.ts:37`, and **rendered zero times**. CS has no breadcrumb anywhere.
@@ -1477,6 +1551,25 @@ Does not affect `components/common/icons/registry.generated.ts`, which is alread
 **Blast radius:** each screen with a parent context — Ticket (inbox → #NNN), Customer profile
 (customers → name), Settings sub-tabs.
 **Risk:** none. **Check:** the Ticket screen should show `Home / Inbox / #1042`.
+
+**SHIPPED 2026-08-08.** 0 renders → 3: Ticket (above the toolbar, per PM `IssueHeader.tsx:71`),
+CustomerProfile and Settings. `V.settingsTabLabel` added in `Console.jsx` off `SETTINGS_CARDS`,
+empty on the overview tab since that tab *is* the section root. The crumbs above the leaf are
+href-less labels rather than links — we have no router for those ancestors and
+`components/common/` is import-only, so no `onClick` was added to the primitive.
+
+**Every leaf is conditional.** `cName` and `tNum` are `''` while their record loads
+(`Console.jsx:1889`, `:1841`), and the primitive draws a chevron before an item whether or not
+that item has text — an unguarded leaf renders as a dangling 32px chevron. Caught in the
+browser on CustomerProfile and fixed there; Ticket and Settings already guarded.
+**Verified in the browser:** Settings renders `Home / Settings / team & users` with the
+`workspace-building` home icon and two `state-chevron-right` separators, all three icon names
+resolving out of `registry.generated.ts`.
+
+**Note on the four chrome words.** "Home", "Inbox", "Customers" and "Settings" are Sentence
+case because this item's own check spells them that way; the leaves are live data in whatever
+case the app holds. Until item 43 lands, those four words are the only Sentence-case chrome in
+a lowercase UI. Deliberate, and item 43 sweeps them up with everything else.
 
 ---
 
@@ -1676,6 +1769,7 @@ of 35). **Open Question H.**
 | `app/globals.css:305` | `[data-anim="sk"]` + `@keyframes cs-shimmer` — referenced by nothing. | Delete (folded into item 24). |
 | `app/globals.css:54-55` vs `:150-151` | `--font-sans` and `--font-mono` each defined **twice** in the same `:root`; the second wins. Same effective value, live footgun. | Delete the first pair. |
 | `components/common/ConfirmDeleteModal.tsx` | Byte-identical to PM's, imported by no screen. | Wire in (item 26) or delete. |
+| `app/globals.css:299-300` | `.h-topbar` (44px) and `.h-navitem` (28px). **Newly dead as of batch 6** — item 32 moved the header to `h-12 md:h-14` and item 30 moved the nav row to `h-[38px]`, so both utilities now have zero call sites. `.h-navitem` is the more dangerous of the two: it still says 28px, which is the geometry item 30 exists to remove. | Delete. |
 
 PM has no equivalent of any of these. They are drift generators aimed at the next person who
 greps for "Button" in CS.
