@@ -115,6 +115,13 @@
      PM's navy. */
   --av-bg: var(--primary-soft); --av-fg: var(--primary); --av-border: 1px solid transparent;
   --tone-hue: var(--text-2); --tone-fg: var(--text-2); --tone-fg-dark: #CBD5E1;
+
+  /* Tint of the dot grid on the sign-in surface. PM keeps the same value in
+     `.login-bg::before` (12% of the brand colour) and steps it down to 8% in
+     dark, because the lighter dark-theme brand reads hotter against a near-black
+     page. Only the tint is a token; the 24px pitch and the mask that keeps the
+     texture off the middle of the card live with the screen that draws them. */
+  --login-dot: color-mix(in srgb, var(--primary) 12%, transparent);
   color-scheme:light;
 }
 
@@ -172,6 +179,8 @@ p { margin: 0; }
   --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.30), 0 1px 1px 0 rgb(0 0 0 / 0.22);
   --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 0.42), 0 2px 4px -1px rgb(0 0 0 / 0.28);
   --shadow-modal: 0 20px 40px -8px rgb(0 0 0 / 0.55), 0 8px 16px -4px rgb(0 0 0 / 0.35);
+
+  --login-dot: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 /* Every bare `border` / `border-b` resolves to the theme's border colour rather

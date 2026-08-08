@@ -21,9 +21,23 @@ const WASH = {
   ].join(','),
 };
 
+/* The dot grid PM lays over that wash (`.login-bg::before`). Three things make
+   it read the way it does on PM and none of them are optional:
+
+   - the dots are drawn at full strength, not dimmed. PM's tint is 12% of the
+     brand colour and nothing multiplies it; the 14%-at-38%-opacity this used to
+     be worked out to ~5%, which is why the texture was invisible next to PM's.
+   - `circle`, not the default ellipse, so a dot stays a dot.
+   - the mask, which is the whole character of it: dots are erased through the
+     middle of the card and ramp to full towards the corners. Without it the
+     grid sits flat behind the form instead of framing it. */
+const DOT_MASK = 'radial-gradient(ellipse 80% 70% at 50% 50%, transparent 30%, black 80%)';
+
 const DOTS = {
-  backgroundImage: 'radial-gradient(color-mix(in srgb, var(--primary) 14%, transparent) 1px, transparent 1px)',
+  backgroundImage: 'radial-gradient(circle, var(--login-dot) 1px, transparent 1px)',
   backgroundSize: '24px 24px',
+  maskImage: DOT_MASK,
+  WebkitMaskImage: DOT_MASK,
 };
 
 /* ---- icons -------------------------------------------------------------- */
@@ -80,9 +94,17 @@ const LockIcon = () => (
   </svg>
 );
 
+/**
+ * PM's `auth-sign-in`, path for path — bracket on the RIGHT, arrow running into
+ * it. What stood here before was the other glyph in PM's registry: bracket on
+ * the left, arrow leaving through the opening, which is `auth-sign-out`. A
+ * sign-in button was wearing the sign-out icon; the component name was the only
+ * part of it that said "in".
+ */
 const ArrowIn = () => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 12h11m-4-4l4 4-4 4M13 4H6a2 2 0 00-2 2v12a2 2 0 002 2h7" />
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M 13 4 L 19 4 Q 20 4 20 5 L 20 19 Q 20 20 19 20 L 13 20" />
+    <path d="M 4 12 L 14 12 M 10 8 L 14 12 L 10 16" />
   </svg>
 );
 
@@ -165,27 +187,39 @@ export default function Login({ V }) {
       className="min-h-screen flex flex-col items-center justify-center px-6 py-10 relative overflow-hidden bg-bg"
       style={WASH}
     >
-      <div className="absolute inset-0 pointer-events-none opacity-[.38]" style={DOTS} />
+      <div className="absolute inset-0 pointer-events-none" style={DOTS} />
 
       <div className="relative w-full max-w-[400px]">
-        {/* lockup — the green mark is what signals the support pillar */}
-        <div className="flex items-center justify-center gap-3 mb-[18px]">
-          <img src="/assets/marks/mark-primary.svg" alt="" className="w-11 h-auto block" />
-          <span className="text-[34px] font-medium leading-none tracking-[-1.4px] text-[color:var(--primary)]">
+        {/* Lockup — the green mark is what signals the support pillar, but the
+            size is PM's. PM renders one 360x100 lockup SVG at height 56, so
+            everything inside it lands at 0.56 scale: blob 40.7x39.2, wordmark
+            56 * 0.56 = 31.36px, ~10.5px between them. CS composes the same
+            lockup from two elements, so each number is set to the figure PM's
+            scale produces — the mark's viewBox is 88 wide, and 88 * 0.56 = 49px
+            of image width puts its blob on PM's. */}
+        <div className="flex items-center justify-center gap-2.5 mb-6">
+          <img src="/assets/marks/mark-primary.svg" alt="" className="w-[49px] h-auto block" />
+          <span className="text-[31.36px] font-medium leading-none tracking-[-1.4px] text-[color:var(--primary)]">
             plumo
           </span>
         </div>
 
         {V.isSignin && (
           <>
-            <h1 className="text-[32px] font-semibold tracking-[-1.1px] text-center text-fg mb-2">
+            {/* `leading-tight` is not cosmetic here. CS's body sets
+                line-height 1.65, so an unqualified 32px heading claimed a 52.8px
+                line box against PM's 28px * 1.25 = 35px — nearly 18px of the
+                slack between the mark and the subtitle came from this one line.
+                Same reason the subtitle is pinned to `leading-normal` (1.5),
+                which is what PM inherits from Tailwind's preflight. */}
+            <h1 className="text-[28px] font-semibold tracking-tight leading-tight text-center text-fg">
               Welcome back.
             </h1>
-            <p className="text-[14px] text-fg-2 text-center mb-[26px]">
-              Sign in to continue to your workspace.
+            <p className="text-[13px] leading-normal text-fg-2 text-center mt-1.5">
+              sign in to continue to your workspace.
             </p>
 
-            <div className="flex flex-col gap-2.5 mb-[22px]">
+            <div className="flex flex-col gap-2 mt-5">
               <Federated provider="google" icon={<GoogleMark />} onClick={V.federated}>
                 Continue with Google
               </Federated>
@@ -200,12 +234,12 @@ export default function Login({ V }) {
             </div>
 
             {V.pmSignInError && (
-              <div className="mb-4 rounded-token bg-[color:var(--danger-soft,rgba(220,60,60,.08))] px-3 py-2 text-[12.5px] text-[color:var(--danger,#c0392b)]">
+              <div className="mt-3 rounded-token bg-[color:var(--danger-soft,rgba(220,60,60,.08))] px-3 py-2 text-[12.5px] text-[color:var(--danger,#c0392b)]">
                 {V.pmSignInError}
               </div>
             )}
 
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-3 my-4">
               <span className="flex-1 h-px bg-[color:var(--border)]" />
               <span className="font-mono text-[10.5px] uppercase tracking-[1.6px] text-fg-3 whitespace-nowrap">
                 or with email
@@ -214,7 +248,7 @@ export default function Login({ V }) {
             </div>
 
             {loginError && (
-              <div role="alert" className="flex gap-2.5 items-start px-3 py-2.5 rounded-token-sm mb-4 text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
+              <div role="alert" className="flex gap-2.5 items-start px-3 py-2.5 rounded-token-sm mb-3 text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="flex-none mt-px">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M12 8v4.5M12 16h.01" />
@@ -223,7 +257,7 @@ export default function Login({ V }) {
               </div>
             )}
 
-            <div className="flex flex-col gap-3.5">
+            <div className="flex flex-col gap-3">
               <Input
                 id="login-email"
                 type="email"
@@ -269,7 +303,12 @@ export default function Login({ V }) {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3 mt-4 mb-5">
+            {/* 12 / 4 / 12, measured off PM rather than read off it. PM's row
+                sits in a `space-y-3` form, and that selector outranks the
+                `mt-2` PM puts on its own submit button — so the gap under this
+                row is 12px there, not the 20 the class names suggest. Hence no
+                `mt-2` on the button below. */}
+            <div className="flex items-center justify-between gap-3 mt-3 pt-1 mb-3">
               <label className={CHECK_LABEL}>
                 <input
                   type="checkbox"
@@ -285,11 +324,11 @@ export default function Login({ V }) {
               </Button>
             </div>
 
-            <Button size="md" onClick={V.signIn} rightIcon={<ArrowIn />} className="w-full justify-center mt-2">
+            <Button size="md" onClick={V.signIn} rightIcon={<ArrowIn />} className="w-full justify-center">
               Sign in
             </Button>
 
-            <p className="text-center text-[13px] text-fg-2 mt-[18px]">
+            <p className="text-center text-[13px] text-fg-2 mt-4">
               New to plumo?{' '}
               <Button variant="link" size="sm" onClick={V.requestAccess} className="text-[13px] align-baseline">
                 Request access
