@@ -171,10 +171,38 @@ p { margin: 0; }
   --primary-soft-border: hsl(var(--brand-h) var(--brand-s) 76%);
   --primary-fg: #ffffff;
 
+  /* Epic is a work-item *type* colour, not a brand colour — it is purple in
+     both pillars. Copied from PM verbatim; do NOT re-green it. */
+  --epic: #7c3aed;
+  --epic-soft: #f3e8ff;
+  --epic-soft-border: #ddd6fe;
+
   --success: #0E8A5F; --success-soft: #E6F5EE;
   --warning: #B7791F; --warning-soft: #FDF6E3;
   --danger:  #C63838; --danger-soft:  #FDECEC;
   --ring: hsl(var(--brand-h) var(--brand-s) 46% / 0.35);
+
+  /* Status icon palette (light). Tuned for the small glyphs in StatusPill, so
+     they get their own --status-* namespace rather than reusing theme tokens.
+     Dark overrides live in [data-cs-theme="dark"].
+     Two of these bind to var(--plumo-blue) in PM; here they re-anchor to
+     var(--primary) so the status glyphs are green, not blue. */
+  --status-ring-muted: #cbd5e1; /* someday / let-go ring */
+  --status-ring-neutral: #94a3b8; /* ready ring */
+  --status-progress-track: #dbeafe; /* in-progress remainder */
+  --status-progress-arc: var(--primary); /* in-progress active arc */
+  --status-review: #7a5f1f; /* looking ring + dot */
+  --status-blocked: #fb923c; /* resting ring + pause */
+  --status-done-fill: var(--primary); /* done circle */
+  --status-done-check: #ffffff; /* check on top of done */
+
+  /* Priority blob outline — navy in light, white in dark. */
+  --plumo-blob-stroke: var(--plumo-night);
+
+  /* Inverse-of-surface stroke for the multi-colour brand icons (state-warning,
+     state-critical) whose source SVGs hardcoded plumo-night for legibility on
+     light backgrounds; flips to white on near-black surfaces. */
+  --plumo-on-surface: var(--plumo-night);
 
   --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 1px 0 rgb(0 0 0 / 0.03);
   --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.04);
@@ -199,12 +227,38 @@ p { margin: 0; }
   --primary-soft: hsl(var(--brand-h) var(--brand-s) 28% / 0.38);
   --primary-soft-border: hsl(var(--brand-h) var(--brand-s) 42%);
   --primary-fg:#0B1710;
+  --epic: #a78bfa;
+  --epic-soft: rgb(167 139 250 / 0.28);
+  --epic-soft-border: rgb(167 139 250 / 0.45);
   --success:#3ECC8E; --success-soft:rgb(62 204 142 / 0.18);
   --warning:#E0A82E; --warning-soft:rgb(224 168 46 / 0.18);
   --danger:#F08A7A;  --danger-soft:rgb(240 138 122 / 0.18);
+
+  /* Status icon palette (dark). --status-progress-arc / --status-done-fill
+     re-anchor to var(--primary) where PM binds var(--plumo-sky). */
+  --status-ring-muted: #475569;
+  --status-ring-neutral: #94a3b8;
+  --status-progress-track: rgb(96 165 250 / 0.3);
+  --status-progress-arc: var(--primary);
+  --status-review: var(--plumo-butter);
+  --status-blocked: var(--plumo-peach);
+  --status-done-fill: var(--primary);
+  --status-done-check: var(--plumo-night);
+
+  --plumo-blob-stroke: #ffffff;
+  --plumo-on-surface: #ffffff;
+
   --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.30), 0 1px 1px 0 rgb(0 0 0 / 0.22);
   --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 0.42), 0 2px 4px -1px rgb(0 0 0 / 0.28);
   --shadow-modal: 0 20px 40px -8px rgb(0 0 0 / 0.55), 0 8px 16px -4px rgb(0 0 0 / 0.35);
+}
+
+/* Every bare `border` / `border-b` resolves to the theme's border colour rather
+   than Tailwind preflight's #e5e7eb. Ported components assume this rule exists. */
+@layer base {
+  * {
+    @apply border-[color:var(--border)];
+  }
 }
 
 /* ---- Token-driven utilities the primitives rely on (ported from PM) ---- */
@@ -307,3 +361,215 @@ button,input,textarea,select{font-family:var(--plumo-font)}
 @media (max-width:1400px){:root{--cs-qcols:28px 96px 88px minmax(200px,1fr) 152px 32px 84px 50px}[data-col="tags"]{display:none}}
 @media (max-width:1180px){:root{--cs-navw:64px;--cs-qcols:26px 92px minmax(180px,1fr) 140px 30px 82px 46px}[data-navlabel]{display:none !important}[data-col="prio"]{display:none}}
 @media (max-width:1080px){:root{--cs-filtw:0px}[data-filterrail]{display:none}}
+
+/* ============================================================
+   Motion system — ported verbatim from the plumo PM console
+   (src/app/globals.css:317-524). Keyframes + utilities.
+   Only transform/opacity for 60fps.
+   ============================================================ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up var(--dur) var(--ease-out) both;
+}
+.animate-scale-in {
+  animation: scale-in var(--dur) var(--ease-out) both;
+}
+.animate-fade-in {
+  animation: fade-in var(--dur) var(--ease-out) both;
+}
+
+/* Route transition — the new page slides in from the right (like turning to
+   the next page in a book) + fades. The scroll container clips overflow-x, so
+   the off-edge start never flashes a horizontal scrollbar; the transform
+   settles to `none`, leaving sticky children + scrolling unaffected. */
+@keyframes route-slide {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-route {
+  animation: route-slide var(--dur-slow) var(--ease-out) both;
+}
+
+/* Dropdown / popover / menu: quick fade + grow from the top edge. */
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-dropdown {
+  animation: dropdown-in var(--dur-fast) var(--ease-out) both;
+  transform-origin: top;
+}
+
+/* Modal panel: clearly-felt fade + scale-up + slight rise. */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-modal-in {
+  animation: modal-in var(--dur-slow) var(--ease-out) both;
+}
+
+/* Exit animations (two-phase: keep mounted, play out, then unmount). */
+@keyframes modal-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+}
+.animate-modal-out {
+  animation: modal-out var(--dur-fast) var(--ease-in) both;
+}
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.animate-fade-out {
+  animation: fade-out var(--dur-fast) var(--ease-in) both;
+}
+
+/* Card removal — fade + shrink + slide, then the list reflows. */
+@keyframes card-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9) translateX(-8px);
+  }
+}
+.card-exit {
+  animation: card-out var(--dur-fast) var(--ease-in) forwards;
+  pointer-events: none;
+}
+
+/* Stagger children: set style="--stagger:<index>" (or use nth-child fallback). */
+.stagger > * {
+  animation: fade-up var(--dur) var(--ease-out) both;
+  animation-delay: calc(var(--stagger, 0) * 1ms);
+}
+.stagger > *:nth-child(1) {
+  --stagger: 0;
+}
+.stagger > *:nth-child(2) {
+  --stagger: 30;
+}
+.stagger > *:nth-child(3) {
+  --stagger: 60;
+}
+.stagger > *:nth-child(4) {
+  --stagger: 90;
+}
+.stagger > *:nth-child(5) {
+  --stagger: 120;
+}
+.stagger > *:nth-child(6) {
+  --stagger: 150;
+}
+.stagger > *:nth-child(7) {
+  --stagger: 180;
+}
+.stagger > *:nth-child(8) {
+  --stagger: 210;
+}
+
+/* Smooth state changes app-wide. `button:not([disabled])` outranks Tailwind's
+   .transition-colors / .transition-all so `transform` is always animated —
+   which is what lets hand-rolled buttons (not just <Button>) press smoothly. */
+button:not([disabled]),
+a,
+[role='button'],
+summary,
+label[for] {
+  transition-property:
+    color, background-color, border-color, box-shadow, transform, opacity, filter;
+  transition-duration: var(--dur-instant);
+  transition-timing-function: var(--ease-out);
+}
+
+/* Universal press — every button dips on click, component or hand-rolled. */
+button:not([disabled]):active,
+[role='button']:not([aria-disabled='true']):active {
+  transform: scale(0.98);
+}
+
+/* Form controls: ease the focus ring + border, not transform. */
+input,
+textarea,
+select {
+  transition-property: box-shadow, border-color, background-color;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+}
+
+/* Opt-in card/row tactility: subtle lift on hover, press-in on click. */
+.interactive {
+  transition-property: transform, box-shadow, background-color, border-color;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+  will-change: transform;
+}
+.interactive:hover {
+  transform: translateY(-1px);
+}
+.interactive:active {
+  transform: translateY(0) scale(0.99);
+  transition-duration: var(--dur-instant);
+}
