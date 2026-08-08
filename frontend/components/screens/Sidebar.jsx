@@ -67,9 +67,13 @@ export default function Sidebar({ V, isMobile = false }) {
       className={cn(
         'flex-none flex flex-col bg-surface border-r border-[color:var(--border)] overflow-hidden',
         'transition-[width] duration-[var(--dur)] ease-[cubic-bezier(0.2,0,0,1)]',
+        // Both widths are classes, the way PM writes them (`Sidebar.tsx:422`:
+        // `isCollapsed ? 'w-12' : 'w-[240px]'`). CS said the same thing through
+        // `--cs-navw` on the element plus a `[data-cs-nav="off"]` rule on
+        // <html>, so the width lived two files away from what it sized.
+        collapsed ? 'w-16' : 'w-[236px]',
         isMobile && 'w-full h-full',
       )}
-      style={isMobile ? undefined : { width: 'var(--cs-navw)' }}
     >
       {/* PM `Sidebar/Sidebar.tsx:429-443` */}
       {isMobile && (

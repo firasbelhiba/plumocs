@@ -17,7 +17,6 @@ import Settings from './screens/Settings';
 import { NotFound, Oops } from './screens/EdgeScreens';
 import Overlays from './screens/Overlays';
 import { LogoLoader } from './common';
-import { sx } from './sx';
 
 /**
  * "30m" / "4h" / "2d" → minutes, and back. SLA targets are stored as a minute
@@ -325,7 +324,6 @@ export default class Console extends React.Component {
     if (p.simulateFailures) seed.failMode = true;
     if (p.startScreen && p.startScreen !== 'ticket' && p.startScreen !== 'login') seed.screen = p.startScreen;
     if (Object.keys(seed).length) this.setState(seed);
-    this.syncDoc();
     // Read the PM callback outcome before anything else can navigate away, then
     // ask whether this deployment offers the link at all.
     // Before anything else: a returning plumo sign-in carries its tokens in the
@@ -438,18 +436,13 @@ export default class Console extends React.Component {
       this.loadCounts();
     }, 3000);
   }
-  /** The rail's width only — the theme class and data-density belong to
-      ThemeProvider, and pane *visibility* now belongs to the panes themselves.
-      `csRail` and `csFilters` are gone with the two global attribute rules they
-      fed: a pane that has to answer to a toggle and a breakpoint at the same
-      time cannot be driven from a selector on `<html>`. */
-  syncDoc() {
-    const r = document.documentElement;
-    r.dataset.csNav = this.state.nav ? 'on' : 'off';
-    const accent = (this.props || {}).accent;
-    r.style.removeProperty('--cs-brand');
-    if (accent) r.style.setProperty('--cs-accent-src', accent);
-  }
+  /* `syncDoc()` is gone. The theme class and `data-density` went to
+     ThemeProvider (item 12); pane *visibility* went to the panes (item 42); and
+     the last thing left — `data-cs-nav`, which existed only to feed
+     `[data-cs-nav="off"]{--cs-navw:64px}` — went with `--cs-navw` itself, now
+     that `Sidebar` writes both of its widths as classes the way PM's does. The
+     never-passed `accent` prop, which wrote `--cs-accent-src`, went too: there
+     is one brand anchor and it lives in globals.css. */
 
   me() {
     const u = this.api?.currentUser;
@@ -652,7 +645,7 @@ export default class Console extends React.Component {
   setSort = (v) => { this.setState({ sort: v }, () => this.loadQueue({ noFail: true })); };
   cycleDensity = () => { if (this.context) this.context.setDensity(this.DENSITIES[(this.DENSITIES.indexOf(this.density()) + 1) % 3]); };
   toggleTheme = () => { if (this.context) this.context.toggleTheme(); };
-  toggleNav = () => this.setState(s => ({ nav: !s.nav }), () => this.syncDoc());
+  toggleNav = () => this.setState(s => ({ nav: !s.nav }));
   toggleFilters = () => this.setState(s => ({ filters: !s.filters }));
   toggleRail = () => this.setState(s => ({ rail: !s.rail }));
   openMobileNav = () => this.setState({ mobileNav: true });
@@ -2047,15 +2040,15 @@ export default class Console extends React.Component {
     return (
       <>
         {V.isBooting && (
-          <div className={sx('height:100vh;display:flex;align-items:center;justify-content:center;background:var(--cs-canvas)')}>
+          <div className="h-screen flex items-center justify-center bg-bg">
             <LogoLoader />
           </div>
         )}
         {V.isLogin && <Login V={V} />}
         {V.inApp && (
-          <div className={sx('height:100vh;display:flex;flex-direction:column;background:var(--cs-canvas);color:var(--cs-text);overflow:hidden')}>
+          <div className="h-screen flex flex-col overflow-hidden bg-bg text-fg">
             <Header V={V} />
-            <div className={sx('flex:1;display:flex;min-height:0')}>
+            <div className="flex-1 flex min-h-0">
               {/* Desktop rail. PM keeps it out of the flow entirely below `md`
                   (`DashboardLayout.tsx:76-80`) rather than shrinking it, and
                   wraps it in a `relative` box with no `overflow-hidden` so the
@@ -2101,7 +2094,7 @@ export default class Console extends React.Component {
                 </>
               )}
 
-              <main className={sx('flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden')}>
+              <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
                 {V.isQueueLike && <Queue V={V} />}
                 {V.isTicket && <Ticket V={V} />}
                 {V.isCustomers && <Customers V={V} />}

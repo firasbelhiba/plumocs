@@ -1,63 +1,149 @@
 'use client';
 
-import { sx } from '../sx';
 import { buttonVariants } from '../common/Button';
 import { cn } from '@/lib/utils';
-import { Breadcrumb, Button, CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, Input, Modal, Select, Switch, Textarea, UserAvatar } from '../common';
+import {
+  Badge,
+  Breadcrumb,
+  Button,
+  CHECKBOX,
+  CHECKBOX_STYLE,
+  CHECK_LABEL,
+  Input,
+  Modal,
+  Select,
+  Switch,
+  Textarea,
+  TonePill,
+  UserAvatar,
+} from '../common';
 
-/* Settings keeps its dense bespoke layout, but every control below borrows the
-   shared components' own class strings (buttonVariants) so geometry, colour and
-   focus rings match Button exactly. Text fields use <Input> itself — the local
-   copy of its class string was missing the disabled and error states, so a
-   disabled field here looked enabled. */
-/* `w-full` moved behind `md:`: below it the tab list is a horizontal strip, and
-   a full-width button in a row would give each tab the whole viewport. */
-const tabBtn = () => cn(
-  'md:w-full px-2.5 py-[9px] rounded-token-sm border-none text-[13px] text-left whitespace-nowrap cursor-pointer',
-  'transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring',
-);
+/* This screen used to be written in `sx()` — a runtime CSS-in-JS injector with
+   no counterpart in PM — against the `--cs-*` palette, ~150 call sites of raw
+   CSS that Tailwind, the token utilities and the purge step could not see. It is
+   now ordinary utility classes on the shared tokens, which means the five things
+   it had invented for itself are gone:
+
+     - its own table (9px/16px header, 10px/16px row, `tracking: 1.4px`) → the
+       shared `h-row-header` / `h-row` recipe item 39 gave Customers and Reports;
+     - its own 26×26 icon button → `Button size="icon"` (item 14);
+     - its own pills (`border-radius: 100px`) → `Badge` / `TonePill`, both
+       `rounded-token-sm`, because PM's badge is never a pill;
+     - its own card hover (`translateY(-4px)` over `--plumo-dur-default`, a
+       marketing-site token) → `.interactive`, PM's `translateY(-1px)` over
+       `--dur-fast`;
+     - `border: 0.5px solid` throughout → 1px, like every other surface in
+       either app. */
+
+/* Panel geometry, identical to `Customers.jsx` / `Reports.jsx`: flat, bordered,
+   no `shadow-card` — PM's card carries no shadow three times in four. */
+const PANEL = 'rounded-token bg-surface border border-[color:var(--border)]';
+const TABLE = PANEL + ' overflow-x-auto';
+const CARD = PANEL + ' p-4 flex flex-col gap-3';
+
+/* Table header and row from PM's reference table (`design-system/page.tsx:495,
+   508`), via the constants item 39 established on the other two screens. */
+const THEAD =
+  'grid gap-3 h-row-header px-3 border-b border-[color:var(--border)] bg-surface-2 items-center text-[11px] font-semibold uppercase tracking-wider text-fg-3';
+const TROW =
+  'grid gap-3 h-row px-3 border-b border-[color:var(--border)] last:border-b-0 items-center text-[13px] text-fg';
+
+const TEAM_COLS = 'minmax(170px,1.2fr) minmax(180px,1.4fr) 110px 100px 120px 92px';
+const INVITE_COLS = 'minmax(180px,1.4fr) 110px minmax(130px,1fr) 120px 92px';
+const SLA_COLS = 'minmax(140px,1fr) minmax(140px,1fr) 140px 130px 150px 70px';
+const HOURS_COLS = '130px 1fr 1fr 70px';
+const TAG_COLS = '1fr 90px 80px';
+const HOOK_COLS = 'minmax(240px,1.6fr) minmax(180px,1fr) 110px 140px';
+const KEY_COLS = 'minmax(180px,1.4fr) 130px 130px 110px 90px';
+
+/* PM's settings pages open with `text-[24px] font-semibold tracking-tight` over
+   a `text-[13px] text-fg-2 mt-1` subtitle (`settings/notifications/page.tsx:
+   137-144`); the section headings inside a card are `text-[14px] font-semibold`
+   (`NotificationPreferencesSection.tsx:73`). */
+const PAGE_TITLE = 'text-[24px] font-semibold tracking-tight text-fg';
+const PAGE_SUB = 'text-[13px] text-fg-2 mt-1';
+const CARD_TITLE = 'text-[14px] font-semibold text-fg';
+const CARD_SUB = 'text-[13px] text-fg-2';
+
+/* A hint where there is nothing to list yet — bordered, dashed, 1px. */
+const HINT =
+  'rounded-token border border-dashed border-[color:var(--border)] px-4 py-3 text-[12.5px] text-fg-2 leading-relaxed';
+
 const editBtn = () => buttonVariants({ variant: 'outline', size: 'sm' });
 const iconBtn = () => buttonVariants({ variant: 'outline', size: 'icon' });
 const primaryBtn = () => cn(buttonVariants({ variant: 'primary', size: 'md' }), 'whitespace-nowrap');
 
+/* The tab rail, on PM's own settings rail (`settings/layout.tsx:305-309`):
+   `h-8 px-2 rounded-token-sm text-[13px]`, active raised onto `bg-surface`
+   against the rail's `bg-surface-2`. This replaces the `[data-on]` token trio
+   (`--cs-onbg` / `--cs-onfg` / `--cs-onw`), which said the same thing through a
+   global attribute selector PM has no analogue for.
+   `md:w-full` only: below `md` the rail is a horizontal strip, and a full-width
+   button in a row would give each tab the whole viewport. */
+const TAB = 'md:w-full flex items-center h-8 px-2 rounded-token-sm text-[13px] whitespace-nowrap cursor-pointer transition-colors focus-ring';
+const TAB_ON = 'bg-surface text-fg shadow-card';
+const TAB_OFF = 'text-fg-2 hover:bg-surface hover:text-fg';
+
+const TABS = [
+  ['overview', 'Overview'],
+  ['team', 'Team & users'],
+  ['sla', 'SLA policies'],
+  ['hours', 'Business hours'],
+  ['canned', 'Canned responses'],
+  ['tags', 'Tags'],
+  ['hooks', 'Webhooks'],
+  ['keys', 'API keys'],
+  ['email', 'Email & channels'],
+];
+
 /**
  * A panel whose rows could not be fetched says so, in place, rather than
  * showing the copy bootstrap happened to leave behind as if it were current.
+ * Same recipe as the modal's error banner two hundred lines below — it used to
+ * borrow the SLA-breach tone, which is a support-domain colour standing in for a
+ * plain failure.
  */
 const LoadNote = ({ children }) => (
-  <span data-tone="sla-breach" className={sx('font-size:12.5px;padding:8px 12px;border-radius:var(--cs-r-sm);background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
+  <div className="px-3 py-2.5 rounded-token-sm text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
     {children}
-  </span>
+  </div>
+);
+
+const Ellipsis = ({ className, children }) => (
+  <span className={cn('truncate', className)}>{children}</span>
 );
 
 export default function Settings({ V }) {
   return (
-    // The tab rail cannot be a 210px column beside a 720px pane at 375px, so it
+    // The tab rail cannot be a 240px column beside a 720px pane at 375px, so it
     // turns the corner: a horizontal scrolling strip under the header below
     // `md`, PM's own shape for a tab row (`AdminSettingsSection.tsx:89`), and
-    // the vertical rail from `md` up. Both these two elements had to come off
-    // `sx()` to say that — `sx` injects its sheet into `<head>` at runtime, so
-    // it lands after Tailwind's and wins every `display` or `width` tie.
+    // the vertical rail from `md` up.
     <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
       <aside
         data-scroll
         className={cn(
-          'flex-none flex gap-0.5 px-3 py-2 overflow-x-auto bg-[color:var(--cs-surface)]',
-          'border-b border-[color:var(--cs-border)]',
-          'md:w-[210px] md:flex-col md:py-4 md:overflow-x-visible md:overflow-y-auto',
-          'md:border-b-0 md:border-r md:border-[color:var(--cs-border)]',
+          'flex-none flex gap-0.5 px-2 py-2 overflow-x-auto bg-surface-2 scrollbar-hidden',
+          'border-b border-[color:var(--border)]',
+          // 240px and `bg-surface-2` are PM's settings rail verbatim
+          // (`settings/layout.tsx:275-277`).
+          'md:w-[240px] md:flex-col md:overflow-x-visible md:overflow-y-auto',
+          'md:border-b-0 md:border-r md:border-[color:var(--border)]',
         )}
       >
-        <span className={sx('font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--cs-brand);font-weight:500;padding:4px 10px 10px') + ' hidden md:block'}>settings</span>
-        <button onClick={V.setSettingsTab} data-v="overview" data-on={String(V.tabOverview)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Overview</button>
-        <button onClick={V.setSettingsTab} data-v="team" data-on={String(V.tabTeam)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Team &amp; users</button>
-        <button onClick={V.setSettingsTab} data-v="sla" data-on={String(V.tabSla)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>SLA policies</button>
-        <button onClick={V.setSettingsTab} data-v="hours" data-on={String(V.tabHours)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Business hours</button>
-        <button onClick={V.setSettingsTab} data-v="canned" data-on={String(V.tabCanned)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Canned responses</button>
-        <button onClick={V.setSettingsTab} data-v="tags" data-on={String(V.tabTags)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Tags</button>
-        <button onClick={V.setSettingsTab} data-v="hooks" data-on={String(V.tabHooks)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Webhooks</button>
-        <button onClick={V.setSettingsTab} data-v="keys" data-on={String(V.tabKeys)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>API keys</button>
-        <button onClick={V.setSettingsTab} data-v="email" data-on={String(V.tabEmail)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Email &amp; channels</button>
+        <span className="hidden md:block px-2 pt-2 pb-1 text-[11px] font-mono font-semibold uppercase tracking-wider text-fg-3">
+          Settings
+        </span>
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            onClick={V.setSettingsTab}
+            data-v={key}
+            className={cn(TAB, V.settingsTab === key ? TAB_ON : TAB_OFF)}
+          >
+            {label}
+          </button>
+        ))}
       </aside>
 
       {/* PM's settings pages cap their content at 720px and centre it (7 pages,
@@ -66,14 +152,12 @@ export default function Settings({ V }) {
           the cap on the page inside a full-bleed scroll container; here the
           pane is the scroll container, so the cap sits on it directly.
 
-          The padding is PM's too. This div is the direct analogue of PM's
-          settings content pane (`settings/layout.tsx:343`, `px-8 py-8`) — the
-          very pane item 37 said CS had nothing to inherit from, which is true
-          of Account but not of here. It is flat 32px in PM, with no breakpoint,
-          so it is flat 32px here. Left at 22/24 it would have been the one
-          720px settings surface in CS not sharing Account's padding, and the
-          two were identical before this batch. */}
-      <div data-scroll className={sx('flex:1;min-width:0;max-width:720px;margin-inline:auto;overflow-y:auto;padding:32px;display:flex;flex-direction:column;gap:16px')}>
+          The padding is PM's too — its settings content pane is a flat `px-8
+          py-8` with no breakpoint (`settings/layout.tsx:343`). */}
+      <div
+        data-scroll
+        className="flex-1 min-w-0 max-w-[720px] mx-auto overflow-y-auto p-8 flex flex-col gap-4"
+      >
         <Breadcrumb
           items={[{ label: 'Home' }, { label: 'Settings' }].concat(
             V.settingsTabLabel ? [{ label: V.settingsTabLabel }] : [],
@@ -81,31 +165,47 @@ export default function Settings({ V }) {
         />
 
         {V.tabOverview && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px')}>
-            <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Settings</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>Eight panels. Everything here is shared by the whole instance, so changes touch every agent.</p>
+          <div className="flex flex-col gap-4">
+            <div>
+              <h1 className={PAGE_TITLE}>Settings</h1>
+              <p className={PAGE_SUB}>
+                Eight panels. Everything here is shared by the whole instance, so changes touch
+                every agent.
+              </p>
             </div>
-            <div className={sx('display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px')}>
-              {V.settingsCards.map(c => (
-                <button key={c.v} onClick={V.setSettingsTab} data-v={c.v} className={sx('display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:var(--cs-cardpad);border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);cursor:pointer;text-align:left;transition:transform var(--plumo-dur-default) var(--plumo-ease)', { hover: 'transform:translateY(-4px)' })}>
-                  <span className={sx('font-size:14.5px;font-weight:500')}>{c.name}</span>
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.5')}>{c.blurb}</span>
-                  <span className={sx('margin-top:2px;padding:2px 9px;border-radius:100px;background:var(--cs-soft);font-size:11.5px;color:var(--cs-brand-ink)')}>{c.meta}</span>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-3">
+              {V.settingsCards.map((c) => (
+                // `.interactive` is PM's opt-in card tactility: -1px on
+                // `--dur-fast`, where this card used to lift 4px over 250ms on
+                // the marketing site's overshoot curve.
+                <button
+                  key={c.v}
+                  onClick={V.setSettingsTab}
+                  data-v={c.v}
+                  className={cn(
+                    PANEL,
+                    'interactive p-4 flex flex-col items-start gap-1.5 text-left cursor-pointer focus-ring',
+                  )}
+                >
+                  <span className="text-[14px] font-semibold text-fg">{c.name}</span>
+                  <span className="text-[12.5px] text-fg-2 leading-relaxed">{c.blurb}</span>
+                  <Badge variant="primary" className="mt-0.5">
+                    {c.meta}
+                  </Badge>
                 </button>
               ))}
             </div>
 
             {V.pmAvailable && (
-              <div className={sx('display:flex;flex-direction:column;gap:10px;padding:var(--cs-cardpad);border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface)')}>
-                <div className={sx('display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap')}>
-                  <div className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px')}>
-                    <span className={sx('font-size:14.5px;font-weight:500')}>Plumo account</span>
-                    <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.5')}>
+              <div className={CARD}>
+                <div className="flex items-start gap-3 flex-wrap">
+                  <div className="flex-1 min-w-[220px]">
+                    <span className={CARD_TITLE}>Plumo account</span>
+                    <p className="text-[12.5px] text-fg-2 leading-relaxed mt-1">
                       {V.pmLinked
                         ? 'This desk is connected to plumo. Your account and workspace are linked.'
                         : 'Connect this desk to your plumo workspace, so the same people and projects line up across both.'}
-                    </span>
+                    </p>
                   </div>
                   <button
                     onClick={V.pmLinked ? V.disconnectPm : V.connectPm}
@@ -116,7 +216,9 @@ export default function Settings({ V }) {
                   </button>
                 </div>
                 {V.pmNotice && (
-                  <span className={sx('font-size:12.5px;color:var(--cs-brand-ink);background:var(--cs-soft);padding:6px 10px;border-radius:var(--cs-r-sm)')}>{V.pmNotice}</span>
+                  <span className="text-[12.5px] text-[color:var(--primary)] bg-[color:var(--primary-soft)] px-2.5 py-1.5 rounded-token-sm">
+                    {V.pmNotice}
+                  </span>
                 )}
               </div>
             )}
@@ -124,40 +226,84 @@ export default function Settings({ V }) {
         )}
 
         {V.tabTeam && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px')}>
-            <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
-              <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Team &amp; users</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Eight people across two teams. Roles decide what each of them can reach.</p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex-1 min-w-[200px]">
+                <h1 className={PAGE_TITLE}>Team &amp; users</h1>
+                <p className={PAGE_SUB}>
+                  Eight people across two teams. Roles decide what each of them can reach.
+                </p>
               </div>
-              {V.canInvite && <button onClick={V.openInvite} className={primaryBtn()}>Invite someone</button>}
+              {V.canInvite && (
+                <button onClick={V.openInvite} className={primaryBtn()}>
+                  Invite someone
+                </button>
+              )}
             </div>
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
-              <div className={sx('display:grid;grid-template-columns:minmax(170px,1.2fr) minmax(180px,1.4fr) 110px 100px 120px 92px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
-                <span>name</span><span>email</span><span>role</span><span>team</span><span>last active</span><span className={sx('text-align:right')}>actions</span>
+            <div className={TABLE}>
+              <div className={THEAD} style={{ gridTemplateColumns: TEAM_COLS }}>
+                <span>name</span>
+                <span>email</span>
+                <span>role</span>
+                <span>team</span>
+                <span>last active</span>
+                <span className="text-right">actions</span>
               </div>
-              {V.teamRows.map(u => (
-                <div key={u.id} className={sx('display:grid;grid-template-columns:minmax(170px,1.2fr) minmax(180px,1.4fr) 110px 100px 120px 92px;gap:12px;padding:10px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                  <span className={sx('display:flex;align-items:center;gap:9px;min-width:0')}>
-                    <span className={sx('position:relative;flex:none')}>
-                      <UserAvatar firstName={(u.name||"").split(" ")[0]} lastName={(u.name||"").split(" ").slice(1).join(" ")} size="sm" />
-                      <i data-tone={u.availTone} className={sx('position:absolute;right:-1px;bottom:-1px;width:8px;height:8px;border-radius:50%;background:var(--tone-hue);border:2px solid var(--cs-surface)')}></i>
+              {V.teamRows.map((u) => (
+                <div key={u.id} className={TROW} style={{ gridTemplateColumns: TEAM_COLS }}>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <span className="relative flex-none">
+                      <UserAvatar
+                        firstName={(u.name || '').split(' ')[0]}
+                        lastName={(u.name || '').split(' ').slice(1).join(' ')}
+                        size="sm"
+                      />
+                      {/* `[data-tone]` is the support-domain palette both apps
+                          agree CS keeps — availability has no PM analogue. */}
+                      <i
+                        data-tone={u.availTone}
+                        className="absolute -right-px -bottom-px w-2 h-2 rounded-full border-2 border-[color:var(--surface)]"
+                        style={{ background: 'var(--tone-hue)' }}
+                      />
                     </span>
-                    <span className={sx('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{u.name}</span>
+                    <Ellipsis>{u.name}</Ellipsis>
                   </span>
-                  <span className={sx('color:var(--cs-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{u.email}</span>
-                  <span data-tone="st-open" className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>{u.role}</span>
-                  <span className={sx('color:var(--cs-muted)')}>{u.teamName}</span>
-                  <span className={sx('color:var(--cs-muted);font-size:12.5px;font-variant-numeric:tabular-nums')}>{u.lastRel}</span>
+                  <Ellipsis className="text-fg-2">{u.email}</Ellipsis>
+                  <TonePill tone="st-open" size="md">
+                    {u.role}
+                  </TonePill>
+                  <span className="text-fg-2">{u.teamName}</span>
+                  <span className="text-fg-2 text-[12.5px] tabular-nums">{u.lastRel}</span>
                   {/* Both writes are admin-only on the server. A lead sees no
                       buttons rather than buttons that answer 403, and nobody
                       sees a deactivate control on their own row — it would
                       revoke their own tokens and sign them out mid-sentence. */}
-                  <span className={sx('display:flex;gap:6px;justify-content:flex-end')}>
-                    {u.canEdit && <button onClick={V.editUser} data-id={u.id} className={editBtn()}>Edit</button>}
+                  <span className="flex gap-1.5 justify-end">
+                    {u.canEdit && (
+                      <button onClick={V.editUser} data-id={u.id} className={editBtn()}>
+                        Edit
+                      </button>
+                    )}
                     {u.canDeactivate && (
-                      <button onClick={V.askDeactivate} data-id={u.id} data-name={u.name} aria-label={'Deactivate ' + u.name} title={'Deactivate ' + u.name} className={iconBtn()}>
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                      <button
+                        onClick={V.askDeactivate}
+                        data-id={u.id}
+                        data-name={u.name}
+                        aria-label={'Deactivate ' + u.name}
+                        title={'Deactivate ' + u.name}
+                        className={iconBtn()}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="13"
+                          height="13"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        >
+                          <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
                       </button>
                     )}
                   </span>
@@ -167,42 +313,52 @@ export default function Settings({ V }) {
 
             {/* pending invitations — people who have been asked but haven't arrived yet */}
             {V.canInvite && (
-              <div className={sx('display:flex;flex-direction:column;gap:10px')}>
-                <div className={sx('display:flex;flex-direction:column;gap:3px')}>
-                  <span className={sx('font-size:14.5px;font-weight:500')}>Pending invitations</span>
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>Each link works once, and only for seven days.</span>
+              <div className="flex flex-col gap-2.5">
+                <div>
+                  <span className={CARD_TITLE}>Pending invitations</span>
+                  <p className={CARD_SUB}>Each link works once, and only for seven days.</p>
                 </div>
 
-                {V.invitesLoading && (
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>Loading…</span>
-                )}
+                {V.invitesLoading && <span className="text-[12.5px] text-fg-2">Loading…</span>}
 
                 {V.invitesFailed && (
-                  <span data-tone="sla-breach" className={sx('font-size:12.5px;padding:8px 12px;border-radius:var(--cs-r-sm);background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
+                  <LoadNote>
                     Failed to load the invitations. The people above are unaffected.
-                  </span>
+                  </LoadNote>
                 )}
 
                 {!V.invitesLoading && !V.invitesFailed && !V.hasInvites && (
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md)')}>
-                    Nobody is waiting on an invitation right now.
-                  </span>
+                  <span className={HINT}>Nobody is waiting on an invitation right now.</span>
                 )}
 
                 {V.hasInvites && (
-                  <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
-                    <div className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 110px minmax(130px,1fr) 120px 92px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
-                      <span>email</span><span>role</span><span>invited by</span><span>expires</span><span className={sx('text-align:right')}>actions</span>
+                  <div className={TABLE}>
+                    <div className={THEAD} style={{ gridTemplateColumns: INVITE_COLS }}>
+                      <span>email</span>
+                      <span>role</span>
+                      <span>invited by</span>
+                      <span>expires</span>
+                      <span className="text-right">actions</span>
                     </div>
-                    {V.inviteRows.map(i => (
-                      <div key={i.id} className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 110px minmax(130px,1fr) 120px 92px;gap:12px;padding:10px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                        <span className={sx('overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{i.email}</span>
-                        <span data-tone="st-open" className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>{i.role}</span>
-                        <span className={sx('color:var(--cs-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{i.invitedBy} · {i.sentRel}</span>
-                        <span data-tone={i.tone} className={sx('padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}>{i.expiresLabel}</span>
-                        <span className={sx('display:flex;justify-content:flex-end')}>
-                          <button onClick={V.revokeInvite} data-id={i.id} data-email={i.email}
-                            className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:100px;background:transparent;color:var(--cs-muted);font-size:12px;cursor:pointer', { hover: 'background:var(--cs-hover);color:var(--cs-text)' })}>
+                    {V.inviteRows.map((i) => (
+                      <div key={i.id} className={TROW} style={{ gridTemplateColumns: INVITE_COLS }}>
+                        <Ellipsis>{i.email}</Ellipsis>
+                        <TonePill tone="st-open" size="md">
+                          {i.role}
+                        </TonePill>
+                        <Ellipsis className="text-fg-2">
+                          {i.invitedBy} · {i.sentRel}
+                        </Ellipsis>
+                        <TonePill tone={i.tone} size="md">
+                          {i.expiresLabel}
+                        </TonePill>
+                        <span className="flex justify-end">
+                          <button
+                            onClick={V.revokeInvite}
+                            data-id={i.id}
+                            data-email={i.email}
+                            className={editBtn()}
+                          >
                             Revoke
                           </button>
                         </span>
@@ -220,7 +376,9 @@ export default function Settings({ V }) {
               size="md"
               footer={
                 <>
-                  <Button variant="outline" size="md" onClick={V.closeInvite}>Cancel</Button>
+                  <Button variant="outline" size="md" onClick={V.closeInvite}>
+                    Cancel
+                  </Button>
                   {/* PM keeps the label still and puts the progress in the
                       button's own spinner (`EditProjectMemberTagModal.tsx:154`)
                       rather than swapping the words out under the cursor. */}
@@ -274,28 +432,44 @@ export default function Settings({ V }) {
         )}
 
         {V.tabSla && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px')}>
-            <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
-              <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>SLA policies</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Targets by priority. Clocks pause outside business hours, and while you are waiting on someone.</p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex-1 min-w-[200px]">
+                <h1 className={PAGE_TITLE}>SLA policies</h1>
+                <p className={PAGE_SUB}>
+                  Targets by priority. Clocks pause outside business hours, and while you are
+                  waiting on someone.
+                </p>
               </div>
-              {V.canManageDesk && <button onClick={V.newSlaPolicy} className={primaryBtn()}>Add a policy</button>}
+              {V.canManageDesk && (
+                <button onClick={V.newSlaPolicy} className={primaryBtn()}>
+                  Add a policy
+                </button>
+              )}
             </div>
             {V.slaErr && <LoadNote>{V.slaErr}</LoadNote>}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
-              <div className={sx('display:grid;grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) 140px 130px 150px 70px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
-                <span>name</span><span>priority</span><span>first response</span><span>resolution</span><span>hours</span><span className={sx('text-align:right')}></span>
+            <div className={TABLE}>
+              <div className={THEAD} style={{ gridTemplateColumns: SLA_COLS }}>
+                <span>name</span>
+                <span>priority</span>
+                <span>first response</span>
+                <span>resolution</span>
+                <span>hours</span>
+                <span className="text-right" />
               </div>
-              {V.slaRows.map(p => (
-                <div key={p.id} className={sx('display:grid;grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) 140px 130px 150px 70px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                  <span className={sx('font-weight:500')}>{p.name}</span>
-                  <span className={sx('color:var(--cs-muted)')}>{p.priority}</span>
-                  <span className={sx('font-variant-numeric:tabular-nums')}>{p.firstResponse}</span>
-                  <span className={sx('font-variant-numeric:tabular-nums')}>{p.resolution}</span>
-                  <span className={sx('color:var(--cs-muted)')}>{p.hours}</span>
-                  <span className={sx('text-align:right')}>
-                    {V.canManageDesk && <button onClick={V.editSlaPolicy} data-id={p.id} className={editBtn()}>Edit</button>}
+              {V.slaRows.map((p) => (
+                <div key={p.id} className={TROW} style={{ gridTemplateColumns: SLA_COLS }}>
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-fg-2">{p.priority}</span>
+                  <span className="tabular-nums">{p.firstResponse}</span>
+                  <span className="tabular-nums">{p.resolution}</span>
+                  <span className="text-fg-2">{p.hours}</span>
+                  <span className="text-right">
+                    {V.canManageDesk && (
+                      <button onClick={V.editSlaPolicy} data-id={p.id} className={editBtn()}>
+                        Edit
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
@@ -307,10 +481,10 @@ export default function Settings({ V }) {
         )}
 
         {V.tabHours && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:680px')}>
-            <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Business hours</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>SLA clocks rest when your team does.</p>
+          <div className="flex flex-col gap-4 max-w-[680px]">
+            <div>
+              <h1 className={PAGE_TITLE}>Business hours</h1>
+              <p className={PAGE_SUB}>SLA clocks rest when your team does.</p>
             </div>
             {V.hoursErr && <LoadNote>{V.hoursErr}</LoadNote>}
 
@@ -318,24 +492,24 @@ export default function Settings({ V }) {
                 clocks then run around the clock. Say that rather than show an
                 empty week with every switch greyed out and no explanation. */}
             {!V.hoursReady && !V.hoursErr && (
-              <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md);line-height:1.55')}>
-                This desk has no working calendar yet, so SLA clocks run 24/7. One has to be created on
-                the server before the days below can be switched on and off here.
+              <span className={HINT}>
+                This desk has no working calendar yet, so SLA clocks run 24/7. One has to be created
+                on the server before the days below can be switched on and off here.
               </span>
             )}
 
             {/* The tick is bound to what the server confirmed, not to a local
                 guess: a failed write leaves the day exactly as it was and says
                 so, instead of a tick that stays put over an unchanged schedule. */}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
-              {V.hoursRows.map(d => (
-                <div key={d.day} className={sx('display:grid;grid-template-columns:130px 1fr 1fr 70px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
+            <div className={TABLE}>
+              {V.hoursRows.map((d) => (
+                <div key={d.day} className={TROW} style={{ gridTemplateColumns: HOURS_COLS }}>
                   <span>{d.day}</span>
-                  <span className={sx('font-variant-numeric:tabular-nums;color:var(--cs-muted)')}>{d.open}</span>
-                  <span className={sx('font-variant-numeric:tabular-nums;color:var(--cs-muted)')}>{d.close}</span>
+                  <span className="tabular-nums text-fg-2">{d.open}</span>
+                  <span className="tabular-nums text-fg-2">{d.close}</span>
                   {/* The label is what makes the track clickable — Switch's
                       input is sr-only and the component is not a label itself. */}
-                  <label className={sx('text-align:right;cursor:pointer')}>
+                  <label className="text-right cursor-pointer">
                     {/* Writes on flip, so it reads as a switch. */}
                     <Switch
                       checked={d.on}
@@ -348,30 +522,51 @@ export default function Settings({ V }) {
                 </div>
               ))}
             </div>
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:var(--cs-cardpad);display:flex;flex-direction:column;gap:10px')}>
-              <div className={sx('display:flex;flex-direction:column;gap:3px')}>
-                <span className={sx('font-size:13.5px;font-weight:500')}>Holidays</span>
-                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>The clocks rest on these days too, so no target ever lands on one.</span>
+            <div className={CARD}>
+              <div>
+                <span className={CARD_TITLE}>Holidays</span>
+                <p className={CARD_SUB}>
+                  The clocks rest on these days too, so no target ever lands on one.
+                </p>
               </div>
-              <div className={sx('display:flex;gap:6px;flex-wrap:wrap;align-items:center')}>
-                {V.holidays.map(h => (
-                  <span key={h.date} className={sx('display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:100px;background:var(--cs-soft);font-size:12.5px')}>
+              <div className="flex gap-1.5 flex-wrap items-center">
+                {V.holidays.map((h) => (
+                  <Badge key={h.date} variant="primary" className="h-[22px] px-2 text-[12px] gap-1">
                     {h.label}
                     {V.canManageDesk && (
-                      <button onClick={V.removeHoliday} data-date={h.date} disabled={V.hoursBusy} aria-label={'Stop resting on ' + h.label} className={sx('border:none;background:transparent;color:var(--cs-muted);font-size:13px;line-height:1;cursor:pointer;padding:0')}>×</button>
+                      <button
+                        onClick={V.removeHoliday}
+                        data-date={h.date}
+                        disabled={V.hoursBusy}
+                        aria-label={'Stop resting on ' + h.label}
+                        className="rounded-full leading-none cursor-pointer focus-ring opacity-70 hover:opacity-100"
+                      >
+                        ×
+                      </button>
                     )}
-                  </span>
+                  </Badge>
                 ))}
                 {!V.hasHolidays && (
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>None yet. Every working day counts.</span>
+                  <span className="text-[12.5px] text-fg-2">None yet. Every working day counts.</span>
                 )}
               </div>
               {V.canManageDesk && (
-                <div className={sx('display:flex;gap:8px;align-items:center;flex-wrap:wrap')}>
-                  <div className={sx('width:200px')}>
-                    <Input type="date" value={V.holidayDraft} onChange={V.onHolidayDraft} aria-label="Holiday date" />
+                <div className="flex gap-2 items-center flex-wrap">
+                  <div className="w-[200px]">
+                    <Input
+                      type="date"
+                      value={V.holidayDraft}
+                      onChange={V.onHolidayDraft}
+                      aria-label="Holiday date"
+                    />
                   </div>
-                  <button onClick={V.addHoliday} disabled={!V.hoursReady || V.hoursBusy} className={editBtn()}>Add a holiday</button>
+                  <button
+                    onClick={V.addHoliday}
+                    disabled={!V.hoursReady || V.hoursBusy}
+                    className={editBtn()}
+                  >
+                    Add a holiday
+                  </button>
                 </div>
               )}
             </div>
@@ -379,27 +574,35 @@ export default function Settings({ V }) {
         )}
 
         {V.tabCanned && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px')}>
-            <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
-              <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Canned responses</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Written once, so nobody has to find the words twice.</p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex-1 min-w-[200px]">
+                <h1 className={PAGE_TITLE}>Canned responses</h1>
+                <p className={PAGE_SUB}>Written once, so nobody has to find the words twice.</p>
               </div>
-              {V.canManageCanned && <button onClick={V.newCanned} className={primaryBtn()}>New response</button>}
+              {V.canManageCanned && (
+                <button onClick={V.newCanned} className={primaryBtn()}>
+                  New response
+                </button>
+              )}
             </div>
             {V.cannedErr && <LoadNote>{V.cannedErr}</LoadNote>}
-            <div className={sx('display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px')}>
-              {V.cannedRows.map(r => (
-                <div key={r.id} className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:var(--cs-cardpad);display:flex;flex-direction:column;gap:8px')}>
-                  <span className={sx('display:flex;align-items:center;gap:8px')}>
-                    <span className={sx('flex:1;font-size:13.5px;font-weight:500')}>{r.title}</span>
-                    <span className={sx('font-size:11.5px;color:var(--cs-muted)')}>{r.team}</span>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3">
+              {V.cannedRows.map((r) => (
+                <div key={r.id} className={PANEL + ' p-4 flex flex-col gap-2'}>
+                  <span className="flex items-center gap-2">
+                    <span className="flex-1 text-[13.5px] font-medium">{r.title}</span>
+                    <span className="text-[11.5px] text-fg-2">{r.team}</span>
                   </span>
-                  <p className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.55')}>{r.snippet}</p>
-                  <span className={sx('display:flex;align-items:center;gap:8px')}>
-                    <span className={sx('padding:2px 9px;border-radius:100px;background:var(--cs-soft);font-size:11.5px;color:var(--cs-muted)')}>{r.tagList}</span>
-                    <span className={sx('flex:1')}></span>
-                    {V.canManageCanned && <button onClick={V.editCanned} data-id={r.id} className={editBtn()}>Edit</button>}
+                  <p className="text-[12.5px] text-fg-2 leading-relaxed">{r.snippet}</p>
+                  <span className="flex items-center gap-2">
+                    <Badge>{r.tagList}</Badge>
+                    <span className="flex-1" />
+                    {V.canManageCanned && (
+                      <button onClick={V.editCanned} data-id={r.id} className={editBtn()}>
+                        Edit
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
@@ -408,49 +611,71 @@ export default function Settings({ V }) {
         )}
 
         {V.tabTags && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:620px')}>
-            <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Tags</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>How conversations get sorted. A key is written onto every conversation that wears it, so it never changes.</p>
+          <div className="flex flex-col gap-4 max-w-[620px]">
+            <div>
+              <h1 className={PAGE_TITLE}>Tags</h1>
+              <p className={PAGE_SUB}>
+                How conversations get sorted. A key is written onto every conversation that wears
+                it, so it never changes.
+              </p>
             </div>
             {V.tagsErr && <LoadNote>{V.tagsErr}</LoadNote>}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
-              {V.tagRows.map(t => (
-                <div key={t.id} className={sx('display:grid;grid-template-columns:1fr 90px 80px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                  <span data-tone={t.tone} className={sx('display:inline-flex;align-items:center;gap:7px;padding:3px 11px;border-radius:100px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}><i className={sx('width:7px;height:7px;border-radius:50%;background:var(--tone-hue)')}></i>{t.label}</span>
-                  <span className={sx('color:var(--cs-muted);font-variant-numeric:tabular-nums;font-size:12.5px')}>{t.count} conversations</span>
-                  <span className={sx('text-align:right')}>
-                    {V.canManageDesk && <button onClick={V.editTag} data-key={t.key} className={editBtn()}>Edit</button>}
+            <div className={TABLE}>
+              {V.tagRows.map((t) => (
+                <div key={t.id} className={TROW} style={{ gridTemplateColumns: TAG_COLS }}>
+                  <TonePill tone={t.tone} size="md" dot>
+                    {t.label}
+                  </TonePill>
+                  <span className="text-fg-2 tabular-nums text-[12.5px]">
+                    {t.count} conversations
+                  </span>
+                  <span className="text-right">
+                    {V.canManageDesk && (
+                      <button onClick={V.editTag} data-key={t.key} className={editBtn()}>
+                        Edit
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
             </div>
             {V.canManageDesk && (
-              <button onClick={V.newTag} className={sx('align-self:flex-start;padding:9px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:13px;cursor:pointer', { hover: 'color:var(--cs-brand);border-color:var(--cs-brand)' })}>+ New tag</button>
+              <Button variant="outline" size="sm" onClick={V.newTag} className="self-start">
+                + New tag
+              </Button>
             )}
           </div>
         )}
 
         {V.tabHooks && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px')}>
-            <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
-              <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Webhooks</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Where plumo tells other systems what happened.</p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex-1 min-w-[200px]">
+                <h1 className={PAGE_TITLE}>Webhooks</h1>
+                <p className={PAGE_SUB}>Where plumo tells other systems what happened.</p>
               </div>
-              {V.canManageDesk && <button onClick={V.newWebhook} className={primaryBtn()}>Add endpoint</button>}
+              {V.canManageDesk && (
+                <button onClick={V.newWebhook} className={primaryBtn()}>
+                  Add endpoint
+                </button>
+              )}
             </div>
             {V.hooksErr && <LoadNote>{V.hooksErr}</LoadNote>}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
-              <div className={sx('display:grid;grid-template-columns:minmax(240px,1.6fr) minmax(180px,1fr) 110px 140px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
-                <span>endpoint</span><span>events</span><span>status</span><span className={sx('text-align:right')}>last delivery</span>
+            <div className={TABLE}>
+              <div className={THEAD} style={{ gridTemplateColumns: HOOK_COLS }}>
+                <span>endpoint</span>
+                <span>events</span>
+                <span>status</span>
+                <span className="text-right">last delivery</span>
               </div>
-              {V.hookRows.map(w => (
-                <div key={w.id} className={sx('display:grid;grid-template-columns:minmax(240px,1.6fr) minmax(180px,1fr) 110px 140px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13px')}>
-                  <span className={sx('font-family:var(--plumo-font-mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{w.url}</span>
-                  <span className={sx('color:var(--cs-muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}>{w.events}</span>
-                  <span data-tone={w.tone} className={sx('display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}><i className={sx('width:6px;height:6px;border-radius:50%;background:var(--tone-hue)')}></i>{w.status}</span>
-                  <span className={sx('text-align:right;color:var(--cs-muted);font-size:12.5px')}>{w.last}</span>
+              {V.hookRows.map((w) => (
+                <div key={w.id} className={TROW} style={{ gridTemplateColumns: HOOK_COLS }}>
+                  <Ellipsis className="font-mono text-[12px]">{w.url}</Ellipsis>
+                  <Ellipsis className="text-fg-2 text-[12.5px]">{w.events}</Ellipsis>
+                  <TonePill tone={w.tone} size="md" dot>
+                    {w.status}
+                  </TonePill>
+                  <span className="text-right text-fg-2 text-[12.5px]">{w.last}</span>
                 </div>
               ))}
             </div>
@@ -458,18 +683,16 @@ export default function Settings({ V }) {
         )}
 
         {V.tabKeys && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px')}>
-            <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
-              <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>API keys</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>A key is shown once and never again.</p>
-              </div>
+          <div className="flex flex-col gap-4">
+            <div>
+              <h1 className={PAGE_TITLE}>API keys</h1>
+              <p className={PAGE_SUB}>A key is shown once and never again.</p>
             </div>
 
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:16px;display:flex;flex-direction:column;gap:12px')}>
-              <span className={sx('font-size:13.5px;font-weight:500')}>New key</span>
-              <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end')}>
-                <div className={sx('flex:1;min-width:200px')}>
+            <div className={CARD}>
+              <span className={CARD_TITLE}>New key</span>
+              <div className="flex gap-2.5 flex-wrap items-end">
+                <div className="flex-1 min-w-[200px]">
                   <Input
                     label="Name"
                     value={V.keyName}
@@ -477,60 +700,83 @@ export default function Settings({ V }) {
                     placeholder="4hacks chatbot"
                   />
                 </div>
-                <button onClick={V.genKey} className={primaryBtn()}>Generate key</button>
+                <button onClick={V.genKey} className={primaryBtn()}>
+                  Generate key
+                </button>
               </div>
-              <div className={sx('display:flex;flex-direction:column;gap:7px')}>
-                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>What is it for</span>
-                <div className={sx('display:flex;gap:7px;flex-wrap:wrap')}>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[12.5px] text-fg-2">What is it for</span>
+                <div className="flex gap-1.5 flex-wrap">
                   {V.keyKinds.map((k) => (
+                    // Selected/unselected on PM's own recipe — soft primary fill
+                    // with a primary border and label (`NavLink.tsx:32`) — in
+                    // place of the `[data-on]` token trio.
                     <button
                       key={k.id}
                       onClick={V.setKeyKind}
                       data-v={k.id}
-                      data-on={String(k.on)}
                       title={k.scopes.join(', ')}
-                      className={sx('padding:7px 13px;border-radius:100px;font-size:12.5px;cursor:pointer')}
-                      style={{ border: '1px solid var(--cs-onbd)', background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' }}
+                      className={cn(
+                        'h-btn-sm px-3 rounded-token-sm border text-[12.5px] cursor-pointer transition-colors focus-ring',
+                        k.on
+                          ? 'bg-[color:var(--primary-soft)] border-[color:var(--primary-soft-border)] text-[color:var(--primary)] font-medium'
+                          : 'bg-transparent border-[color:var(--border)] text-fg-2 hover:bg-surface-2 hover:text-fg',
+                      )}
                     >
                       {k.label}
                     </button>
                   ))}
                 </div>
-                <span className={sx('font-size:12px;color:var(--cs-muted)')}>
+                <span className="text-[12px] text-fg-2">
                   {(V.keyKinds.find((k) => k.on) || {}).hint}
                 </span>
               </div>
             </div>
             {V.hasSecret && (
-              <div data-tone="st-pending" className={'animate-fade-in ' + sx('display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--cs-r-md);background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));border:1px solid color-mix(in srgb, var(--tone-hue) 30%, transparent);flex-wrap:wrap')}>
-                <div className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px')}>
-                  <span className={sx("font-size:12.5px;color:var(--tone-fg);font-weight:500")}>Copy this now — it cannot be shown again</span>
-                  <span className={sx('font-family:var(--plumo-font-mono);font-size:13px;color:var(--cs-text);word-break:break-all')}>{V.secret}</span>
+              <div
+                data-tone="st-pending"
+                className="animate-fade-in flex items-center gap-3 flex-wrap px-4 py-3.5 rounded-token border"
+                style={{
+                  background: 'color-mix(in srgb, var(--tone-hue) 12%, var(--surface))',
+                  borderColor: 'color-mix(in srgb, var(--tone-hue) 30%, transparent)',
+                }}
+              >
+                <div className="flex-1 min-w-[220px] flex flex-col gap-1">
+                  <span className="text-[12.5px] font-medium" style={{ color: 'var(--tone-fg)' }}>
+                    Copy this now — it cannot be shown again
+                  </span>
+                  <span className="font-mono text-[13px] text-fg break-all">{V.secret}</span>
                 </div>
-                <button onClick={V.copySecret} className={sx('padding:8px 14px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12.5px;cursor:pointer')}>Copy</button>
-                <button onClick={V.hideKey} className={sx('padding:8px 14px;border:none;border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:12.5px;cursor:pointer')}>Done</button>
+                <Button variant="outline" size="sm" onClick={V.copySecret}>
+                  Copy
+                </Button>
+                <Button variant="ghost" size="sm" onClick={V.hideKey}>
+                  Done
+                </Button>
               </div>
             )}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
-              <div className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 130px 130px 110px 90px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
-                <span>name</span><span>scope</span><span>created</span><span className={sx('text-align:right')}>last used</span><span className={sx('text-align:right')}></span>
+            <div className={TABLE}>
+              <div className={THEAD} style={{ gridTemplateColumns: KEY_COLS }}>
+                <span>name</span>
+                <span>scope</span>
+                <span>created</span>
+                <span className="text-right">last used</span>
+                <span className="text-right" />
               </div>
-              {V.keyRows.map(k => (
-                <div key={k.id} className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 130px 130px 110px 90px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
-                  <span className={sx('display:flex;align-items:center;gap:7px')}>
-                    {k.name}
+              {V.keyRows.map((k) => (
+                <div key={k.id} className={TROW} style={{ gridTemplateColumns: KEY_COLS }}>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <Ellipsis>{k.name}</Ellipsis>
                     {k.active === false && (
-                      <span data-tone="st-closed" className={sx('font-size:11px;padding:1px 7px;border-radius:100px')}
-                        style={{ background: 'color-mix(in srgb, var(--tone-hue) 16%, transparent)', color: 'var(--tone-fg)' }}>Revoked</span>
+                      <TonePill tone="st-closed">Revoked</TonePill>
                     )}
                   </span>
-                  <span className={sx('color:var(--cs-muted)')}>{k.scope}</span>
-                  <span className={sx('color:var(--cs-muted);font-size:12.5px')}>{k.created}</span>
-                  <span className={sx('text-align:right;color:var(--cs-muted);font-size:12.5px')}>{k.last}</span>
-                  <span className={sx('text-align:right')}>
+                  <span className="text-fg-2">{k.scope}</span>
+                  <span className="text-fg-2 text-[12.5px]">{k.created}</span>
+                  <span className="text-right text-fg-2 text-[12.5px]">{k.last}</span>
+                  <span className="text-right">
                     {k.active !== false && (
-                      <button onClick={V.revokeKey} data-id={k.id}
-                        className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:100px;background:transparent;color:var(--cs-muted);font-size:12px;cursor:pointer')}>
+                      <button onClick={V.revokeKey} data-id={k.id} className={editBtn()}>
                         Revoke
                       </button>
                     )}
@@ -542,10 +788,10 @@ export default function Settings({ V }) {
         )}
 
         {V.tabEmail && (
-          <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:680px')}>
-            <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Email &amp; channels</h2>
-              <p className={sx("font-size:13px;color:var(--cs-muted)")}>Where conversations come in.</p>
+          <div className="flex flex-col gap-4 max-w-[680px]">
+            <div>
+              <h1 className={PAGE_TITLE}>Email &amp; channels</h1>
+              <p className={PAGE_SUB}>Where conversations come in.</p>
             </div>
 
             {/* The receiving address is the only setting on this screen with
@@ -553,25 +799,24 @@ export default function Settings({ V }) {
                 buttons that used to sit under it had no endpoint at all — they
                 showed a toast and changed nothing, so they are gone. */}
             {!V.canManageDesk ? (
-              <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md)')}>
-                The receiving address is an admin setting.
-              </span>
+              <span className={HINT}>The receiving address is an admin setting.</span>
             ) : (
-              <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:20px;display:flex;flex-direction:column;gap:12px')}>
-                <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-                  <span className={sx('font-size:14px;font-weight:500')}>Inbound</span>
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.5')}>
-                    Mail sent to this address becomes a conversation on this desk. Leave it empty to stop
-                    receiving mail. Nothing already here is lost; new messages are simply refused.
-                  </span>
+              <div className={PANEL + ' p-5 flex flex-col gap-3'}>
+                <div>
+                  <span className={CARD_TITLE}>Inbound</span>
+                  <p className="text-[12.5px] text-fg-2 leading-relaxed mt-1">
+                    Mail sent to this address becomes a conversation on this desk. Leave it empty to
+                    stop receiving mail. Nothing already here is lost; new messages are simply
+                    refused.
+                  </p>
                 </div>
 
                 {V.emailErr && <LoadNote>{V.emailErr}</LoadNote>}
 
                 {/* The rejection sits under the address it is about, rather
                     than in a banner two rows above it. */}
-                <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start')}>
-                  <div className={sx('flex:1;min-width:220px')}>
+                <div className="flex gap-2.5 flex-wrap items-start">
+                  <div className="flex-1 min-w-[220px]">
                     <Input
                       label="Receiving address"
                       type="email"
@@ -584,20 +829,25 @@ export default function Settings({ V }) {
                   </div>
                   {/* 20px = the label's 16px line box + its 4px margin, so the
                       button's top edge meets the field's, not the label's. */}
-                  <button onClick={V.saveInbound} disabled={V.inboundBusy} className={cn(primaryBtn(), 'mt-5')}>
+                  <button
+                    onClick={V.saveInbound}
+                    disabled={V.inboundBusy}
+                    className={cn(primaryBtn(), 'mt-5')}
+                  >
                     {V.inboundBusy ? 'Saving…' : 'Save'}
                   </button>
                 </div>
 
-                <span data-tone={V.inboundOn ? 'sla-met' : 'sla-paused'} className={sx('width:fit-content;padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
+                <TonePill tone={V.inboundOn ? 'sla-met' : 'sla-paused'} size="md">
                   {V.inboundOn ? 'Receiving mail' : 'Inbound mail is off'}
-                </span>
+                </TonePill>
               </div>
             )}
 
-            <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.55')}>
-              The reply-to name, the in-app widget and the chatbot bridge have no setting behind them yet,
-              so there is nothing here to change. Keys for the public API live in the API keys panel.
+            <span className="text-[12.5px] text-fg-2 leading-relaxed">
+              The reply-to name, the in-app widget and the chatbot bridge have no setting behind
+              them yet, so there is nothing here to change. Keys for the public API live in the API
+              keys panel.
             </span>
           </div>
         )}
@@ -614,7 +864,9 @@ export default function Settings({ V }) {
           size="md"
           footer={
             <>
-              <Button variant="outline" size="md" onClick={V.closeEditor}>Cancel</Button>
+              <Button variant="outline" size="md" onClick={V.closeEditor}>
+                Cancel
+              </Button>
               <Button size="md" onClick={V.submitEditor} loading={V.editorBusy}>
                 {V.editorOk}
               </Button>
@@ -630,31 +882,59 @@ export default function Settings({ V }) {
               </div>
             )}
 
-            {V.editorFields.map(f => (
+            {V.editorFields.map((f) =>
               f.kind === 'select' ? (
-                <Select key={f.name} label={f.label} value={f.value} data-f={f.name}
-                  onChange={V.onEditorField} options={f.options} helperText={f.helper} />
+                <Select
+                  key={f.name}
+                  label={f.label}
+                  value={f.value}
+                  data-f={f.name}
+                  onChange={V.onEditorField}
+                  options={f.options}
+                  helperText={f.helper}
+                />
               ) : f.kind === 'textarea' ? (
-                <Textarea key={f.name} label={f.label} value={f.value} data-f={f.name}
-                  onChange={V.onEditorField} placeholder={f.placeholder} helperText={f.helper} rows={6} />
+                <Textarea
+                  key={f.name}
+                  label={f.label}
+                  value={f.value}
+                  data-f={f.name}
+                  onChange={V.onEditorField}
+                  placeholder={f.placeholder}
+                  helperText={f.helper}
+                  rows={6}
+                />
               ) : f.kind === 'checks' ? (
                 <fieldset key={f.name} className="flex flex-col gap-1.5">
                   <legend className="text-xs font-medium text-fg mb-1">{f.label}</legend>
-                  {f.options.map(o => (
+                  {f.options.map((o) => (
                     <label key={o.value} className={CHECK_LABEL}>
-                      <input type="checkbox" data-f={f.name} value={o.value} checked={o.on}
+                      <input
+                        type="checkbox"
+                        data-f={f.name}
+                        value={o.value}
+                        checked={o.on}
                         onChange={V.onEditorField}
-                        className={CHECKBOX} style={CHECKBOX_STYLE} />
+                        className={CHECKBOX}
+                        style={CHECKBOX_STYLE}
+                      />
                       {o.label}
                     </label>
                   ))}
                 </fieldset>
               ) : (
-                <Input key={f.name} label={f.label} value={f.value} data-f={f.name}
-                  onChange={V.onEditorField} placeholder={f.placeholder} helperText={f.helper}
-                  autoComplete="off" />
-              )
-            ))}
+                <Input
+                  key={f.name}
+                  label={f.label}
+                  value={f.value}
+                  data-f={f.name}
+                  onChange={V.onEditorField}
+                  placeholder={f.placeholder}
+                  helperText={f.helper}
+                  autoComplete="off"
+                />
+              ),
+            )}
           </div>
         </Modal>
       </div>

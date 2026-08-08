@@ -65,7 +65,7 @@ export const AgentGlyph = (props) => (
   <Glyph {...props}>
     <circle cx="12" cy="9" r="4" />
     <path d="M4 20 Q4 14 12 14 Q20 14 20 20" />
-    <circle cx="18" cy="6" r="2" fill="var(--cs-leafsoft)" stroke="#5A7856" />
+    <circle cx="18" cy="6" r="2" fill="var(--primary-soft-border)" stroke="#5A7856" />
   </Glyph>
 );
 

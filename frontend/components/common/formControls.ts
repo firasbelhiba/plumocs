@@ -8,7 +8,7 @@ import type { CSSProperties } from 'react';
  * smaller, more accessible and better behaved than anything we would build.
  * "Inline" is fine; *five different inlines* is not, which is what the console
  * had: 14px and 15px boxes, no radius, no border, and two different accent
- * sources (`--primary` and `--cs-brand`, two different greens in dark mode).
+ * sources (`--primary` and the retired `--cs-brand`, two different greens).
  *
  * These strings are copied from the shared design system's sign-in and sign-up
  * forms, which are the specified recipe.

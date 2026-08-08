@@ -1,6 +1,16 @@
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import RootLayoutClient from '@/components/layout/RootLayoutClient';
+
+// Self-hosted, same two faces and same CSS variable names as PM
+// (src/app/layout.tsx:17-18), so a file ported from either side resolves
+// `--font-geist-sans` / `--font-geist-mono` identically. Replaces the
+// render-blocking `@import` of fonts.googleapis.com that used to sit at the top
+// of globals.css, which also loaded only weights 400/500/600 — anything at
+// `font-bold` was synthesized faux-bold. Variable Inter covers 100–900.
+const sans = Inter({ subsets: ['latin'], variable: '--font-geist-sans', display: 'swap' });
+const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-geist-mono', display: 'swap' });
 
 export const metadata = {
   title: 'Plumo CS Console',
@@ -27,14 +37,17 @@ const THEME_BOOT_SNIPPET = `
 `;
 
 export default function RootLayout({ children }) {
-  /* `data-cs-nav` survives because `[data-cs-nav="off"]{--cs-navw:64px}` still
-     drives the rail's animated width. `data-cs-rail` and `data-cs-filters` went
-     with the selectors that read them (item 42): those two panes now answer to a
-     breakpoint as well as a toggle, which a rule on <html> cannot express, so
-     they take `railOn` / `filtersOn` as props instead. */
+  /* No `data-cs-*` attributes left. `data-cs-rail` / `data-cs-filters` went
+     with the selectors that read them (item 42), and `data-cs-nav` went with
+     `--cs-navw`: the sidebar now writes both of its widths as classes, the way
+     PM's does, so nothing on <html> decides how wide a pane is. */
   return (
-    <html lang="en" data-cs-nav="on" suppressHydrationWarning>
-      <body>
+    <html
+      lang="en"
+      className={`${sans.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="font-sans">
         <script id="cs-theme-boot" dangerouslySetInnerHTML={{ __html: THEME_BOOT_SNIPPET }} />
         <ThemeProvider>
           <RootLayoutClient>{children}</RootLayoutClient>

@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Breadcrumb, Button, Card, Dropdown, DropdownItem, Input, Segment, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
+import { Breadcrumb, Button, Dropdown, DropdownItem, Input, Segment, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
 import { buttonVariants } from '../common/Button';
 import { KnowledgeBaseGlyph, SlaGlyph } from './glyphs';
 
@@ -17,7 +17,9 @@ const PANES = [
   { value: 'details', label: 'Details' },
 ];
 
-const ON_ROW_STYLE = { background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' };
+/** Selected row / segment on PM's own recipe (`Sidebar/NavLink.tsx:32`), in
+    place of the `[data-on]` token trio `--cs-onbg` / `--cs-onfg` / `--cs-onw`. */
+const ON_ROW = 'bg-[color:var(--primary-soft)] text-[color:var(--primary)] font-medium';
 
 /** `Dropdown` renders its own <button> around whatever it is given, so a trigger
     must not be one itself — nesting buttons is invalid markup. PM's triggers are
@@ -210,14 +212,14 @@ export default function Ticket({ V }) {
             <div role="menu" className={PANEL + ' top-full mt-2 right-0 w-[262px] !p-2'}>
               <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="Search agents…" aria-label="Search agents" className="!rounded-full mb-1.5" />
               <Button size="sm" onClick={V.assignMe} className="w-full mb-1 justify-start" variant="outline"
-                style={{ background: 'var(--primary-soft)', color: 'var(--cs-brand-ink)' }}>
+                style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>
                 Assign to me
               </Button>
               <div data-scroll className="max-h-[232px] overflow-y-auto">
                 {V.agentList.map((a) => {
                   const [f, l] = splitName(a.name);
                   return (
-                    <button key={a.id} role="menuitem" onClick={V.setAssignee} data-v={a.id} data-on={String(a.on)} className={MENU_ROW} style={ON_ROW_STYLE}>
+                    <button key={a.id} role="menuitem" onClick={V.setAssignee} data-v={a.id} className={cn(MENU_ROW, a.on && ON_ROW)}>
                       <span className="relative flex-none">
                         <UserAvatar firstName={f} lastName={l} size="sm" />
                         <i data-tone={a.availTone} className="absolute -right-px -bottom-px w-2 h-2 rounded-full border-2 border-[color:var(--surface)]" style={{ background: 'var(--tone-hue)' }} />
@@ -347,7 +349,7 @@ export default function Ticket({ V }) {
               style={{
                 background: 'var(--primary-soft)',
                 border: '1px solid color-mix(in srgb, var(--primary) 22%, transparent)',
-                color: 'var(--cs-brand-ink)',
+                color: 'var(--primary)',
               }}
             >
               <i className="w-[7px] h-[7px] rounded-full flex-none bg-[color:var(--primary)]" />
@@ -433,12 +435,12 @@ export default function Ticket({ V }) {
           </div>
 
           {/* suggested article */}
-          <div className="mx-[18px] mb-3 px-3.5 py-3 rounded-[10px] bg-surface flex gap-2.5 items-start" style={{ border: '1px solid var(--cs-leafsoft)' }}>
-            <span className="w-[22px] h-[22px] flex-none rounded-full grid place-items-center" style={{ background: 'var(--cs-leafsoft)' }}>
+          <div className="mx-[18px] mb-3 px-3.5 py-3 rounded-token bg-surface flex gap-2.5 items-start border border-[color:var(--primary-soft-border)]">
+            <span className="w-[22px] h-[22px] flex-none rounded-full grid place-items-center bg-[color:var(--primary-soft)]">
               <KnowledgeBaseGlyph className="w-[13px] h-[13px]" />
             </span>
             <div className="flex-1 flex flex-col gap-0.5">
-              <span className="text-[12px] font-medium" style={{ color: 'var(--cs-brand-ink)' }}>This article might help</span>
+              <span className="text-[12px] font-medium text-[color:var(--primary)]">This article might help</span>
               <span className="text-[12.5px] text-fg-3">Rotating an account key without locking anyone out</span>
             </div>
             <Button variant="outline" size="sm" onClick={V.mock} data-msg="Article added to your reply" className="whitespace-nowrap">
@@ -454,10 +456,10 @@ export default function Ticket({ V }) {
           >
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[color:var(--border)] flex-wrap">
               <div className="flex gap-[3px] p-[3px] rounded-full bg-bg">
-                <button onClick={V.setMode} data-m="reply" data-on={String(V.isReply)} className="px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer" style={ON_ROW_STYLE}>
+                <button onClick={V.setMode} data-m="reply" className={cn('px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer focus-ring', V.isReply ? ON_ROW : 'text-fg-2')}>
                   Reply to customer
                 </button>
-                <button onClick={V.setMode} data-m="note" data-on={String(V.isNote)} className="px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer" style={ON_ROW_STYLE}>
+                <button onClick={V.setMode} data-m="note" className={cn('px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer focus-ring', V.isNote ? ON_ROW : 'text-fg-2')}>
                   Internal note
                 </button>
               </div>
@@ -548,7 +550,9 @@ export default function Ticket({ V }) {
           data-scroll
           className={cn(
             'flex-none overflow-y-auto p-3.5 bg-surface border-l border-[color:var(--border)] flex-col gap-3',
-            'w-full lg:w-[var(--cs-railw)]',
+            // was `--cs-railw`; a pane width belongs beside its markup, the
+            // way PM writes its own rail (`Sidebar.tsx:422`).
+            'w-full lg:w-[322px]',
             V.ticketPane === 'details' ? 'flex' : 'hidden',
             V.railOn ? 'lg:flex' : 'lg:hidden',
           )}
@@ -659,8 +663,7 @@ export default function Ticket({ V }) {
               {[1, 2, 3].map((n) => (
                 <span
                   key={n}
-                  className="w-6 h-6 rounded-full grid place-items-center text-[12px]"
-                  style={{ background: 'var(--cs-leafsoft)', color: 'var(--cs-forest)', border: '1px solid var(--cs-forest)' }}
+                  className="w-6 h-6 rounded-full grid place-items-center text-[12px] bg-[color:var(--primary-soft)] text-[color:var(--primary)] border border-[color:var(--primary-soft-border)]"
                 >
                   ✓
                 </span>

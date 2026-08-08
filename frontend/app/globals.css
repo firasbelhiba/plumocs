@@ -1,163 +1,66 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+/* Inter and JetBrains Mono are self-hosted through `next/font/google` in
+   app/layout.jsx, exactly as PM does it (src/app/layout.tsx:17-18). The
+   render-blocking `@import url('https://fonts.googleapis.com/…')` that used to
+   head this file is gone with it. */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ============================================================
-   Plumo Design System tokens
-   (ported from _ds/plumo-design-system/tokens/*.css)
+   Design tokens — one namespace.
+
+   Until item 46 this file carried two more: a marketing `--plumo-*` layer
+   (neutrals, a type scale, tracking, line heights, five radii, four durations,
+   an overshoot easing, a spacing ramp and three shadows) and a `--cs-*` console
+   layer — about 105 variables PM does not have, every one of them a second name
+   for something the shared layer already said. Two radius systems, two
+   elevation systems, two motion systems and two density systems ran side by
+   side, so an edit to one silently desynced the other.
+
+   What survives of `--plumo-*` is exactly what PM keeps (`globals.css:17-23`):
+   six fixed brand hexes that are theme-invariant, plus the two stroke tokens the
+   brand icons need. Everything else in the app now reads the semantic tokens
+   below, which is the only namespace either pillar has.
+
+   The one intentional divergence from PM stays the brand anchor: `--brand-h` /
+   `--brand-s` are support green (145 / 35%) where PM is plumo blue (221 / 83%),
+   and every derived variant re-tints from those two values alone.
    ============================================================ */
 
 :root {
-  /* ---- Brand blues ---- */
-  --plumo-night: #1E3A8A;
-  --plumo-blue:  #2563EB;
-  --plumo-sky:   #60A5FA;
-  --plumo-mist:  #EFF6FF;
-
-  /* ---- Warm accents ---- */
-  --plumo-peach:  #FFD4B8;
-  --plumo-butter: #FFE8A3;
-
-  /* ---- Neutrals ---- */
-  --plumo-dark:   #0F172A;
-  --plumo-muted:  #64748B;
-  --plumo-border: #E5E7EB;
-  --plumo-canvas: #F8FAFC;
-  --plumo-white:  #FFFFFF;
-
-  /* ---- Text-on-color pairings ---- */
-  --plumo-on-peach:  #7A3E1F;
-  --plumo-on-butter: #7A5F1F;
-  --plumo-on-night:  #DBEAFE;
-
-  /* ---- Semantic aliases ---- */
-  --text-primary:    var(--plumo-dark);
-  --text-secondary:  var(--plumo-muted);
-  --text-brand:      var(--plumo-blue);
-  --text-on-dark:    var(--plumo-on-night);
-  --surface-page:    var(--plumo-white);
-  --surface-canvas:  var(--plumo-canvas);
-  --surface-card:    var(--plumo-white);
-  --surface-soft:    var(--plumo-mist);
-  --surface-warm:    #FFF6EC;
-  --surface-dark:    var(--plumo-night);
-  --border-default:  var(--plumo-border);
-  --border-focus:    var(--plumo-sky);
-  --accent-primary:  var(--plumo-blue);
-  --accent-hover:    var(--plumo-night);
-
-  /* ---- Typography ---- */
-  --plumo-font:      'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --plumo-font-mono: 'SF Mono', Menlo, Consolas, monospace;
-  --font-sans: var(--plumo-font);
-  --font-mono: var(--plumo-font-mono);
-  --plumo-fw-regular: 400;
-  --plumo-fw-medium:  500;
-  --plumo-text-display-xl: 96px;
-  --plumo-text-display:    56px;
-  --plumo-text-h1:         40px;
-  --plumo-text-h2:         28px;
-  --plumo-text-h3:         20px;
-  --plumo-text-body:       16px;
-  --plumo-text-caption:    13px;
-  --plumo-text-eyebrow:    11px;
-  --plumo-track-display-xl: -4px;
-  --plumo-track-display:    -2px;
-  --plumo-track-h1:         -1.2px;
-  --plumo-track-h2:         -0.6px;
-  --plumo-track-h3:         -0.3px;
-  --plumo-track-eyebrow:    2px;
-  --plumo-lh-tight: 0.95;
-  --plumo-lh-snug:  1.1;
-  --plumo-lh-body:  1.65;
-
-  /* ---- Radius ---- */
-  --plumo-radius-sm:   8px;
-  --plumo-radius-md:   12px;
-  --plumo-radius-lg:   16px;
-  --plumo-radius-xl:   20px;
-  --plumo-radius-pill: 100px;
-
-  /* ---- Motion ---- */
-  --plumo-ease:        cubic-bezier(0.34, 1.25, 0.64, 1);
-  --plumo-dur-micro:   150ms;
-  --plumo-dur-default: 250ms;
-  --plumo-dur-moment:  400ms;
-  --plumo-dur-hero:    700ms;
-
-  /* ---- Spacing ---- */
-  --plumo-space-1:  4px;
-  --plumo-space-2:  8px;
-  --plumo-space-3:  12px;
-  --plumo-space-4:  16px;
-  --plumo-space-6:  24px;
-  --plumo-space-8:  32px;
-  --plumo-space-10: 40px;
-  --plumo-space-12: 48px;
-
-  /* ---- Soft elevation ---- */
-  --plumo-shadow-card:  0 10px 30px rgba(15,23,42,0.06), 0 0 0 1px var(--plumo-border);
-  --plumo-shadow-float: 0 30px 80px rgba(30,58,138,0.12);
-  --plumo-shadow-toast: 0 20px 50px rgba(30,58,138,0.25);
-}
-
-*, *::before, *::after { box-sizing: border-box; }
-
-img, svg { display: block; max-width: 100%; }
-
-p { margin: 0; }
-
-/* ============================================================
-   Console theme layer: semantic vars only — every component is
-   styled inline. Light/dark, density and pane state are driven
-   by data-attrs on the root element.
-   ============================================================ */
-:root{
-  --cs-canvas:#F8FAFC; --cs-surface:#FFFFFF; --cs-soft:#EDF4EE;
-  --cs-warm:#FFF9E9; --cs-text:#0F172A; --cs-muted:#475569;
-  --cs-border:#E2E8F0; --cs-hover:#F1F5F9; --cs-accent-src:#4C9F6E; --cs-brand:var(--cs-accent-src);
-  --cs-forest:#1F4A2E; --cs-leafsoft:#B8CFB4;
-  --cs-brand-soft:color-mix(in srgb, var(--cs-brand) 10%, var(--cs-surface));
-  --cs-brand-ink:var(--cs-forest);
-  --cs-navw:236px; --cs-railw:322px; --cs-filtw:216px;
-  --cs-r-sm:8px; --cs-r-md:12px; --cs-fs:13.5px; --cs-gap:12px; --cs-cardpad:16px;
-  /* `--cs-qcols` is gone with the media queries that re-wrote it. The queue's
-     column set is now three `grid-cols-[…]` utilities on the row itself
-     (`md:` 7 columns, `lg:` 8, `xl:` 9), so the template and the breakpoint that
-     selects it live in the same place instead of two files apart. */
-  --av-bg:var(--cs-soft); --av-fg:var(--plumo-night); --av-border:1px solid transparent;
-  --tone-hue:var(--cs-muted); --tone-fg:var(--cs-muted); --tone-fg-dark:#CBD5E1;
-  --cs-subjw:400; --cs-subjc:var(--cs-text);
-  color-scheme:light;
-
-  /* ---- Shared component language (ported from the plumo PM console) -------
-     Same semantic token names, so the primitives are byte-identical between
-     pillars. The one deliberate difference: the brand anchor is support green
-     (#4C9F6E = hsl(145 35% 46%)) where PM uses plumo blue. Everything that
-     derives from --brand-h/--brand-s re-tints from those two values alone. */
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: var(--plumo-font-mono, ui-monospace, monospace);
+  --font-sans: var(--font-geist-sans), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'JetBrains Mono', ui-monospace, monospace;
   --radius: 6px;
   --density: 1;
+
+  /* Brand palette — fixed hexes from the plumo brand doc. NEVER theme-swap.
+     Copied from PM verbatim: these are the brand, whatever the pillar. */
+  --plumo-night: #1e3a8a;
+  --plumo-blue: #2563eb;
+  --plumo-sky: #60a5fa;
+  --plumo-mist: #eff6ff;
+  --plumo-peach: #ffd4b8;
+  --plumo-butter: #ffe8a3;
 
   --brand-h: 145;
   --brand-s: 35%;
 
-  --bg: var(--cs-canvas);
-  --surface: var(--cs-surface);
+  --bg: #F8FAFC;
+  --surface: #FFFFFF;
   --surface-2: #F4F6F5;
   --surface-3: #E8EDE9;
-  --border: var(--cs-border);
+
+  --border: #E2E8F0;
   --border-strong: #CBD5D0;
-  --text: var(--cs-text);
-  --text-2: var(--cs-muted);
+
+  --text: #0F172A;
+  --text-2: #475569;
   --text-3: #8CA093;
 
-  --primary: var(--cs-accent-src);
+  --primary: #4C9F6E;
   --primary-hover: hsl(var(--brand-h) var(--brand-s) 36%);
-  --primary-soft: var(--cs-soft);
+  --primary-soft: #EDF4EE;
   --primary-soft-border: hsl(var(--brand-h) var(--brand-s) 76%);
   --primary-fg: #ffffff;
 
@@ -202,7 +105,24 @@ p { margin: 0; }
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---- Support-domain semantics -------------------------------------------
+     The three blocks below have no PM counterpart because PM has no tickets:
+     `[data-tone]` (status / priority / SLA / tag), `[data-av]` (the six-colour
+     avatar rotation) and `[data-side]` (who a message came from). They are
+     CORRECT-BY-DESIGN and stay — but their *defaults* now come from the shared
+     layer rather than from a parallel one, and `--av-fg` no longer defaults to
+     PM's navy. */
+  --av-bg: var(--primary-soft); --av-fg: var(--primary); --av-border: 1px solid transparent;
+  --tone-hue: var(--text-2); --tone-fg: var(--text-2); --tone-fg-dark: #CBD5E1;
+  color-scheme:light;
 }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+img, svg { display: block; max-width: 100%; }
+
+p { margin: 0; }
 /* Density presets — multiplier scales vertical rhythm only (see DENSITY.md). */
 :root[data-density='compact'] {
   --density: 0.85;
@@ -218,14 +138,11 @@ p { margin: 0; }
    re-scale — PM's density switch touches vertical rhythm only. */
 
 .dark{
-  --cs-canvas:#0B1710; --cs-surface:#12261A; --cs-soft:#1A3324; --cs-warm:#2A2416;
-  --cs-text:#E7F0E9; --cs-muted:#A8BCAE; --cs-border:#26402E; --cs-hover:#173023;
-  --cs-brand:color-mix(in srgb, var(--cs-accent-src) 52%, #FFFFFF);
-  --cs-brand-ink:color-mix(in srgb, var(--cs-accent-src) 60%, #FFFFFF); color-scheme:dark;
-
-  /* shared layer, dark */
+  color-scheme:dark;
+  --bg:#0B1710; --surface:#12261A;
   --surface-2:#173023; --surface-3:#1F3D2C;
-  --border-strong:#35543F; --text-3:#7E9587;
+  --border:#26402E; --border-strong:#35543F;
+  --text:#E7F0E9; --text-2:#A8BCAE; --text-3:#7E9587;
   --primary: hsl(var(--brand-h) var(--brand-s) 62%);
   --primary-hover: hsl(var(--brand-h) var(--brand-s) 70%);
   --primary-soft: hsl(var(--brand-h) var(--brand-s) 28% / 0.38);
@@ -298,8 +215,10 @@ input::-ms-clear {
   .h-input  { height: calc(32px * var(--density)); }
   .h-row    { height: calc(44px * var(--density)); }
   .h-row-header { height: calc(40px * var(--density)); }
-  .h-topbar { height: calc(44px * var(--density)); }
-  .h-navitem { height: calc(28px * var(--density)); }
+  /* `.h-topbar` (44px) and `.h-navitem` (28px) are gone: item 32 moved the top
+     bar to `h-12 md:h-14` and item 30 rebuilt the nav row at `h-[38px]`, so both
+     utilities had zero call sites and `.h-navitem` still advertised the very
+     geometry item 30 existed to remove. */
   .h-segment { height: calc(28px * var(--density)); }
   .min-h-textarea { min-height: calc(72px * var(--density)); }
 }
@@ -311,16 +230,14 @@ input::-ms-clear {
   animation: shimmer 1.6s infinite linear;
 }
 .dark [data-tone]{--tone-fg:var(--tone-fg-dark);}
-/* The rail's *width* is still a document-level token, because the collapse has
-   to animate and the sidebar is the only consumer. What is no longer done in
-   CSS is deciding which panes are *visible*: a pane now has to answer to both a
-   user toggle and a breakpoint at once (`hidden lg:flex` vs `lg:hidden`), and a
-   global attribute selector cannot express that. The three companion rules —
-   `[data-cs-nav="off"] [data-navlabel]`, `[data-cs-rail="off"] [data-rail]` and
-   `[data-cs-filters="off"] [data-filterrail]` — are gone, and the sidebar,
-   details rail and filter rail take `navOn` / `railOn` / `filtersOn` as props
-   the way PM's do (`Sidebar/NavLink.tsx` takes `isCollapsed`). */
-[data-cs-nav="off"]{--cs-navw:64px;}
+/* Nothing on <html> decides a pane's width any more. `--cs-navw` /
+   `--cs-railw` / `--cs-filtw` and the `[data-cs-nav="off"]` rule that rewrote
+   the first of them are gone: the sidebar, details rail and filter rail each
+   carry their own width class, which is how PM writes them
+   (`Sidebar.tsx:422`, `isCollapsed ? 'w-12' : 'w-[240px]'`). Pane *visibility*
+   left for the same reason one batch earlier — a pane has to answer to a toggle
+   and a breakpoint at once, and an attribute selector on the root cannot say
+   that. */
 :root[data-density='compact'] [data-snip]{display:inline; margin-left:8px;}
 [data-tone="st-new"]{--tone-hue:#94A3B8;--tone-fg:#475569;--tone-fg-dark:#C3CEDE}
 [data-tone="st-open"]{--tone-hue:#4C9F6E;--tone-fg:#1F4A2E;--tone-fg-dark:#B8CFB4}
@@ -343,40 +260,48 @@ input::-ms-clear {
 [data-tone="tag-account"]{--tone-hue:#4F46E5;--tone-fg:#3730A3;--tone-fg-dark:#B6B2FF}
 [data-tone="tag-urgent"]{--tone-hue:#E8A97E;--tone-fg:#B7551A;--tone-fg-dark:#FFD4B8}
 [data-tone="tag-integration"]{--tone-hue:#0E7490;--tone-fg:#0E5A70;--tone-fg-dark:#8AD8EC}
-[data-tone="neutral"]{--tone-hue:#94A3B8;--tone-fg:var(--cs-muted);--tone-fg-dark:#B7C2D2}
+[data-tone="neutral"]{--tone-hue:#94A3B8;--tone-fg:var(--text-2);--tone-fg-dark:#B7C2D2}
 [data-av="1"]{--av-bg:#EFF6FF;--av-fg:#1E3A8A}
 [data-av="2"]{--av-bg:#FFE8D6;--av-fg:#7A3E1F}
 [data-av="3"]{--av-bg:#FFF4CE;--av-fg:#7A5F1F}
 [data-av="4"]{--av-bg:#EDF4EE;--av-fg:#1F4A2E}
 [data-av="5"]{--av-bg:#E9E7FF;--av-fg:#3730A3}
 [data-av="6"]{--av-bg:#E2F2F7;--av-fg:#0E5A70}
-[data-av="ghost"]{--av-bg:transparent;--av-fg:var(--cs-muted);--av-border:0.5px dashed var(--cs-border)}
-.dark [data-av]{--av-bg:color-mix(in srgb, var(--av-fg) 26%, var(--cs-surface));--av-fg:#E7EDF9}
-[data-on="true"]{--cs-onbg:var(--cs-brand-soft);--cs-onfg:var(--cs-brand-ink);--cs-onbd:color-mix(in srgb, var(--cs-brand) 26%, transparent);--cs-onw:500;--cs-onbar:transparent}
-[data-on="false"]{--cs-onbg:transparent;--cs-onfg:var(--cs-muted);--cs-onbd:transparent;--cs-onw:400;--cs-onbar:transparent}
-/* The `nav [data-on="true"]` override that used to sit here bound the active nav
-   row's tint, label and indicator bar to `--cs-btn` — #2563EB light, #3B82F6
-   dark, i.e. PM's --plumo-blue / --plumo-sky verbatim — so the selected sidebar
-   row was accent blue in a green product. Both the rule and `--cs-btn` are gone;
-   the rail now uses PM's own recipe (`bg-[color:var(--primary-soft)]` +
-   `text-[color:var(--primary)]`, NavLink.tsx:32) directly at the call site. */
-[data-side="customer"]{--msg-bg:var(--cs-soft);--msg-bd:var(--cs-leafsoft);--msg-ml:0;--msg-r:12px 12px 12px 4px}
-[data-side="agent"]{--msg-bg:var(--cs-surface);--msg-bd:var(--cs-border);--msg-ml:auto;--msg-r:12px 12px 4px 12px}
-[data-side="note"]{--msg-bg:var(--cs-warm);--msg-bd:color-mix(in srgb, #E0A82E 40%, transparent);--msg-ml:auto;--msg-r:12px}
-[data-side="reply"]{--msg-bg:var(--cs-surface);--msg-bd:var(--cs-border);--msg-ml:0;--msg-r:var(--cs-r-md)}
-[data-danger="true"]{--cs-okbg:#FFD4B8;--cs-okfg:#7A3E1F}
-[data-danger="false"]{--cs-okbg:var(--cs-brand);--cs-okfg:#fff}
+[data-av="ghost"]{--av-bg:transparent;--av-fg:var(--text-2);--av-border:1px dashed var(--border)}
+.dark [data-av]{--av-bg:color-mix(in srgb, var(--av-fg) 26%, var(--surface));--av-fg:#E7EDF9}
+/* The `[data-on]` pair that used to sit here is gone with the `--cs-on*`
+   quartet it defined. It was a second way of saying "selected", driven from a
+   global attribute selector, and PM has no analogue: PM writes the active state
+   at the call site as `bg-[color:var(--primary-soft)]` +
+   `text-[color:var(--primary)]` (`Sidebar/NavLink.tsx:32`), which is what the
+   saved views, the filter facets, the assignee menu, the composer segments, the
+   new-ticket priority row, the settings rail and the API-key kinds all do now.
+   The `nav [data-on="true"]` override that painted the active nav row PM's
+   accent blue went one batch earlier, with `--cs-btn`. */
+/* `[data-side]` is support-domain — who a message came from — so it stays, but
+   its values now come from the shared layer. `--cs-warm` (the internal-note
+   tint) becomes `--warning-soft`, which is the same idea with a theme-aware
+   dark value; `--cs-leafsoft` becomes `--primary-soft-border`; `--cs-r-md`
+   (12px, the second radius system) becomes `--radius`. */
+[data-side="customer"]{--msg-bg:var(--primary-soft);--msg-bd:var(--primary-soft-border);--msg-ml:0;--msg-r:12px 12px 12px 4px}
+[data-side="agent"]{--msg-bg:var(--surface);--msg-bd:var(--border);--msg-ml:auto;--msg-r:12px 12px 4px 12px}
+[data-side="note"]{--msg-bg:var(--warning-soft);--msg-bd:color-mix(in srgb, var(--warning) 40%, transparent);--msg-ml:auto;--msg-r:12px}
+[data-side="reply"]{--msg-bg:var(--surface);--msg-bd:var(--border);--msg-ml:0;--msg-r:var(--radius)}
 [data-showq="true"]{--q-op:1;--q-pe:auto}
 [data-showq="false"]{--q-op:0;--q-pe:none}
-[data-unread="true"]{--cs-subjw:500}
-[data-unread="false"]{--cs-subjw:400}
+/* `[data-danger]` (`--cs-okbg` / `--cs-okfg`) and `[data-unread]`
+   (`--cs-subjw` / `--cs-subjc`) had no consumers left: the confirm footer went
+   to `DialogContext` (item 26) and the unread subject weight is now a
+   `font-medium` class on the element that is unread. Both are deleted. */
 html, body { height: 100%; }
 body{
-  margin:0;background:var(--cs-canvas);color:var(--cs-text);font-size:var(--cs-fs);
-  font-family:var(--plumo-font);font-weight:var(--plumo-fw-regular);line-height:var(--plumo-lh-body);
+  /* PM's own body rule (`globals.css:196-205`) is `@apply text-fg bg-bg` plus
+     font smoothing; the family comes from `<body className="font-sans">`, not
+     from CSS, which is why `--plumo-font` is not missed here. The size and
+     line-height are CS's — no item in this plan moves the console off 13.5px. */
+  margin:0;background:var(--bg);color:var(--text);font-size:13.5px;line-height:1.65;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
 }
-button,input,textarea,select{font-family:var(--plumo-font)}
 /* The `[data-anim]` vocabulary is gone — it was a second motion system running
    at 400ms on an overshoot curve alongside PM's 200ms decelerate, on the same
    elements. `cs-in`/`[data-anim="in"]` is replaced by `.animate-dropdown`,

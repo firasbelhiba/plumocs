@@ -52,15 +52,17 @@ const CARD_LINE = 'flex items-center gap-2 min-w-0 md:contents';
     borrowing the Button recipe rather than a nested <Button>. */
 const TRIGGER_SM = buttonVariants({ variant: 'outline', size: 'sm' });
 
-/** Pill whose on/off colour comes from the console's [data-on] token pair. */
-const ON_PILL_STYLE = {
-  border: '1px solid var(--cs-onbd)',
-  background: 'var(--cs-onbg)',
-  color: 'var(--cs-onfg)',
-  fontWeight: 'var(--cs-onw)',
-};
+/** Selected / unselected on PM's own recipe — a soft-primary fill with a
+    primary border and label (`Sidebar/NavLink.tsx:32`) — rather than the
+    `[data-on]` token quartet (`--cs-onbg` / `--cs-onfg` / `--cs-onbd` /
+    `--cs-onw`), a second active-state vocabulary driven off a global attribute
+    selector PM has no analogue for. */
 const ON_PILL =
-  'inline-flex items-center gap-1.5 rounded-full cursor-pointer whitespace-nowrap transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
+  'inline-flex items-center gap-1.5 rounded-full border cursor-pointer whitespace-nowrap transition-colors duration-[var(--dur-instant)] focus-ring';
+const ON_PILL_ON =
+  'bg-[color:var(--primary-soft)] border-[color:var(--primary-soft-border)] text-[color:var(--primary)] font-medium';
+const ON_PILL_OFF = 'bg-transparent border-transparent text-fg-2 hover:bg-surface-2 hover:text-fg';
+const onPill = (on, extra) => cn(ON_PILL, on ? ON_PILL_ON : ON_PILL_OFF, extra);
 
 const RAIL_HEAD = 'text-[12px] font-medium text-fg';
 const BULK_BTN =
@@ -90,7 +92,7 @@ export default function Queue({ V }) {
       <div className="flex-none flex items-center gap-2 px-4 pt-2.5 overflow-hidden">
         <div data-scroll className="flex gap-[3px] flex-1 min-w-0 overflow-x-auto">
           {views.map(([v, label, on, count]) => (
-            <button key={v} onClick={V.onView} data-v={v} data-on={String(on)} className={ON_PILL + ' h-btn-sm px-3 text-[13px]'} style={ON_PILL_STYLE}>
+            <button key={v} onClick={V.onView} data-v={v} className={onPill(on, 'h-btn-sm px-3 text-[13px]')}>
               {label}
               <span className="tabular-nums opacity-75">{count}</span>
             </button>
@@ -196,8 +198,10 @@ export default function Queue({ V }) {
           className={cn(
             'flex-none p-3.5 overflow-y-auto bg-surface border-r border-[color:var(--border)] flex-col gap-[18px]',
             V.filtersOn ? 'hidden lg:flex' : 'hidden',
+            // was `--cs-filtw`; PM writes pane widths as classes beside the
+            // markup they govern (`Sidebar.tsx:422`), not as document tokens.
+            'w-[216px]',
           )}
-          style={{ width: 'var(--cs-filtw)' }}
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]">refine</span>
@@ -222,7 +226,7 @@ export default function Queue({ V }) {
             {V.assigneeOptions.map((o) => {
               const [first, last] = splitName(o.label.replace(/^me · /, ''));
               return (
-                <button key={o.id} onClick={V.setAssigneeFilter} data-v={o.id} data-on={String(o.on)} className={ON_PILL + ' px-2 py-[5px] text-[12.5px] text-left'} style={ON_PILL_STYLE}>
+                <button key={o.id} onClick={V.setAssigneeFilter} data-v={o.id} className={onPill(o.on, 'px-2 py-[5px] text-[12.5px] text-left')}>
                   <UserAvatar firstName={first} lastName={last} size="xs" />
                   <span className="flex-1 truncate">{o.label}</span>
                 </button>
@@ -234,7 +238,7 @@ export default function Queue({ V }) {
             <span className={RAIL_HEAD}>Team</span>
             <div className="flex gap-1.5 flex-wrap">
               {V.teamOptions.map((o) => (
-                <button key={o.id} onClick={V.setTeamFilter} data-v={o.id} data-on={String(o.on)} className={ON_PILL + ' px-3 py-[5px] text-[12.5px]'} style={ON_PILL_STYLE}>
+                <button key={o.id} onClick={V.setTeamFilter} data-v={o.id} className={onPill(o.on, 'px-3 py-[5px] text-[12.5px]')}>
                   {o.label}
                 </button>
               ))}
@@ -245,7 +249,7 @@ export default function Queue({ V }) {
             <span className={RAIL_HEAD}>Date range</span>
             <div className="flex gap-1.5 flex-wrap">
               {V.rangeOptions.map((o) => (
-                <button key={o.id} onClick={V.setRange} data-v={o.id} data-on={String(o.on)} className={ON_PILL + ' px-3 py-[5px] text-[12.5px]'} style={ON_PILL_STYLE}>
+                <button key={o.id} onClick={V.setRange} data-v={o.id} className={onPill(o.on, 'px-3 py-[5px] text-[12.5px]')}>
                   {o.label}
                 </button>
               ))}
@@ -331,7 +335,6 @@ export default function Queue({ V }) {
               return (
                 <div
                   key={row.id}
-                  data-unread={String(row.unread)}
                   onClick={V.openRow}
                   onMouseEnter={V.onRowEnter}
                   onMouseLeave={V.onRowLeave}
@@ -366,7 +369,7 @@ export default function Queue({ V }) {
                     <span className="flex items-center gap-[7px] min-w-0">
                       {row.unread && <i className="w-1.5 h-1.5 rounded-full flex-none bg-[color:var(--primary)]" />}
                       <span title={row.channelLabel} className="text-fg-3 flex flex-none">{row.channelGlyph}</span>
-                      <span className="truncate" style={{ fontWeight: 'var(--cs-subjw)' }}>{row.subject}</span>
+                      <span className={cn('truncate', row.unread && 'font-medium')}>{row.subject}</span>
                       <span className="tabular-nums text-fg-3 text-[12px] flex-none">#{row.num}</span>
                     </span>
                     <span data-snip className="block truncate text-fg-3 text-[12.5px]">{row.snippet}</span>
@@ -452,13 +455,12 @@ export default function Queue({ V }) {
               <button onClick={V.bulkAssign} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>Assign to me</button>
               <button onClick={V.bulkPending} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>Set pending</button>
               <button onClick={V.bulkTag} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>Flag for review</button>
-              <button
-                onClick={V.bulkClose}
-                className="h-btn-sm px-3 rounded-full border-none text-[12.5px] font-medium cursor-pointer transition-transform duration-[var(--dur-fast)] hover:scale-[1.02]"
-                style={{ background: 'var(--plumo-butter)', color: 'var(--plumo-on-butter)' }}
-              >
+              {/* Was butter-on-`--plumo-on-butter`, a marketing text-on-colour
+                  pairing CS invented. `warning` is the shared variant that means
+                  the same thing and PM uses 14 times. */}
+              <Button variant="warning" size="sm" onClick={V.bulkClose} className="rounded-full">
                 Close
-              </button>
+              </Button>
               {/* The bulk bar is a dark surface, so the ghost variant's
                   foreground/hover pair is overridden here — the geometry, the
                   press and the focus ring are the shared ones. */}

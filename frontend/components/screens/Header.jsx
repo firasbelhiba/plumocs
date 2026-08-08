@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import { Button, Input, TonePill, UserAvatar } from '../common';
 
 const RESULT_ROW =
@@ -170,7 +171,7 @@ export default function Header({ V }) {
               </Button>
             </div>
             {V.notifs.map((n) => (
-              <div key={n.id} data-unread={n.unread} className="flex gap-2.5 items-start px-3.5 py-3 border-b border-[color:var(--border)] last:border-b-0">
+              <div key={n.id} className="flex gap-2.5 items-start px-3.5 py-3 border-b border-[color:var(--border)] last:border-b-0">
                 <span
                   data-tone={n.tone}
                   className="w-[26px] h-[26px] flex-none rounded-full grid place-items-center text-[12px]"
@@ -179,7 +180,7 @@ export default function Header({ V }) {
                   {n.glyph}
                 </span>
                 <div className="flex-1 flex flex-col gap-0.5">
-                  <span className="text-[13px] leading-snug" style={{ fontWeight: 'var(--cs-subjw)' }}>{n.text}</span>
+                  <span className={cn('text-[13px] leading-snug', n.unread && 'font-medium')}>{n.text}</span>
                   <span className="text-[11.5px] text-fg-3 tabular-nums">{n.rel} ago</span>
                 </div>
               </div>

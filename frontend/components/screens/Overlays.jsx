@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import { Button, Drawer, Input, Kbd, Modal, Select, Textarea } from '../common';
 import { BlobHappy } from '../brand';
 
@@ -65,14 +66,14 @@ export default function Overlays({ V }) {
                   key={o.id}
                   onClick={V.onNewPriority}
                   data-v={o.id}
-                  data-on={String(o.on)}
-                  className="h-btn-md px-4 rounded-full text-[12.5px] cursor-pointer transition-colors duration-[var(--dur-instant)] focus-ring"
-                  style={{
-                    border: '1px solid var(--cs-onbd)',
-                    background: 'var(--cs-onbg)',
-                    color: 'var(--cs-onfg)',
-                    fontWeight: 'var(--cs-onw)',
-                  }}
+                  className={cn(
+                    'h-btn-md px-4 rounded-full border text-[12.5px] cursor-pointer transition-colors duration-[var(--dur-instant)] focus-ring',
+                    // PM's active recipe (`Sidebar/NavLink.tsx:32`) rather than
+                    // the `[data-on]` token quartet.
+                    o.on
+                      ? 'bg-[color:var(--primary-soft)] border-[color:var(--primary-soft-border)] text-[color:var(--primary)] font-medium'
+                      : 'bg-transparent border-transparent text-fg-2 hover:bg-surface-2 hover:text-fg',
+                  )}
                 >
                   {o.label}
                 </button>

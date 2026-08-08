@@ -6,7 +6,7 @@
 // only, and literal hex: `globals.css` is imported by that same broken layout,
 // so no custom property is guaranteed to resolve here.
 //
-// The two brand colours are the CS greens (`--primary` #4C9F6E, `--cs-forest`
+// The two brand colours are the CS greens (`--primary` #4C9F6E, forest
 // #1F4A2E) rather than PM's #2563EB / #1E3A8A. Everything else — the neutrals,
 // the card geometry, the copy shape — is PM's.
 

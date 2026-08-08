@@ -30,14 +30,14 @@ const WASH = {
     'radial-gradient(760px 560px at 50% 46%, color-mix(in srgb, var(--surface) 30%, transparent) 0%, transparent 74%)',
     'radial-gradient(1100px 820px at 3% 2%, color-mix(in srgb, var(--primary) 15%, transparent) 0%, transparent 66%)',
     'radial-gradient(1000px 780px at 98% 3%, color-mix(in srgb, var(--wash-lilac) 24%, transparent) 0%, transparent 62%)',
-    'radial-gradient(1000px 760px at 2% 98%, color-mix(in srgb, var(--cs-leafsoft) 36%, transparent) 0%, transparent 64%)',
+    'radial-gradient(1000px 760px at 2% 98%, color-mix(in srgb, var(--primary-soft-border) 36%, transparent) 0%, transparent 64%)',
     'radial-gradient(900px 700px at 97% 97%, color-mix(in srgb, var(--plumo-sky) 9%, transparent) 0%, transparent 62%)',
     'linear-gradient(135deg, color-mix(in srgb, var(--primary) 7%, transparent) 0%, transparent 42%, transparent 58%, color-mix(in srgb, var(--wash-lilac) 8%, transparent) 100%)',
   ].join(','),
 };
 
 const DOTS = {
-  backgroundImage: 'radial-gradient(color-mix(in srgb, var(--cs-forest) 14%, transparent) 1px, transparent 1px)',
+  backgroundImage: 'radial-gradient(color-mix(in srgb, var(--primary) 14%, transparent) 1px, transparent 1px)',
   backgroundSize: '24px 24px',
 };
 

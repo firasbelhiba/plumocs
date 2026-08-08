@@ -2096,9 +2096,16 @@ rather than a design-parity one. Two findings from doing item 43 that bear on th
 ### BATCH 10 — Delete the parallel systems
 *Last, because everything above has to stop depending on them first.*
 
+**STATUS 2026-08-08:** items 45, 46, 47, 48 all **DONE**. One row of item 45's table was
+deliberately **not** done — `ConfirmDeleteModal.tsx` is kept; reasons under the item.
+`npm run build`, `tsc --noEmit` and 87 tests green. Unlike batches 4–7, this batch **was seen in
+a browser**: Settings was rendered against a stub `V` on a scratch route (since deleted) and
+every geometry claimed below is a measured number, not an inference. Queue, Ticket, Header and
+Sidebar still need a backend and have **not** been looked at.
+
 ---
 
-#### 45. Delete the dead code — **S**
+#### 45. Delete the dead code — **S** ✅ DONE 2026-08-08
 
 | Path | What it is | Status |
 |---|---|---|
@@ -2115,9 +2122,33 @@ greps for "Button" in CS.
 
 **Effort S. Risk: none. Check:** `npm run build` and `tsc --noEmit`.
 
+**DONE 2026-08-08, six of the seven rows.** `components/ds.jsx` and the whole `components/ui/`
+directory are deleted; neither had an importer. `Card` is out of `Ticket.jsx:4`'s import list.
+The duplicate `--font-sans` / `--font-mono` pair is gone — and with item 48 the surviving pair is
+PM's own string. `.h-topbar` and `.h-navitem` are deleted from the `@layer components` block,
+with a note saying which items retired them. `[data-anim="sk"]` / `@keyframes cs-shimmer` had
+already gone with item 24; nothing to do.
+
+Found during review and fixed in the same commit: two `data-unread` attributes
+(`Header.jsx:174`, `Queue.jsx:338`) outlived the `[data-unread]` rule item 46 deleted. No CSS
+and no test read them, and the unread weight is now a `font-medium` class on the element itself,
+so they were dead markup of exactly the kind this item exists to remove.
+
+**`components/common/ConfirmDeleteModal.tsx` is kept, against the row's "or delete".** The
+table's stated rationale — *"PM has no equivalent of any of these"* — is the one thing that is
+**false** for this file. It is byte-identical to PM's and PM renders it in five places
+(`issues/[id]/page.tsx:996`, `admin/changelogs/page.tsx:447`, `admin/project-member-tags`,
+`McpClientModal`, `EditIssueModal`). Deleting it would be the only edit in this batch that moves
+CS *away* from PM, and it would break the next port that arrives carrying
+`<ConfirmDeleteModal>`. It is an unused-but-identical primitive, which is the case item 2 already
+ruled on for `StatusPill` — *"define them anyway; the file is shipped and the next port will use
+it."* **Owner call if you disagree; it is a one-line delete plus one line of `index.ts`.** Note
+item 26 did not orphan it by accident: PM ships *both* `DialogContext` and `ConfirmDeleteModal`
+and uses both.
+
 ---
 
-#### 46. Retire the `--plumo-*` / `--cs-*` duplicate token layer — **L**
+#### 46. Retire the `--plumo-*` / `--cs-*` duplicate token layer — **L** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:12-104` (the `--plumo-*` block, 60 vars) and `:130-142` (the `--cs-*`
 block, ~45 vars) — 105 variables PM does not have. **PM** has one namespace.
@@ -2161,9 +2192,64 @@ count of legacy refs is already small.
 **Check:** `grep -c -- '--plumo-\|--cs-' components/screens/*.jsx` should trend to zero
 (except `[data-tone]` / `[data-av]` consumers).
 
+**DONE 2026-08-08. There is one namespace.** `globals.css` has a single `:root` now, not two,
+and **the built stylesheet contains zero `--cs-*`** — `grep -o -- '--cs-[a-z-]*'
+.next/static/css/*.css` returns nothing. What survives of `--plumo-*` is exactly the eight names
+PM keeps: the six theme-invariant brand hexes (`night` / `blue` / `sky` / `mist` / `peach` /
+`butter`, copied from PM `globals.css:17-23` verbatim, lowercase hexes and all) plus
+`--plumo-blob-stroke` and `--plumo-on-surface`, which `PriorityBars.tsx` and
+`icons/registry.generated.ts` — both byte-identical PM files — need. Every row of the table above
+is spent, and so are `--cs-warm`, `--cs-hover`, `--cs-forest`, `--cs-leafsoft`, `--cs-navw` /
+`-railw` / `-filtw`, `--cs-fs`, `--cs-gap`, `--cs-cardpad`, `--cs-subjw` / `-subjc`, `--cs-okbg` /
+`-okfg` and the `--cs-on*` quartet, which the table did not name.
+
+Where a legacy name carried a value with no PM token, it mapped rather than vanished:
+`--cs-warm` → `--warning-soft` (so it gains a dark value it never had), `--cs-leafsoft` →
+`--primary-soft-border`, `--cs-forest` and `--cs-brand-ink` → `--primary`, `--cs-r-md` (12px) →
+`--radius` (6px), `--cs-hover` → `--surface-2`.
+
+Four things this cost beyond a rename, all deliberate:
+
+- **`[data-on]` is gone, not renamed.** It was a second way to say "selected", driven from a
+  global attribute selector, and PM has no analogue — PM writes it at the call site as
+  `bg-[color:var(--primary-soft)]` + `text-[color:var(--primary)]` (`NavLink.tsx:32`). Seven
+  places moved to that recipe: Queue's saved views and its three filter facets, Ticket's assignee
+  menu and its reply/note segments, Overlays' new-ticket priority row, Settings' tab rail and its
+  API-key kinds. Two of them — Ticket's composer segments — **gained a `focus-ring` they never
+  had.**
+- **`--av-fg: var(--plumo-night)` → `var(--primary)`,** as the item asks. Measured: `--av-fg`
+  computes `hsl(145 35% 62%)` in dark where it was `#1E3A8A` navy. `[data-av]` still has zero
+  call sites; it is kept on the item's CORRECT-BY-DESIGN instruction, like `StatusPill`.
+- **`--cs-navw` and `[data-cs-nav="off"]` are gone, and so is `Console.syncDoc()`.** The sidebar
+  carries `collapsed ? 'w-16' : 'w-[236px]'` as classes, which is how PM writes it
+  (`Sidebar.tsx:422`: `isCollapsed ? 'w-12' : 'w-[240px]'`). **CS's 236 / 64 values are kept —
+  matching PM's 240 / 48 is item 30's business, not this one.** With the token gone `syncDoc()`
+  had nothing left to write, so it and the `data-cs-nav` attribute on `<html>` are deleted;
+  `<html>` now carries no `data-cs-*` at all. The never-passed `accent` prop went with it.
+- **`[data-danger]` and `[data-unread]` are deleted.** Both were rule pairs feeding variables
+  nothing reads any more — the confirm footer left for `DialogContext` in item 26, and the unread
+  subject weight is now a `font-medium` class on the row that is unread. `[data-tone]`,
+  `[data-av]`, `[data-side]` and `[data-showq]` stay: support-domain, no PM analogue.
+
+**Two `--plumo-*` colour uses survive that no item authorises changing — flagged, not fixed.**
+Queue's bulk-action bar is `background: var(--plumo-night)` (`Queue.jsx:452`) and Reports' second
+chart series is `var(--plumo-sky)` (`:144, 152`): PM's navy and PM's accent-light, on prominent
+CS surfaces. §6 calls the *toast's* navy "a missed re-green, not a decision" and item 22 fixed
+it; these two have the same shape and no item names them, so re-tinting would be inventing a
+colour decision. **Owner call.** The auth wash keeps a 9%-alpha `--plumo-sky` for the same
+reason. Queue's Close button did *not* survive: it was `--plumo-butter` on `--plumo-on-butter`, a
+marketing text-on-colour pairing with no PM definition left once the block was cut, so it is now
+`<Button variant="warning">` — the shared variant PM uses 14 times.
+
+**Body type.** `body` no longer reads `--cs-fs` / `--plumo-fw-regular` / `--plumo-lh-body`; the
+values are inlined at `13.5px` / `1.65`. §3 confirms PM's body is the 16px browser default and
+CS's is 13.5px, but **no item in this plan moves the console off 13.5px**, so this one did not
+either. `font-family` is dropped entirely — it comes from `<body className="font-sans">` now,
+which is where PM gets it.
+
 ---
 
-#### 47. Rewrite `Settings.jsx` off `sx()` — **L**
+#### 47. Rewrite `Settings.jsx` off `sx()` — **L** ✅ DONE 2026-08-08
 
 **CS** `components/screens/Settings.jsx` (625 lines) uses the `sx()` runtime CSS injector
 (`components/sx.js`, 38 lines) with raw CSS strings against the `--cs-*` palette — ~150 call
@@ -2192,9 +2278,51 @@ convert — then delete `sx.js`.
 **Risk:** medium — Settings has the most stateful forms in the app.
 **Check:** every tab; the disabled-field state (item 21) should now work.
 
+**DONE 2026-08-08, and `components/sx.js` is deleted.** `grep 'sx('` over the tree returns
+nothing, and no `<style data-sx>` element is created at runtime. Console's four remaining calls
+(`:2050, 2056, 2058, 2104` — the boot shell, the app shell, the shell row and `<main>`) went to
+plain utilities in the same pass; the file cannot be deleted while they stand, and the item
+already calls them trivial.
+
+All five defects the item lists are gone, **measured in Chrome** on a scratch route rendering
+Settings against a stub `V`:
+
+| | before | now (measured) |
+|---|---|---|
+| table header | `9px 16px`, 11px, `letter-spacing: 1.4px` | `h-row-header` **40px**, `bg-surface-2`, 600, **0.55px**, `px-3` |
+| table row | `10px 16px`, 13.5px | `h-row` **44px**, 13px, `px-3` |
+| icon button | 26×26, `0.5px` border, 50% radius | **32×32**, `rounded-full` (item 14's `size="icon"`) |
+| pills | `border-radius: 100px`, 11.5–12px | `Badge` / `TonePill`, **`rounded-token-sm` = 3px**, h 18 / 22px |
+| card hover | `translateY(-4px)` over `--plumo-dur-default` (250ms, overshoot) | `.interactive` — `translateY(-1px)`, `--dur-fast`, `--ease-out` |
+| surfaces | `border: 0.5px solid` throughout | **1px**, `rounded-token` (6px, was `--cs-r-md` 12px), no `shadow-card` |
+
+It also spends four things the item did not ask for but the rewrite made unavoidable:
+
+- **The tab rail is PM's settings rail** (`settings/layout.tsx:275-309`), not a restyle of CS's:
+  240px (was 210), `bg-surface-2`, tabs at `h-8 px-2 rounded-token-sm text-[13px]` with the
+  active one raised onto `bg-surface` + `shadow-card`. Measured 240 / 32 / 3px. Its eyebrow is
+  PM's `text-[11px] font-mono font-semibold uppercase tracking-wider text-fg-3` — the old one
+  bound `--cs-brand`, which no longer exists.
+- **Panel titles are `<h1>` at PM's settings size** — `text-[24px] font-semibold tracking-tight`
+  over `text-[13px] text-fg-2 mt-1` (`settings/notifications/page.tsx:137-144`) — where they were
+  `<h2>` at `20px / 500 / -.5px`. Measured 24px / 600 / −0.6px. That is item 34's rule; Settings
+  was not in item 34's file list, and there is no third heading convention to leave it in.
+- **`LoadNote` stops borrowing `data-tone="sla-breach"`.** An SLA-breach colour was standing in
+  for "this panel failed to load"; it now uses the same `--danger-soft` / `--danger` banner the
+  modal two hundred lines below already used.
+- **Six hand-rolled buttons became `Button`s** — the two Revoke controls, Copy, Done, "+ New tag"
+  and "Add a holiday". `+ New tag` loses its dashed border, on item 14's "PM has no dashed
+  button".
+
+**One correction to the item's own numbers:** the ~30 raw `<button>`s item 14 deferred here are
+not thirty. After this rewrite `Settings.jsx` has **eight** hand-rolled `<button>`s left, and
+every one wears a `buttonVariants()` string (`editBtn` / `iconBtn` / `primaryBtn`). They stay
+`<button>` rather than `<Button>` only because they carry the `data-id` / `data-v` attributes the
+handlers read.
+
 ---
 
-#### 48. Self-host the fonts — **M**
+#### 48. Self-host the fonts — **M** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:1` —
 `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap')`.
@@ -2215,6 +2343,28 @@ Three differences:
 
 **Blast radius:** app-wide typography. **Risk:** low. **Check:** DevTools Network — no request
 to `fonts.googleapis.com`; `font-bold` renders a real 700 weight.
+
+**DONE 2026-08-08.** `app/layout.jsx` takes PM's two `next/font/google` calls verbatim — `Inter`
+and `JetBrains_Mono`, `subsets: ['latin']`, `display: 'swap'`, and **PM's own variable names
+`--font-geist-sans` / `--font-geist-mono`**, so a file ported from either side resolves them
+identically. The two variable classes go on `<html>` and `font-sans` on `<body>`, both PM's
+(`layout.tsx:120-121`). `--font-sans` / `--font-mono` in `globals.css` are now PM's strings
+byte-for-byte, and the `@import url('https://fonts.googleapis.com/…')` at line 1 is gone.
+
+All three differences the item lists are fixed and **measured in Chrome**:
+1. **Delivery** — 13 `.woff2` files under `.next/static/media/`; the page fetches two of them
+   from `/_next/static/media/`, and there is no request to `fonts.googleapis.com`.
+2. **Weights** — `document.fonts` reports `Inter 100 900 loaded`. The same string at 300 / 400 /
+   500 / 600 / 700 / 800 / 900 measures 321.35 / 325.73 / 329.64 / 333.45 / 337.36 / 342.10 /
+   347.24px — seven distinct widths, so every weight is a real cut. **`font-bold` is no longer
+   synthesized faux-bold.**
+3. **Mono** — `JetBrains Mono 100 800 loaded`. The API-key secret renders in it, and the same
+   string measures 360px against Consolas' 329.89px, which is the proof CS is no longer falling
+   back to the OS mono.
+
+One cosmetic note: `--font-sans` resolves to `'Inter', 'Inter Fallback', 'Inter', system-ui,
+sans-serif` — Tailwind's `fontFamily.sans` appends its own tail to a token that already has one.
+PM's config has the identical shape, so this is copied, not introduced.
 
 ---
 
