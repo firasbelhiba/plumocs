@@ -54,10 +54,11 @@ const GoogleMark = () => (
 /**
  * The Plumo blob, for the "Continue with Plumo" button.
  *
- * A federated button shows the PROVIDER's brand, the way the Google button
- * carries Google's own four colours — so this is PM's blue, not Plumo CS's
- * green. Green would read as "continue with the product you are already
- * looking at", which is the opposite of what the button does.
+ * In CS green, not PM blue. The Google-button argument — a federated button
+ * wears the provider's colours — is real, and it loses here: rendered, a blue
+ * blob was the only non-green thing on the page and took the eye before the
+ * primary action did. Google gets away with it because everyone already reads
+ * that mark as a logo; an unfamiliar blob just reads as the odd one out.
  *
  * 17px to sit on Google's optical size rather than the 15px of the outline
  * icons next to it: a filled shape reads larger than a stroked one at the same
@@ -67,7 +68,7 @@ const PlumoMark = () => (
   <svg width="17" height="17" viewBox="0 0 80 80" aria-hidden="true">
     <path
       d="M 40 4 C 60 2, 75 18, 73 38 C 81 48, 73 65, 56 66 C 51 76, 32 76, 23 68 C 5 71, -2 52, 8 40 C 0 22, 20 4, 40 4 Z"
-      fill="#2563EB"
+      fill="var(--primary)"
     />
     <path d="M 22 34 Q 28 27, 34 34" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" />
     <path d="M 46 34 Q 52 27, 58 34" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" />
