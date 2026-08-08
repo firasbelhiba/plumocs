@@ -102,6 +102,16 @@ export default class Console extends React.Component {
     booted: false, loggedIn: true, screen: 'queue',
     role: 'agent', avail: 'available',
     nav: true, filters: true, rail: true,
+    // Below `md` the rail is not collapsed, it is replaced by an overlay drawer
+    // (PM `DashboardLayout.tsx:21,112-124`), and the header search folds to an
+    // icon (`Header.tsx:222`). Both are mobile-only states, separate from the
+    // desktop `nav` collapse, which stays a pure user choice at every width.
+    mobileNav: false, mobileSearch: false,
+    // Below `lg` the ticket's two panes become one at a time; `railOn` still
+    // owns the desktop toggle. PM hides its detail rail outright below `xl`
+    // (`issues/[id]/page.tsx:951`) — the plan asks CS for tabs instead, because
+    // CS's rail is the only home the SLA targets and customer card have.
+    ticketPane: 'conversation',
     view: 'all-open', sort: 'updated', page: 0,
     f: { status: [], priority: [], channel: [], tag: null, team: null, assignee: null, range: 'any' },
     rows: [], total: 0, pageSize: 25, counts: {}, facets: { status: {}, priority: {}, channel: {}, tag: {} },
@@ -420,12 +430,14 @@ export default class Console extends React.Component {
       this.loadCounts();
     }, 3000);
   }
-  /** Pane state only — the theme class and data-density belong to ThemeProvider. */
+  /** The rail's width only — the theme class and data-density belong to
+      ThemeProvider, and pane *visibility* now belongs to the panes themselves.
+      `csRail` and `csFilters` are gone with the two global attribute rules they
+      fed: a pane that has to answer to a toggle and a breakpoint at the same
+      time cannot be driven from a selector on `<html>`. */
   syncDoc() {
     const r = document.documentElement;
     r.dataset.csNav = this.state.nav ? 'on' : 'off';
-    r.dataset.csRail = this.state.rail ? 'on' : 'off';
-    r.dataset.csFilters = this.state.filters ? 'on' : 'off';
     const accent = (this.props || {}).accent;
     r.style.removeProperty('--cs-brand');
     if (accent) r.style.setProperty('--cs-accent-src', accent);
@@ -555,7 +567,10 @@ export default class Console extends React.Component {
     this.reallyNav(screen);
   }
   reallyNav(screen) {
-    const patch = { screen, menu: null, sel: [] };
+    // PM's drawer closes on any nav click (`Sidebar.tsx:172-174`); the rows are
+    // the same rows in the drawer and in the desktop rail, so the close belongs
+    // here rather than at the call site.
+    const patch = { screen, menu: null, sel: [], mobileNav: false };
     if (screen === 'settings') patch.settingsTab = 'overview';
     if (screen === 'mine') { patch.screen = 'queue'; patch.view = 'my-open'; }
     else if (screen === 'queue' && this.state.view === 'my-open') patch.view = 'all-open';
@@ -630,8 +645,12 @@ export default class Console extends React.Component {
   cycleDensity = () => { if (this.context) this.context.setDensity(this.DENSITIES[(this.DENSITIES.indexOf(this.density()) + 1) % 3]); };
   toggleTheme = () => { if (this.context) this.context.toggleTheme(); };
   toggleNav = () => this.setState(s => ({ nav: !s.nav }), () => this.syncDoc());
-  toggleFilters = () => this.setState(s => ({ filters: !s.filters }), () => this.syncDoc());
-  toggleRail = () => this.setState(s => ({ rail: !s.rail }), () => this.syncDoc());
+  toggleFilters = () => this.setState(s => ({ filters: !s.filters }));
+  toggleRail = () => this.setState(s => ({ rail: !s.rail }));
+  openMobileNav = () => this.setState({ mobileNav: true });
+  closeMobileNav = () => this.setState({ mobileNav: false });
+  toggleMobileSearch = () => this.setState(s => ({ mobileSearch: !s.mobileSearch }));
+  setTicketPane = (pane) => this.setState({ ticketPane: pane });
   refresh = () => this.loadQueue({ noFail: true });
   saveView = () => this.toast("view saved — it's in your tabs now ✿");
   toggleFacet = (e) => {
@@ -1792,6 +1811,9 @@ export default class Console extends React.Component {
       me: meView, go: this.go, signOut: this.signOut,
       canAdmin: S.role !== 'agent', toggleAvail: this.toggleAvail, openSheet: this.openSheet,
       themeAction: this.theme() === 'dark' ? 'switch to light' : 'switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
+      navOn: S.nav,
+      mobileNavOpen: S.mobileNav, openMobileNav: this.openMobileNav, closeMobileNav: this.closeMobileNav,
+      mobileSearchOpen: S.mobileSearch, toggleMobileSearch: this.toggleMobileSearch,
 
       isQueue: S.screen === 'queue' && S.view !== 'my-open', isMine: S.screen === 'queue' && S.view === 'my-open',
       isQueueLike: S.screen === 'queue', isTicket: S.screen === 'ticket',
@@ -1818,7 +1840,7 @@ export default class Console extends React.Component {
       onView: this.onView, saveView: this.saveView,
       sortLabel: (this.SORTS.find(x => x.id === S.sort) || {}).label,
       setSort: this.setSort, sortOptions: this.SORTS.map(o => ({ id: o.id, label: o.label, on: o.id === S.sort })),
-      densityLabel: this.density(), cycleDensity: this.cycleDensity, toggleFilters: this.toggleFilters, refresh: this.refresh,
+      densityLabel: this.density(), cycleDensity: this.cycleDensity, toggleFilters: this.toggleFilters, filtersOn: S.filters, refresh: this.refresh,
       refreshedRel: this.rel(S.refreshed), loading: S.load === 'loading',
 
       facetGroups, chips, removeChip: this.removeChip, toggleFacet: this.toggleFacet, clearFilters: this.clearFilters,
@@ -1859,6 +1881,7 @@ export default class Console extends React.Component {
       custEmail: tc ? tc.email : '', custOrg: tc ? this.orgName(tc.org) : '', custTz: tc ? tc.tz : '', custLocale: tc ? tc.locale : '',
       custId: tc ? tc.id : '',
       backToQueue: this.backToQueue, toggleRail: this.toggleRail, railOn: S.rail,
+      ticketPane: S.ticketPane, setTicketPane: this.setTicketPane,
       remote: S.remote, reloadTicket: this.reloadTicket,
       // only chatbot conversations have an assistant to silence
       isBotConversation: !!(t && t.createdByApiKeyId),
@@ -2024,7 +2047,51 @@ export default class Console extends React.Component {
           <div className={sx('height:100vh;display:flex;flex-direction:column;background:var(--cs-canvas);color:var(--cs-text);overflow:hidden')}>
             <Header V={V} />
             <div className={sx('flex:1;display:flex;min-height:0')}>
-              <Sidebar V={V} />
+              {/* Desktop rail. PM keeps it out of the flow entirely below `md`
+                  (`DashboardLayout.tsx:76-80`) rather than shrinking it, and
+                  wraps it in a `relative` box with no `overflow-hidden` so the
+                  collapse handle can straddle the rail's right edge. */}
+              <div className="relative hidden md:flex">
+                <Sidebar V={V} />
+                {/* PM `DashboardLayout.tsx:82-105`, verbatim apart from the
+                    label and the flip condition. CS's collapse used to live on
+                    the header's hamburger; the hamburger is `md:hidden` now and
+                    belongs to the drawer, so the desktop control moves to PM's
+                    own affordance instead of disappearing. */}
+                <button
+                  type="button"
+                  onClick={V.toggleNav}
+                  aria-label={V.navOn ? 'collapse sidebar' : 'expand sidebar'}
+                  title={V.navOn ? 'collapse sidebar' : 'expand sidebar'}
+                  className="group absolute left-full top-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--border-strong)] bg-surface text-fg-2 shadow-sm transition-colors hover:border-[color:var(--primary)] hover:bg-[color:var(--primary-soft)] hover:text-[color:var(--primary)]"
+                  style={{ transform: 'translate(-50%, -50%)' }}
+                >
+                  <svg
+                    className={'h-3.5 w-3.5 transition-transform duration-200 ' + (V.navOn ? '' : 'rotate-180')}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.2}
+                    aria-hidden
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Mobile drawer + scrim, PM `DashboardLayout.tsx:108-124`. */}
+              {V.mobileNavOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 bg-black/50 z-modal-backdrop md:hidden animate-fade-in"
+                    onClick={V.closeMobileNav}
+                  />
+                  <div className="fixed inset-y-0 left-0 w-72 z-modal md:hidden animate-fade-in">
+                    <Sidebar V={V} isMobile />
+                  </div>
+                </>
+              )}
+
               <main className={sx('flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden')}>
                 {V.isQueueLike && <Queue V={V} />}
                 {V.isTicket && <Ticket V={V} />}

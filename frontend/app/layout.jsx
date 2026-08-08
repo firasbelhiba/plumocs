@@ -27,8 +27,13 @@ const THEME_BOOT_SNIPPET = `
 `;
 
 export default function RootLayout({ children }) {
+  /* `data-cs-nav` survives because `[data-cs-nav="off"]{--cs-navw:64px}` still
+     drives the rail's animated width. `data-cs-rail` and `data-cs-filters` went
+     with the selectors that read them (item 42): those two panes now answer to a
+     breakpoint as well as a toggle, which a rule on <html> cannot express, so
+     they take `railOn` / `filtersOn` as props instead. */
   return (
-    <html lang="en" data-cs-nav="on" data-cs-rail="on" data-cs-filters="on" suppressHydrationWarning>
+    <html lang="en" data-cs-nav="on" suppressHydrationWarning>
       <body>
         <script id="cs-theme-boot" dangerouslySetInnerHTML={{ __html: THEME_BOOT_SNIPPET }} />
         <ThemeProvider>

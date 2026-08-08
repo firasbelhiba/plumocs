@@ -10,8 +10,10 @@ import { Breadcrumb, Button, CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, Input, Modal
    focus rings match Button exactly. Text fields use <Input> itself — the local
    copy of its class string was missing the disabled and error states, so a
    disabled field here looked enabled. */
+/* `w-full` moved behind `md:`: below it the tab list is a horizontal strip, and
+   a full-width button in a row would give each tab the whole viewport. */
 const tabBtn = () => cn(
-  'w-full px-2.5 py-[9px] rounded-token-sm border-none text-[13px] text-left cursor-pointer',
+  'md:w-full px-2.5 py-[9px] rounded-token-sm border-none text-[13px] text-left whitespace-nowrap cursor-pointer',
   'transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring',
 );
 const editBtn = () => buttonVariants({ variant: 'outline', size: 'sm' });
@@ -30,9 +32,23 @@ const LoadNote = ({ children }) => (
 
 export default function Settings({ V }) {
   return (
-    <div className={sx('flex:1;min-height:0;display:flex;overflow:hidden')}>
-      <aside data-scroll className={sx('flex:none;width:210px;border-right:1px solid var(--cs-border);background:var(--cs-surface);padding:16px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:2px')}>
-        <span className={sx('font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--cs-brand);font-weight:500;padding:4px 10px 10px')}>settings</span>
+    // The tab rail cannot be a 210px column beside a 720px pane at 375px, so it
+    // turns the corner: a horizontal scrolling strip under the header below
+    // `md`, PM's own shape for a tab row (`AdminSettingsSection.tsx:89`), and
+    // the vertical rail from `md` up. Both these two elements had to come off
+    // `sx()` to say that — `sx` injects its sheet into `<head>` at runtime, so
+    // it lands after Tailwind's and wins every `display` or `width` tie.
+    <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
+      <aside
+        data-scroll
+        className={cn(
+          'flex-none flex gap-0.5 px-3 py-2 overflow-x-auto bg-[color:var(--cs-surface)]',
+          'border-b border-[color:var(--cs-border)]',
+          'md:w-[210px] md:flex-col md:py-4 md:overflow-x-visible md:overflow-y-auto',
+          'md:border-b-0 md:border-r md:border-[color:var(--cs-border)]',
+        )}
+      >
+        <span className={sx('font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--cs-brand);font-weight:500;padding:4px 10px 10px') + ' hidden md:block'}>settings</span>
         <button onClick={V.setSettingsTab} data-v="overview" data-on={String(V.tabOverview)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>overview</button>
         <button onClick={V.setSettingsTab} data-v="team" data-on={String(V.tabTeam)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>team &amp; users</button>
         <button onClick={V.setSettingsTab} data-v="sla" data-on={String(V.tabSla)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>sla policies</button>
@@ -116,7 +132,7 @@ export default function Settings({ V }) {
               </div>
               {V.canInvite && <button onClick={V.openInvite} className={primaryBtn()}>invite someone</button>}
             </div>
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
               <div className={sx('display:grid;grid-template-columns:minmax(170px,1.2fr) minmax(180px,1.4fr) 110px 100px 120px 92px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
                 <span>name</span><span>email</span><span>role</span><span>team</span><span>last active</span><span className={sx('text-align:right')}>actions</span>
               </div>
@@ -174,7 +190,7 @@ export default function Settings({ V }) {
                 )}
 
                 {V.hasInvites && (
-                  <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+                  <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
                     <div className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 110px minmax(130px,1fr) 120px 92px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
                       <span>email</span><span>role</span><span>invited by</span><span>expires</span><span className={sx('text-align:right')}>actions</span>
                     </div>
@@ -267,7 +283,7 @@ export default function Settings({ V }) {
               {V.canManageDesk && <button onClick={V.newSlaPolicy} className={primaryBtn()}>add a policy</button>}
             </div>
             {V.slaErr && <LoadNote>{V.slaErr}</LoadNote>}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
               <div className={sx('display:grid;grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) 140px 130px 150px 70px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
                 <span>name</span><span>priority</span><span>first response</span><span>resolution</span><span>hours</span><span className={sx('text-align:right')}></span>
               </div>
@@ -311,7 +327,7 @@ export default function Settings({ V }) {
             {/* The tick is bound to what the server confirmed, not to a local
                 guess: a failed write leaves the day exactly as it was and says
                 so, instead of a tick that stays put over an unchanged schedule. */}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
               {V.hoursRows.map(d => (
                 <div key={d.day} className={sx('display:grid;grid-template-columns:130px 1fr 1fr 70px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
                   <span>{d.day}</span>
@@ -398,7 +414,7 @@ export default function Settings({ V }) {
               <p className={sx('font-size:13px;color:var(--cs-muted)')}>how conversations get sorted. a key is written onto every conversation that wears it, so it never changes.</p>
             </div>
             {V.tagsErr && <LoadNote>{V.tagsErr}</LoadNote>}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
               {V.tagRows.map(t => (
                 <div key={t.id} className={sx('display:grid;grid-template-columns:1fr 90px 80px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--cs-border);align-items:center;font-size:13.5px')}>
                   <span data-tone={t.tone} className={sx('display:inline-flex;align-items:center;gap:7px;padding:3px 11px;border-radius:100px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}><i className={sx('width:7px;height:7px;border-radius:50%;background:var(--tone-hue)')}></i>{t.label}</span>
@@ -425,7 +441,7 @@ export default function Settings({ V }) {
               {V.canManageDesk && <button onClick={V.newWebhook} className={primaryBtn()}>add endpoint</button>}
             </div>
             {V.hooksErr && <LoadNote>{V.hooksErr}</LoadNote>}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
               <div className={sx('display:grid;grid-template-columns:minmax(240px,1.6fr) minmax(180px,1fr) 110px 140px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
                 <span>endpoint</span><span>events</span><span>status</span><span className={sx('text-align:right')}>last delivery</span>
               </div>
@@ -495,7 +511,7 @@ export default function Settings({ V }) {
                 <button onClick={V.hideKey} className={sx('padding:8px 14px;border:none;border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:12.5px;cursor:pointer')}>done</button>
               </div>
             )}
-            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow:hidden')}>
+            <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
               <div className={sx('display:grid;grid-template-columns:minmax(180px,1.4fr) 130px 130px 110px 90px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
                 <span>name</span><span>scope</span><span>created</span><span className={sx('text-align:right')}>last used</span><span className={sx('text-align:right')}></span>
               </div>

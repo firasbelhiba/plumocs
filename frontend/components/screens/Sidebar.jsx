@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Badge, Dropdown, DropdownItem, UserAvatar } from '../common';
+import { Badge, Dropdown, DropdownItem, Icon, UserAvatar } from '../common';
 import { CustomerGlyph, ResolveGlyph, SlaGlyph, TicketGlyph } from './glyphs';
 
 /** Nav row — PM's `NavLink.tsx:29-44`, geometry and state classes both.
@@ -17,11 +17,12 @@ const MENU_ITEM =
   'w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-token-sm border-none bg-transparent ' +
   'text-[13px] text-fg text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
 
-function NavItem({ screen, icon, label, count, active, onClick }) {
+function NavItem({ screen, icon, label, count, active, collapsed, onClick }) {
   return (
     <button
       onClick={onClick}
       data-s={screen}
+      title={collapsed ? label : undefined}
       className={cn(
         NAV_ROW,
         active
@@ -30,12 +31,13 @@ function NavItem({ screen, icon, label, count, active, onClick }) {
       )}
     >
       {/* Active accent bar — a detached pill, not a border on the row, so it does
-          not eat 2.5px of the row's own box. `data-navlabel` is how the collapsed
-          rail hides things at ≤1180px; PM suppresses this the same way when its
-          sidebar is collapsed (NavLink.tsx:38). */}
-      {active && (
+          not eat 2.5px of the row's own box. PM suppresses it when the sidebar
+          is collapsed (NavLink.tsx:38), and — like the label and the count —
+          takes that from an `isCollapsed` prop rather than a global selector,
+          which is what lets the drawer render expanded while the desktop rail
+          beside it stays collapsed. */}
+      {active && !collapsed && (
         <span
-          data-navlabel
           aria-hidden
           className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full"
           style={{ background: 'var(--primary)' }}
@@ -44,22 +46,45 @@ function NavItem({ screen, icon, label, count, active, onClick }) {
       <span className={cn('relative shrink-0', active ? 'text-[color:var(--primary)]' : 'text-fg-3 group-hover:text-fg-2')}>
         {icon}
       </span>
-      <span data-navlabel className="flex-1 truncate">{label}</span>
-      {count != null && (
-        <span data-navlabel>
-          <Badge variant="default" className="tabular-nums">{count}</Badge>
-        </span>
+      {!collapsed && <span className="flex-1 truncate">{label}</span>}
+      {!collapsed && count != null && (
+        <Badge variant="default" className="tabular-nums">{count}</Badge>
       )}
     </button>
   );
 }
 
-export default function Sidebar({ V }) {
+/**
+ * `isMobile` is PM's own prop (`Sidebar/Sidebar.tsx:112`): inside the overlay
+ * drawer the rail is full-width, carries its own header with a close button,
+ * and — `isCollapsed = isMobile ? false : collapsed` at `:381` — ignores the
+ * desktop collapse entirely.
+ */
+export default function Sidebar({ V, isMobile = false }) {
+  const collapsed = !isMobile && !V.navOn;
   return (
     <nav
-      className="flex-none flex flex-col bg-surface border-r border-[color:var(--border)] overflow-hidden transition-[width] duration-[var(--dur)] ease-[cubic-bezier(0.2,0,0,1)]"
-      style={{ width: 'var(--cs-navw)' }}
+      className={cn(
+        'flex-none flex flex-col bg-surface border-r border-[color:var(--border)] overflow-hidden',
+        'transition-[width] duration-[var(--dur)] ease-[cubic-bezier(0.2,0,0,1)]',
+        isMobile && 'w-full h-full',
+      )}
+      style={isMobile ? undefined : { width: 'var(--cs-navw)' }}
     >
+      {/* PM `Sidebar/Sidebar.tsx:429-443` */}
+      {isMobile && (
+        <div className="flex items-center justify-between p-3 border-b border-[color:var(--border)]">
+          <span className="text-sm font-semibold text-fg">menu</span>
+          <button
+            onClick={V.closeMobileNav}
+            className="p-1.5 rounded-token-sm hover:bg-surface-2 transition-colors focus-ring"
+            aria-label="close menu"
+          >
+            <Icon name="state-close" size={16} className="text-fg-2" />
+          </button>
+        </div>
+      )}
+
       {/* PM's rail is a flat, unlabelled list (`Sidebar/Sidebar.tsx:446,461`):
           a scrolling `py-2` region wrapping a `px-2 space-y-0.5` stack. The
           "overview" / "people" section headings CS used to split these five rows
@@ -67,14 +92,15 @@ export default function Sidebar({ V }) {
           whole rail, and it belongs to a list CS does not have. */}
       <div className="flex-1 overflow-y-auto py-2 scrollbar-hidden">
         <div className="px-2 space-y-0.5">
-          <NavItem screen="queue" active={V.isQueue} onClick={V.go} label="inbox" count={V.cUn} icon={<TicketGlyph />} />
-          <NavItem screen="mine" active={V.isMine} onClick={V.go} label="mine" count={V.cMy} icon={<ResolveGlyph />} />
-          <NavItem screen="customers" active={V.isCustomersNav} onClick={V.go} label="customers" icon={<CustomerGlyph />} />
-          <NavItem screen="reports" active={V.isReports} onClick={V.go} label="reports" icon={<SlaGlyph />} />
+          <NavItem screen="queue" active={V.isQueue} collapsed={collapsed} onClick={V.go} label="inbox" count={V.cUn} icon={<TicketGlyph />} />
+          <NavItem screen="mine" active={V.isMine} collapsed={collapsed} onClick={V.go} label="mine" count={V.cMy} icon={<ResolveGlyph />} />
+          <NavItem screen="customers" active={V.isCustomersNav} collapsed={collapsed} onClick={V.go} label="customers" icon={<CustomerGlyph />} />
+          <NavItem screen="reports" active={V.isReports} collapsed={collapsed} onClick={V.go} label="reports" icon={<SlaGlyph />} />
           {V.canAdmin && (
             <NavItem
               screen="settings"
               active={V.isSettings}
+              collapsed={collapsed}
               onClick={V.go}
               label="settings"
               icon={
@@ -108,12 +134,14 @@ export default function Sidebar({ V }) {
                     style={{ background: 'var(--tone-hue)' }}
                   />
                 </span>
-                <span data-navlabel className="flex-1 min-w-0">
-                  <span className="flex flex-col min-w-0">
-                    <span className="text-[13px] font-medium truncate">{V.me.name}</span>
-                    <span className="text-[11.5px] text-fg-3">{V.me.role} · {V.me.avail}</span>
+                {!collapsed && (
+                  <span className="flex-1 min-w-0">
+                    <span className="flex flex-col min-w-0">
+                      <span className="text-[13px] font-medium truncate">{V.me.name}</span>
+                      <span className="text-[11.5px] text-fg-3">{V.me.role} · {V.me.avail}</span>
+                    </span>
                   </span>
-                </span>
+                )}
               </span>
             }
           >

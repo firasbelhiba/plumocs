@@ -1,8 +1,21 @@
 'use client';
 
-import { Breadcrumb, Button, Card, Dropdown, DropdownItem, Input, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
+import { cn } from '@/lib/utils';
+import { Breadcrumb, Button, Card, Dropdown, DropdownItem, Input, Segment, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
 import { buttonVariants } from '../common/Button';
 import { KnowledgeBaseGlyph, SlaGlyph } from './glyphs';
+
+/* Below `lg` the two panes become one at a time. PM's own answer for its issue
+   detail is blunter — the rail is simply `hidden xl:block`
+   (`issues/[id]/page.tsx:951`) — but PM's rail duplicates fields that also
+   appear inline in its header, and CS's does not: the SLA targets, the customer
+   card, the tags and the CSAT have no other home in this app, so hiding them
+   outright would lose them rather than repeat them. Hence tabs, which is what
+   item 42 asks for, on the `Segment` primitive CS already ships. */
+const PANES = [
+  { value: 'conversation', label: 'conversation' },
+  { value: 'details', label: 'details' },
+];
 
 const ON_ROW_STYLE = { background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' };
 
@@ -102,7 +115,7 @@ export default function Ticket({ V }) {
       </div>
 
       {/* toolbar */}
-      <div className="flex-none flex items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface relative z-sticky">
+      <div className="flex-none flex flex-wrap items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface relative z-sticky">
         <Button variant="outline" size="icon" onClick={V.backToQueue} aria-label="back to the inbox" title="back to the inbox" className="flex-none">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 6l-6 6 6 6" />
@@ -286,17 +299,24 @@ export default function Ticket({ V }) {
           </Dropdown>
         </div>
 
-        <Button variant="outline" size="icon" onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className="flex-none">
+        {/* The rail toggle is a desktop control: below `lg` the tabs decide
+            which pane is on screen, so a second, invisible switch on the same
+            thing would only be a way to make the details tab render nothing. */}
+        <Button variant="outline" size="icon" onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className="flex-none hidden lg:inline-flex">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 5h16v14H4zM15 5v14" />
           </svg>
         </Button>
       </div>
 
+      <div className="flex-none lg:hidden px-4 py-2 border-b border-[color:var(--border)] bg-surface">
+        <Segment options={PANES} value={V.ticketPane} onChange={V.setTicketPane} />
+      </div>
+
       {/* SLA strip */}
       <div
         data-tone={V.tSlaTone}
-        className="flex-none flex items-center gap-3.5 px-[18px] py-[7px] border-b border-[color:var(--border)] text-[12.5px] tabular-nums"
+        className="flex-none flex flex-wrap items-center gap-x-3.5 gap-y-1 px-[18px] py-[7px] border-b border-[color:var(--border)] text-[12.5px] tabular-nums"
         style={{ background: 'color-mix(in srgb, var(--tone-hue) 9%, var(--surface))', color: 'var(--tone-fg)' }}
       >
         <span className="inline-flex items-center gap-[7px]">
@@ -315,7 +335,12 @@ export default function Ticket({ V }) {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="flex-1 min-w-0 flex flex-col bg-bg">
+        <div
+          className={cn(
+            'flex-1 min-w-0 flex-col bg-bg lg:flex',
+            V.ticketPane === 'conversation' ? 'flex' : 'hidden',
+          )}
+        >
           {V.remote && (
             <div
               className="flex-none flex items-center gap-2.5 mx-[18px] mt-3 px-3.5 py-2.5 rounded-full text-[12.5px] animate-slide-up"
@@ -514,12 +539,19 @@ export default function Ticket({ V }) {
           </div>
         </div>
 
-        {/* details rail */}
+        {/* Details rail. Like the queue's filter rail this now answers to the
+            toggle *and* the viewport, which the old `[data-cs-rail="off"]
+            [data-rail]` selector could not express: at `lg` and up `railOn`
+            decides, below it the tab does, and below `lg` it is full width
+            rather than a 322px column beside nothing. */}
         <aside
-          data-rail
           data-scroll
-          className="flex-none overflow-y-auto p-3.5 bg-surface border-l border-[color:var(--border)] flex flex-col gap-3"
-          style={{ width: 'var(--cs-railw)' }}
+          className={cn(
+            'flex-none overflow-y-auto p-3.5 bg-surface border-l border-[color:var(--border)] flex-col gap-3',
+            'w-full lg:w-[var(--cs-railw)]',
+            V.ticketPane === 'details' ? 'flex' : 'hidden',
+            V.railOn ? 'lg:flex' : 'lg:hidden',
+          )}
         >
           <div className={RAIL_CARD + ' gap-3'}>
             <div className="flex items-center gap-3">

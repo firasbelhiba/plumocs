@@ -123,7 +123,10 @@ p { margin: 0; }
   --cs-brand-ink:var(--cs-forest);
   --cs-navw:236px; --cs-railw:322px; --cs-filtw:216px;
   --cs-r-sm:8px; --cs-r-md:12px; --cs-fs:13.5px; --cs-gap:12px; --cs-cardpad:16px;
-  --cs-qcols:28px 100px 92px minmax(220px,1fr) 168px 32px 118px 88px 52px;
+  /* `--cs-qcols` is gone with the media queries that re-wrote it. The queue's
+     column set is now three `grid-cols-[…]` utilities on the row itself
+     (`md:` 7 columns, `lg:` 8, `xl:` 9), so the template and the breakpoint that
+     selects it live in the same place instead of two files apart. */
   --av-bg:var(--cs-soft); --av-fg:var(--plumo-night); --av-border:1px solid transparent;
   --tone-hue:var(--cs-muted); --tone-fg:var(--cs-muted); --tone-fg-dark:#CBD5E1;
   --cs-subjw:400; --cs-subjc:var(--cs-text);
@@ -308,10 +311,16 @@ input::-ms-clear {
   animation: shimmer 1.6s infinite linear;
 }
 .dark [data-tone]{--tone-fg:var(--tone-fg-dark);}
+/* The rail's *width* is still a document-level token, because the collapse has
+   to animate and the sidebar is the only consumer. What is no longer done in
+   CSS is deciding which panes are *visible*: a pane now has to answer to both a
+   user toggle and a breakpoint at once (`hidden lg:flex` vs `lg:hidden`), and a
+   global attribute selector cannot express that. The three companion rules —
+   `[data-cs-nav="off"] [data-navlabel]`, `[data-cs-rail="off"] [data-rail]` and
+   `[data-cs-filters="off"] [data-filterrail]` — are gone, and the sidebar,
+   details rail and filter rail take `navOn` / `railOn` / `filtersOn` as props
+   the way PM's do (`Sidebar/NavLink.tsx` takes `isCollapsed`). */
 [data-cs-nav="off"]{--cs-navw:64px;}
-[data-cs-nav="off"] [data-navlabel]{display:none !important;}
-[data-cs-rail="off"] [data-rail]{display:none;}
-[data-cs-filters="off"] [data-filterrail]{display:none;}
 :root[data-density='compact'] [data-snip]{display:inline; margin-left:8px;}
 [data-tone="st-new"]{--tone-hue:#94A3B8;--tone-fg:#475569;--tone-fg-dark:#C3CEDE}
 [data-tone="st-open"]{--tone-hue:#4C9F6E;--tone-fg:#1F4A2E;--tone-fg-dark:#B8CFB4}
@@ -376,9 +385,18 @@ button,input,textarea,select{font-family:var(--plumo-font)}
    `cs-breathe` has now gone the same way: it was the idle on CS's own mascots,
    and PM's illustrations carry their own SMIL animation, so with the mascots
    replaced the keyframe had no callers left. */
-@media (max-width:1400px){:root{--cs-qcols:28px 96px 88px minmax(200px,1fr) 152px 32px 84px 50px}[data-col="tags"]{display:none}}
-@media (max-width:1180px){:root{--cs-navw:64px;--cs-qcols:26px 92px minmax(180px,1fr) 140px 30px 82px 46px}[data-navlabel]{display:none !important}[data-col="prio"]{display:none}}
-@media (max-width:1080px){:root{--cs-filtw:0px}[data-filterrail]{display:none}}
+/* The three hand-written max-width queries that used to sit here — 1400px drops
+   the tags column, 1180px forces the rail to 64px and drops the priority column,
+   1080px hides the filter rail — are gone (item 42). CS had no breakpoint value
+   in common with PM, and no layout at all below 1080px. Everything responsive
+   is now a Tailwind prefix at PM's own 640 / 768 / 1024 / 1280, declared next to
+   the markup it governs, and `prefers-reduced-motion` is again the only `@media`
+   block in this file, as it is the only one in PM's.
+
+   The 1180px rule also *forced* the rail collapsed, silently overriding the
+   user's own toggle between 1080 and 1180. In PM collapsing is only ever a user
+   choice (`DashboardLayout.tsx:87-105`); below `md` the rail is not collapsed at
+   all, it is replaced by the overlay drawer. */
 
 /* ============================================================
    Motion system — ported verbatim from the plumo PM console

@@ -1,11 +1,52 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import {
   Button, CHECKBOX, CHECKBOX_STYLE, Dropdown, DropdownItem, EmptyState, LoadingSpinner,
   Skeleton, TonePill, UserAvatar,
 } from '../common';
 import { buttonVariants } from '../common/Button';
 import { AgentGlyph, SnoozeGlyph } from './glyphs';
+
+/* The column set, at Tailwind's shared breakpoints instead of CS's 1400 / 1180.
+   Below `md` there is no grid at all — the row is a stacked card, which CS had
+   no equivalent of at any width — and above it columns are *added* as room
+   appears rather than dropped as it runs out.
+
+   The budget each step has to fit inside, at its own narrowest width and with
+   every rail the step allows:
+
+     md   768 − 236 rail − 24 px-3                     = 508  →  294 used
+     lg  1024 − 236 rail − 216 filter rail − 24        = 548  →  406 used
+     xl  1280 − 236 − 216 − 24                         = 804  →  644 used
+     2xl 1536 − 236 − 216 − 24                         = 1060 →  774 used
+
+   That is why priority waits for `lg`, customer and assignee for `xl`, and tags
+   for `2xl` — CS's old set gave the full nine columns from 1400px up, and only
+   fitted them by force-collapsing the rail to 64px, which is the override item
+   42 exists to remove. The subject track is `minmax(0,1fr)` at every step: its
+   old 180–220px floor is what pushed the total past the container and clipped
+   the right-hand columns instead of shrinking the one that truncates anyway. */
+const QCOLS =
+  'md:grid-cols-[26px_92px_minmax(0,1fr)_82px_46px] ' +
+  'lg:grid-cols-[28px_96px_88px_minmax(0,1fr)_84px_50px] ' +
+  'xl:grid-cols-[28px_100px_92px_minmax(0,1fr)_168px_32px_88px_52px] ' +
+  '2xl:grid-cols-[28px_100px_92px_minmax(0,1fr)_168px_32px_118px_88px_52px]';
+
+/* Every one of these is on the stacked card, where there is vertical room for
+   all of it, then hidden at `md` and re-admitted at the step whose budget above
+   can pay for it. Column order in the DOM is checkbox, status, priority,
+   subject, customer, assignee, tags, sla, updated — the same order as each
+   template, which is what keeps the counts matching. */
+const COL_PRIO = 'block md:hidden lg:block';
+const COL_CUST = 'flex md:hidden xl:flex';
+const COL_AV = 'flex md:hidden xl:flex';
+const COL_TAGS = 'flex md:hidden 2xl:flex';
+
+/* `md:contents` is what lets one row serve both layouts: below `md` these two
+   wrappers are the card's badge line and meta line, and from `md` up they
+   dissolve so their children become direct grid items in the template above. */
+const CARD_LINE = 'flex items-center gap-2 min-w-0 md:contents';
 
 /** `Dropdown` wraps its trigger in a <button>, so the trigger itself is a span
     borrowing the Button recipe rather than a nested <Button>. */
@@ -70,8 +111,8 @@ export default function Queue({ V }) {
       </div>
 
       {/* toolbar */}
-      <div className="flex-none flex items-center gap-2.5 px-4 py-2.5 border-b border-[color:var(--border)]">
-        <Button variant="outline" size="sm" onClick={V.toggleFilters} leftIcon={
+      <div className="flex-none flex flex-wrap items-center gap-2.5 px-4 py-2.5 border-b border-[color:var(--border)]">
+        <Button variant="outline" size="sm" onClick={V.toggleFilters} className="hidden lg:inline-flex" leftIcon={
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 6h16M7 12h10M10 18h4" />
           </svg>
@@ -144,11 +185,18 @@ export default function Queue({ V }) {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        {/* filter rail */}
+        {/* Filter rail. It answers to two things now — the user's toggle and the
+            viewport — which is why it stopped being a global attribute rule:
+            `[data-cs-filters="off"] [data-filterrail]` could not also say
+            "and never below `lg`". 1080px was CS's own number; `lg` is 1024,
+            PM's. Below it the toolbar's `filters` button goes too, since it
+            would toggle something that cannot appear. */}
         <aside
-          data-filterrail
           data-scroll
-          className="flex-none p-3.5 overflow-y-auto bg-surface border-r border-[color:var(--border)] flex flex-col gap-[18px]"
+          className={cn(
+            'flex-none p-3.5 overflow-y-auto bg-surface border-r border-[color:var(--border)] flex-col gap-[18px]',
+            V.filtersOn ? 'hidden lg:flex' : 'hidden',
+          )}
           style={{ width: 'var(--cs-filtw)' }}
         >
           <div className="flex items-center justify-between">
@@ -213,32 +261,41 @@ export default function Queue({ V }) {
               `bg-surface-2` not the page background, semibold, and PM's
               `tracking-wider` (0.05em ≈ 0.55px) in place of `tracking-[1.4px]`,
               which was nearly 3× as wide. */}
+          {/* The column header belongs to the grid, so it goes with it: a
+              stacked card has no columns to label. */}
           <div
-            className="flex-none grid items-center h-row-header px-3 border-b border-[color:var(--border)] bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-fg-3"
-            style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)' }}
+            className={cn(
+              'flex-none hidden md:grid items-center gap-3 h-row-header px-3 border-b border-[color:var(--border)]',
+              'bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-fg-3',
+              QCOLS,
+            )}
           >
             <input type="checkbox" checked={V.allSelected} onChange={V.toggleAll} aria-label="select all conversations" className={CHECKBOX} style={CHECKBOX_STYLE} />
-            <span>status</span><span data-col="prio">priority</span><span>subject</span><span>customer</span><span />
-            <span data-col="tags">tags</span><span>sla</span>
+            <span>status</span><span className={COL_PRIO}>priority</span><span>subject</span>
+            <span className={COL_CUST}>customer</span><span className={COL_AV} />
+            <span className={COL_TAGS}>tags</span><span>sla</span>
             <span className="text-right">upd.</span>
           </div>
 
           <div data-scroll className="flex-1 overflow-y-auto">
             {V.loadingRows && V.skeletons.map((s) => (
-              <div
-                key={s.id}
-                className="grid items-center px-3 h-row border-b border-[color:var(--border)]"
-                style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)' }}
-              >
-                <span />
-                <Skeleton className="h-[18px] rounded-full" />
-                <Skeleton className="h-[18px] rounded-full" />
-                <Skeleton className="h-3 w-[70%] rounded-full" />
-                <Skeleton className="h-3 rounded-full" />
-                <Skeleton className="h-6 w-6 rounded-full" />
-                <Skeleton className="h-4 rounded-full" />
-                <Skeleton className="h-4 rounded-full" />
-                <Skeleton className="h-2.5 rounded-full" />
+              <div key={s.id}>
+                <div className={cn('hidden md:grid items-center gap-3 px-3 h-row border-b border-[color:var(--border)]', QCOLS)}>
+                  <span />
+                  <Skeleton className="h-[18px] rounded-full" />
+                  <Skeleton className={COL_PRIO + ' h-[18px] rounded-full'} />
+                  <Skeleton className="h-3 w-[70%] rounded-full" />
+                  <Skeleton className={COL_CUST + ' h-3 rounded-full'} />
+                  <Skeleton className={COL_AV + ' h-6 w-6 rounded-full'} />
+                  <Skeleton className={COL_TAGS + ' h-4 rounded-full'} />
+                  <Skeleton className="h-4 rounded-full" />
+                  <Skeleton className="h-2.5 rounded-full" />
+                </div>
+                <div className="md:hidden flex flex-col gap-2 px-4 py-3 border-b border-[color:var(--border)]">
+                  <Skeleton className="h-[18px] w-24 rounded-full" />
+                  <Skeleton className="h-3 w-[70%] rounded-full" />
+                  <Skeleton className="h-3 w-[45%] rounded-full" />
+                </div>
               </div>
             ))}
 
@@ -279,22 +336,30 @@ export default function Queue({ V }) {
                   onMouseEnter={V.onRowEnter}
                   onMouseLeave={V.onRowLeave}
                   data-id={row.id}
-                  className={
-                    'relative grid items-center h-row px-3 border-b border-[color:var(--border)] text-[13px] text-fg cursor-pointer transition-colors duration-[var(--dur-instant)] ' +
-                    (row.selected ? 'bg-[color:var(--primary-soft)]' : 'hover:bg-surface-2')
-                  }
-                  style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)' }}
+                  className={cn(
+                    'relative border-b border-[color:var(--border)] text-[13px] text-fg cursor-pointer',
+                    'transition-colors duration-[var(--dur-instant)]',
+                    // Below `md`: PM's stacked list row (`IssuesList.tsx:142-160`) —
+                    // a badge line, the subject, then a meta line.
+                    'flex flex-col gap-1.5 px-4 py-3',
+                    // `md` and up: the column grid, unchanged.
+                    'md:grid md:items-center md:gap-3 md:h-row md:px-3 md:py-0',
+                    QCOLS,
+                    row.selected ? 'bg-[color:var(--primary-soft)]' : 'hover:bg-surface-2',
+                  )}
                 >
-                  <span data-stop="1" onClick={V.stop} className="flex items-center">
-                    <input type="checkbox" checked={row.selected} onChange={V.toggleSel} data-id={row.id} aria-label="select conversation" className={CHECKBOX} style={CHECKBOX_STYLE} />
-                  </span>
+                  <span className={CARD_LINE}>
+                    <span data-stop="1" onClick={V.stop} className="flex items-center">
+                      <input type="checkbox" checked={row.selected} onChange={V.toggleSel} data-id={row.id} aria-label="select conversation" className={CHECKBOX} style={CHECKBOX_STYLE} />
+                    </span>
 
-                  <TonePill tone={row.statusTone} dot size="md">{row.statusLabel}</TonePill>
+                    <TonePill tone={row.statusTone} dot size="md">{row.statusLabel}</TonePill>
 
-                  <span data-col="prio">
-                    <TonePill tone={row.prioTone} size="md" glyph={<span className="text-[11px]">{row.prioGlyph}</span>}>
-                      {row.prioLabel}
-                    </TonePill>
+                    <span className={COL_PRIO}>
+                      <TonePill tone={row.prioTone} size="md" glyph={<span className="text-[11px]">{row.prioGlyph}</span>}>
+                        {row.prioLabel}
+                      </TonePill>
+                    </span>
                   </span>
 
                   <span className="min-w-0 flex flex-col gap-0.5">
@@ -307,29 +372,33 @@ export default function Queue({ V }) {
                     <span data-snip className="block truncate text-fg-3 text-[12.5px]">{row.snippet}</span>
                   </span>
 
-                  <span className="min-w-0 flex flex-col">
-                    <span className="truncate">{row.custName}</span>
-                    <span className="truncate text-fg-3 text-[12px]">{row.custOrg}</span>
+                  <span className={CARD_LINE + ' flex-wrap gap-x-3'}>
+                    <span className={COL_CUST + ' min-w-0 flex-col'}>
+                      <span className="truncate">{row.custName}</span>
+                      <span className="truncate text-fg-3 text-[12px]">{row.custOrg}</span>
+                    </span>
+
+                    <span className={COL_AV + ' items-center'}>
+                      <UserAvatar firstName={aFirst} lastName={aLast} size="sm" />
+                    </span>
+
+                    <span className={COL_TAGS + ' gap-1 items-center min-w-0'}>
+                      {row.tagChips.map((t, i) => (
+                        <TonePill key={i} tone={t.tone}>{t.label}</TonePill>
+                      ))}
+                      {row.hasMoreTags && <span className="text-[11.5px] text-fg-3">{row.tagMore}</span>}
+                    </span>
+
+                    <span data-tone={row.slaTone} title={row.slaTitle} className="inline-flex items-center gap-[7px] whitespace-nowrap">
+                      <svg width="26" height="26" viewBox="0 0 32 32" className="flex-none">
+                        <circle cx="16" cy="16" r="12" fill="none" stroke="var(--surface-3)" strokeWidth="3" />
+                        <circle cx="16" cy="16" r="12" fill="none" stroke={row.arcColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={row.arcDash} transform="rotate(-90 16 16)" />
+                      </svg>
+                      <span className="text-[11.5px] tabular-nums text-fg-3">{row.slaLabel}</span>
+                    </span>
+
+                    <span className="md:text-right text-fg-3 text-[12.5px] tabular-nums">{row.updated}</span>
                   </span>
-
-                  <UserAvatar firstName={aFirst} lastName={aLast} size="sm" />
-
-                  <span data-col="tags" className="flex gap-1 items-center min-w-0">
-                    {row.tagChips.map((t, i) => (
-                      <TonePill key={i} tone={t.tone}>{t.label}</TonePill>
-                    ))}
-                    {row.hasMoreTags && <span className="text-[11.5px] text-fg-3">{row.tagMore}</span>}
-                  </span>
-
-                  <span data-tone={row.slaTone} title={row.slaTitle} className="inline-flex items-center gap-[7px] whitespace-nowrap">
-                    <svg width="26" height="26" viewBox="0 0 32 32" className="flex-none">
-                      <circle cx="16" cy="16" r="12" fill="none" stroke="var(--surface-3)" strokeWidth="3" />
-                      <circle cx="16" cy="16" r="12" fill="none" stroke={row.arcColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={row.arcDash} transform="rotate(-90 16 16)" />
-                    </svg>
-                    <span className="text-[11.5px] tabular-nums text-fg-3">{row.slaLabel}</span>
-                  </span>
-
-                  <span className="text-right text-fg-3 text-[12.5px] tabular-nums">{row.updated}</span>
 
                   <span
                     data-showq={String(row.hovered)}
@@ -365,7 +434,17 @@ export default function Queue({ V }) {
 
           {V.hasSelection && (
             <div
-              className="absolute left-1/2 -translate-x-1/2 bottom-[60px] z-fixed flex items-center gap-2 pl-4 pr-2.5 py-2 rounded-full shadow-modal whitespace-nowrap animate-slide-up"
+              className={
+                'absolute bottom-[60px] z-fixed flex items-center gap-2 pl-4 pr-2.5 py-2 shadow-modal animate-slide-up ' +
+                // Seven controls in a row do not fit 375px. Below `sm` the bar
+                // spans the list and its controls wrap; from `sm` up it is the
+                // centred pill again. `left-1/2` has to wait for `sm` too — an
+                // absolutely positioned box with only `left` set shrink-fits to
+                // whatever is right of that edge, so at 375 the pill would have
+                // had 187px to wrap seven controls into.
+                'left-2 right-2 flex-wrap justify-center rounded-token ' +
+                'sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:flex-nowrap sm:whitespace-nowrap sm:rounded-full'
+              }
               style={{ background: 'var(--plumo-night)', color: '#fff' }}
             >
               <span className="text-[13px] tabular-nums">{V.selCount} selected</span>

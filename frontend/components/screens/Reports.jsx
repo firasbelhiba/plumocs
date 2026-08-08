@@ -130,7 +130,10 @@ export default function Reports({ V }) {
         </div>
       )}
 
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'minmax(320px,1.6fr) minmax(240px,1fr)' }}>
+      {/* A two-column split whose narrower track alone is 320px cannot hold at
+          375. PM's idiom for exactly this is one column until the breakpoint,
+          the pair after it (`ProjectsDetailedView.tsx:59`). */}
+      <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(320px,1.6fr)_minmax(240px,1fr)]">
         <div className={PANEL + ' p-4 flex flex-col gap-3.5'}>
           <div className="flex items-center gap-3.5 flex-wrap">
             <span className="text-[13.5px] font-medium">created vs resolved</span>
@@ -162,7 +165,11 @@ export default function Reports({ V }) {
         </div>
       </div>
 
+      {/* PM scrolls a too-wide table inside its own panel rather than letting it
+          push the page (`users/page.tsx:696`). `AGENT_COLS` has a 530px floor,
+          so below `md` it scrolls here instead of scrolling the document. */}
       <div className={PANEL + ' overflow-hidden'}>
+        <div className="overflow-x-auto">
         <div className={THEAD} style={{ gridTemplateColumns: AGENT_COLS }}>
           <span>agent</span>
           <span className="text-right">open</span>
@@ -187,6 +194,7 @@ export default function Reports({ V }) {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

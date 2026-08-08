@@ -46,7 +46,11 @@ export function Customers({ V }) {
         </div>
       </div>
 
+      {/* `LIST_COLS` has a 798px floor. PM's answer for a table wider than its
+          container is to scroll it inside the panel (`users/page.tsx:696`),
+          not to let it widen the page. */}
       <div className={PANEL}>
+        <div className="overflow-x-auto">
         <div className={THEAD} style={{ gridTemplateColumns: LIST_COLS }}>
           <span>name</span><span>email</span><span>organisation</span>
           <span className="text-right">open</span>
@@ -69,6 +73,7 @@ export function Customers({ V }) {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
@@ -122,6 +127,7 @@ export function CustomerProfile({ V }) {
       </div>
 
       <div className={PANEL}>
+        <div className="overflow-x-auto">
         <div className={THEAD} style={{ gridTemplateColumns: TICKET_COLS }}>
           <span>id</span><span>subject</span><span>status</span><span>priority</span><span>created</span>
           <span className="text-right">updated</span>
@@ -136,6 +142,7 @@ export function CustomerProfile({ V }) {
             <span className="text-right text-fg-3 text-[12.5px] tabular-nums">{x.updated} ago</span>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

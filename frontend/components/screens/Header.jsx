@@ -37,76 +37,109 @@ const IconButton = ({ label, onClick, children, className = '' }) => (
   </Button>
 );
 
+/** The search field, shared by the desktop slot and the mobile drop-down row so
+    the two can never drift. Only the desktop copy takes `V.searchRef`: both are
+    in the DOM at once whenever the mobile row is open, and the `/` shortcut has
+    to land on the one that is actually visible. */
+const Search = ({ V, autoFocus, withRef }) => (
+  <Input
+    ref={withRef ? V.searchRef : undefined}
+    value={V.q}
+    onChange={V.onQ}
+    onFocus={V.onQFocus}
+    autoFocus={autoFocus}
+    placeholder="search conversations, people…  /"
+    aria-label="search conversations and people"
+    className="!rounded-full h-btn-md bg-bg"
+    leftIcon={
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="6.5" />
+        <path d="M16 16l4 4" />
+      </svg>
+    }
+  />
+);
+
+const SearchGlyph = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="M16 16l4 4" />
+  </svg>
+);
+
+/** The results popover, likewise shared: `inset` is the only thing that differs
+    between the desktop slot (flush) and the mobile row (inside its padding). */
+const Results = ({ V, inset }) => (
+  <div role="listbox" data-scroll className={PANEL + ' ' + inset + ' p-2 max-h-[420px] overflow-auto'}>
+    <div className={GROUP_LABEL}>conversations</div>
+    {V.resTickets.map((r) => (
+      <button key={r.id} onClick={V.openRow} data-id={r.id} className={RESULT_ROW}>
+        <span className="tabular-nums text-fg-3 text-[12.5px]">#{r.num}</span>
+        <span className="flex-1 text-[13.5px] truncate">{r.subject}</span>
+        <TonePill tone={r.statusTone}>{r.statusLabel}</TonePill>
+      </button>
+    ))}
+    {V.resNoTickets && <div className="px-2.5 py-2 text-[13px] text-fg-3">nothing matching yet ✿</div>}
+
+    <div className={GROUP_LABEL + ' border-t border-[color:var(--border)] mt-1.5 !pt-2.5'}>customers</div>
+    {V.resCustomers.map((c) => (
+      <button key={c.id} onClick={V.openCustomer} data-id={c.id} className={RESULT_ROW}>
+        <UserAvatar firstName={c.name?.split(' ')[0]} lastName={c.name?.split(' ').slice(1).join(' ')} size="sm" />
+        <span className="flex-1 text-[13.5px]">{c.name}</span>
+        <span className="text-[12.5px] text-fg-3">{c.orgName}</span>
+      </button>
+    ))}
+  </div>
+);
+
 export default function Header({ V }) {
   return (
-    <header className="flex-none flex items-center gap-3.5 h-12 md:h-14 px-2 md:px-3 relative z-sticky border-b border-[color:var(--border)] bg-surface">
+    // PM's header is a bordered box wrapping a fixed-height bar
+    // (`Header.tsx:126-130`), not a bar itself — which is what leaves room for
+    // the mobile search row to drop below it without changing the bar's height.
+    <header className="flex-none relative z-sticky border-b border-[color:var(--border)] bg-surface">
+      <div className="flex items-center gap-2 md:gap-3.5 h-12 md:h-14 px-2 md:px-3">
       {/* Hamburger + logo, PM's left group (`Header.tsx:133, 176-184`). The mark
           and wordmark used to live at the top of the left rail; the shell puts
           them here, at 24px with a 14px wordmark. The artwork itself is the one
-          exempt asset — its place in the shell is not. */}
+          exempt asset — its place in the shell is not.
+
+          The hamburger is `md:hidden` and opens the drawer, exactly as PM's
+          does. It used to be CS's desktop collapse toggle at every width; that
+          job moved to PM's collapse handle on the rail's edge
+          (`DashboardLayout.tsx:82-105`), so no width loses a control. */}
       <div className="flex items-center gap-2 md:gap-3 flex-none">
-        <IconButton label="collapse sidebar" onClick={V.toggleNav}>
+        <IconButton label="open menu" onClick={V.openMobileNav} className="md:hidden">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </IconButton>
 
-        <span className="flex items-center gap-2 ml-4 md:ml-8">
+        <span className="flex items-center gap-2 ml-1 md:ml-8">
           <img src="/assets/marks/mark-primary.svg" alt="" className="w-6 h-auto block" />
           <span className="text-[14px] font-medium tracking-tight text-fg whitespace-nowrap">plumo</span>
         </span>
       </div>
 
-      <div className="relative flex-1 max-w-[520px]">
-        <Input
-          ref={V.searchRef}
-          value={V.q}
-          onChange={V.onQ}
-          onFocus={V.onQFocus}
-          placeholder="search conversations, people…  /"
-          aria-label="search conversations and people"
-          className="!rounded-full h-btn-md bg-bg"
-          leftIcon={
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="M16 16l4 4" />
-            </svg>
-          }
-        />
-
-        {V.searchOpen && (
-          <div
-            role="listbox"
-            data-scroll
-            className={PANEL + ' left-0 right-0 p-2 max-h-[420px] overflow-auto'}
-          >
-            <div className={GROUP_LABEL}>conversations</div>
-            {V.resTickets.map((r) => (
-              <button key={r.id} onClick={V.openRow} data-id={r.id} className={RESULT_ROW}>
-                <span className="tabular-nums text-fg-3 text-[12.5px]">#{r.num}</span>
-                <span className="flex-1 text-[13.5px] truncate">{r.subject}</span>
-                <TonePill tone={r.statusTone}>{r.statusLabel}</TonePill>
-              </button>
-            ))}
-            {V.resNoTickets && <div className="px-2.5 py-2 text-[13px] text-fg-3">nothing matching yet ✿</div>}
-
-            <div className={GROUP_LABEL + ' border-t border-[color:var(--border)] mt-1.5 !pt-2.5'}>customers</div>
-            {V.resCustomers.map((c) => (
-              <button key={c.id} onClick={V.openCustomer} data-id={c.id} className={RESULT_ROW}>
-                <UserAvatar firstName={c.name?.split(' ')[0]} lastName={c.name?.split(' ').slice(1).join(' ')} size="sm" />
-                <span className="flex-1 text-[13.5px]">{c.name}</span>
-                <span className="text-[12.5px] text-fg-3">{c.orgName}</span>
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="relative hidden md:block flex-1 max-w-[520px]">
+        <Search V={V} withRef />
+        {V.searchOpen && <Results V={V} inset="left-0 right-0" />}
       </div>
 
       <div className="flex-1" />
 
+      {/* Search collapses to an icon below `md` (PM `Header.tsx:222-247`). PM's
+          opens a command palette; CS has no palette — that is Open Question E
+          and item 32 left it alone — so this drops the same field into a row
+          under the bar rather than inventing a second search mechanism. */}
+      <IconButton label="search" onClick={V.toggleMobileSearch} className="md:hidden">
+        <SearchGlyph />
+      </IconButton>
+
       <Button
         onClick={V.openNewTicket}
         size="sm"
+        aria-label="new conversation"
         className="flex-none"
         leftIcon={
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -114,7 +147,8 @@ export default function Header({ V }) {
           </svg>
         }
       >
-        new conversation
+        {/* PM `Header.tsx:258` — the label goes, the glyph stays. */}
+        <span className="hidden md:inline">new conversation</span>
       </Button>
 
       <div className="relative flex-none">
@@ -159,6 +193,14 @@ export default function Header({ V }) {
           <path d="M20 13.5A8 8 0 1110.5 4a6.5 6.5 0 009.5 9.5z" />
         </svg>
       </IconButton>
+      </div>
+
+      {V.mobileSearchOpen && (
+        <div className="md:hidden relative px-2 pb-2">
+          <Search V={V} autoFocus />
+          {V.searchOpen && <Results V={V} inset="left-2 right-2" />}
+        </div>
+      )}
     </header>
   );
 }

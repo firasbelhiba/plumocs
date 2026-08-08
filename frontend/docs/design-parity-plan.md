@@ -1798,9 +1798,12 @@ confirmed in Chrome, and the 404 route renders the green blob at its 360×240 bo
 
 ### BATCH 8 — Responsive
 
+**STATUS 2026-08-08:** item 42 **DONE**, all four splits. Checked in Chrome at
+375 / 768 / 1024 / 1280 / 1920 with the shell live; see under it.
+
 ---
 
-#### 42. Give CS a mobile layout and align the breakpoints — **L**
+#### 42. Give CS a mobile layout and align the breakpoints — **L** ✅ DONE 2026-08-08
 
 **CS** — **24** responsive prefixes in the whole tree, and **all 24 are inside three ported
 primitives** (`common/FilterBar.tsx`, `common/Modal.tsx`, `common/SettingsFormSkeleton.tsx`).
@@ -1832,6 +1835,121 @@ hamburger `md:hidden`; search collapses to an icon; the create button's label hi
 **Risk:** high. Split it: (a) hamburger + drawer + scrim; (b) Queue grid → a stacked card list
 below `md`; (c) Ticket two-pane → tabs below `lg`; (d) retire the three raw media queries.
 **Check:** 375 / 768 / 1024 / 1280 / 1920, no horizontal scroll at any width.
+
+**DONE 2026-08-08 — all four splits.** `components/screens/` goes from **zero** responsive
+prefixes to ~60, `app/globals.css` from four `@media` blocks to one
+(`prefers-reduced-motion`, PM's only one), and every breakpoint in the tree is now
+640 / 768 / 1024 / 1280 / 1536.
+
+**(a) Drawer.** PM `DashboardLayout.tsx:108-124` verbatim: scrim `fixed inset-0 bg-black/50
+z-modal-backdrop md:hidden animate-fade-in`, drawer `fixed inset-y-0 left-0 w-72 z-modal
+md:hidden`, desktop rail `hidden md:flex`. `Sidebar` took PM's `isMobile` prop
+(`Sidebar.tsx:112`) with PM's mobile header and close button (`:429-443`), and PM's
+`isCollapsed = isMobile ? false : collapsed` (`:381`). The drawer closes on any nav click, as
+PM's does (`:172-174`). **Measured at 375:** scrim `rgba(0,0,0,.5)` at z-40, drawer 288px at
+z-50, the rail inside it 288px with labels showing, closed on a nav click.
+
+**The header hamburger is `md:hidden` now, so the desktop collapse needed somewhere to live:
+PM's own collapse handle** (`DashboardLayout.tsx:82-105`, copied whole) — the 28px round
+button straddling the rail's right edge. Without it, making the hamburger mobile-only would
+have deleted CS's collapse outright.
+
+**Search folds to an icon** (`Header.tsx:222`), and the create button's label goes with
+`hidden md:inline` (`:258`). PM's mobile search icon opens a command palette; CS has none —
+that is Open Question E, which item 32 left alone — so the icon drops the *same* `<Input>`
+into a row under the bar rather than inventing a second search mechanism. `<header>` is now
+PM's bordered box around a `h-12 md:h-14` bar (`:126-130`), which is what leaves room for that
+row. Field and results popover are one component each, used by both slots; only the desktop
+copy takes `V.searchRef`, since both are in the DOM at once and `/` has to land on the visible
+one.
+
+**(b) Queue.** Below `md` the row is PM's stacked list row (`IssuesList.tsx:142-160`) — badge
+line, subject, meta line — and the column header is gone. One DOM serves both: two wrapper
+spans are the card's lines below `md` and `md:contents` above it, so their children become
+direct grid items.
+
+**The column budget is the part that is not a straight re-labelling of CS's breakpoints, and
+it is the item's real finding.** Mapping 1400 → `xl` and 1180 → `lg` does not work, because
+CS's old sets only ever fitted by *force-collapsing the rail to 64px* — the very override this
+item removes. With the rail left at the user's 236px, the old 7-column set at 768 needs 692px
+of a 508px container, and the 9-column set at 1280 needs 774 of 804, leaving the subject 30px.
+So columns are now **added as room appears** rather than dropped as it runs out: 5 at `md`,
+priority at `lg`, customer and assignee at `xl`, tags at `2xl`. The subject track is
+`minmax(0,1fr)` at every step — its old 180–220px floor is exactly what pushed the total past
+the container and clipped the right-hand columns instead of shrinking the one that truncates.
+**Measured, no overflow at any step:** 768 → `26 92 214 82 46`; 1024 → `28 96 88 142 84 50`;
+1280 → `28 100 92 160 168 32 88 52`; 1920 → the full nine with a 670px subject.
+
+The filter rail moves from CS's 1080 to `lg`, and the toolbar's `filters` button goes with it
+— it would otherwise toggle something that cannot appear. The bulk bar spans the list and
+wraps below `sm`; `left-1/2` had to wait for `sm` too, since an absolutely positioned box with
+only `left` set shrink-fits to whatever is right of that edge and the pill was getting 187px
+to wrap seven controls into.
+
+**(c) Ticket.** Tabs below `lg` on the `Segment` primitive — CS's second use of it.
+**This is the one place the plan and PM disagree and the plan won:** PM's detail rail is
+simply `hidden xl:block` (`issues/[id]/page.tsx:951`), but PM's rail repeats fields that also
+appear inline in its header and CS's does not — the SLA targets, the customer card, the tags
+and the CSAT have no other home — so hiding it outright would lose them rather than repeat
+them. The rail toggle is `hidden lg:inline-flex`: below `lg` the tab decides, and a second
+invisible switch on the same thing would only be a way to make the details tab render nothing.
+**Measured at 375:** conversation tab → rail `display:none`; details tab → rail 375px, thread
+hidden; at 1920 the tabs are gone and both panes sit side by side, rail 322px.
+
+**(d) The three queries are gone, and so are the three attribute rules that went with them.**
+`[data-cs-nav="off"] [data-navlabel]`, `[data-cs-rail="off"] [data-rail]` and
+`[data-cs-filters="off"] [data-filterrail]` could not survive this item: a pane now has to
+answer to a user toggle *and* a breakpoint at once (`hidden lg:flex` vs `lg:hidden`), which a
+selector on `<html>` cannot express. The sidebar, details rail and filter rail take
+`navOn` / `railOn` / `filtersOn` as props instead, the way PM's take `isCollapsed`.
+`Console.syncDoc()` still writes `data-cs-nav` (the width token, which has to animate).
+`app/layout.jsx` no longer server-renders `data-cs-rail` / `data-cs-filters` either — it had
+gone on emitting both for `syncDoc` to delete on mount, which left two dead attributes on
+`<html>` and a `delete` on each side of them; both sides are gone now, and `data-cs-nav` is
+the only one left. `--cs-qcols` is deleted; **`--cs-gap` is now unreferenced** and left for
+item 46's sweep, like `--plumo-fw-medium` under item 7.
+
+**Three screens past the four splits, because "no horizontal scroll at any width" is the
+check and they failed it.** Customers' two tables (798px and 728px floors), Reports' agent
+table (530px) and Settings' seven table panels now scroll inside their own panel — PM's own
+answer for a table wider than its container (`users/page.tsx:696`). Reports' `minmax(320px,
+1.6fr) minmax(240px,1fr)` split is one column until `lg`, PM's idiom at
+`ProjectsDetailedView.tsx:59`. Settings' 210px tab rail turns the corner below `md` into a
+horizontal scrolling strip, PM's shape for a tab row (`AdminSettingsSection.tsx:89`) — that
+element and its parent had to come off `sx()` to say so, because `sx` injects its sheet into
+`<head>` at runtime and therefore wins every `display` or `width` tie against Tailwind.
+
+**Checked in Chrome at 375 / 768 / 1024 / 1280 / 1920**, on queue, ticket, customers, customer
+profile, reports, account and settings: `scrollWidth === clientWidth` on every one, and no row
+or grid overflowing its own container. The backend was down, so the shell was driven by
+setting `booted`/`loggedIn` and three synthetic rows on the live Console instance — **real
+data has not been through this**, and the frozen-animation artifact from item 30's note still
+applies (the Browser pane reports `visibilityState: hidden`, so `animate-slide-up` never
+completes and its `translateY` masks the bar's `translateX(-50%)`).
+
+**Re-verified on commit 2026-08-08**, independently of the run above, with the rail *forced
+expanded* at each width — the worst case, and the one CS's old sets never had to survive
+because 1180px collapsed the rail for them. Measured column templates came back exactly as
+computed: 768 → `26 92 214 82 46` (filter rail `display:none`); 1024 → `28 96 88 142 84 50`;
+1280 → `28 100 92 160 168 32 88 52`, summing with gaps to **804px inside an 828px container**.
+`scrollWidth === clientWidth` on the document at 375 / 768 / 1024 / 1280. Drawer measured
+288px at z-50 over an `rgba(0,0,0,.5)` scrim at z-40, labels showing, closing on a nav click;
+ticket tabs switch panes (details rail 375px full width, conversation `display:none`, and the
+reverse at 1280 with the tab strip gone); the collapse handle flips its label and `--cs-navw`
+resolves to 64px. Two notes for whoever measures next: the Browser pane reports
+`visibilityState: hidden`, which **freezes the rail's `transition-[width]` mid-flight** — the
+token is right and the rail settles at 64px the moment the transition is removed, so measure
+the token, not the rect. And a whole-tree scan for elements wider than their own container
+flags exactly one, `DIV.relative hidden md:flex`: that is the rail wrapper, and it is
+*supposed* to overflow, because PM deliberately puts no `overflow-hidden` there so the
+collapse handle can straddle the edge (`DashboardLayout.tsx:76-80`). It does not reach the
+document.
+
+**One thing this hands us, flagged not fixed.** The nav rail is 236px at every width ≥768.
+PM's is `w-[240px]` expanded and **`w-12` (48px) collapsed** (`Sidebar.tsx:423`); CS's collapsed
+width is 64px, and neither number is in this item's scope — but the whole column budget above
+is computed against 236, so if item 46 or a later pass moves the rail to PM's widths the four
+templates want re-checking. Same shape as the `w-8` oval under item 14.
 
 ---
 
