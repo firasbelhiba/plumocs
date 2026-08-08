@@ -117,6 +117,39 @@ ALTER TABLE tickets   RENAME COLUMN organization_id TO company_id;
 ALTER TABLE customers RENAME CONSTRAINT customers_organization_id_fkey TO customers_company_id_fkey;
 ALTER TABLE tickets   RENAME CONSTRAINT tickets_organization_id_fkey   TO tickets_company_id_fkey;
 
+-- NOT NULL CONSTRAINTS ARE NAMED OBJECTS FROM POSTGRESQL 17 ONWARD, and this
+-- migration's own assertion caught that the hard way: CI failed with
+--
+--   organizations_id_not_null, organizations_name_not_null,
+--   organizations_created_at_not_null, organizations_updated_at_not_null,
+--   organizations_workspace_id_not_null
+--
+-- still sitting on a table now called `companies`. They are invisible in a
+-- schema dump's column list and in \d output, so listing renames by hand was
+-- always going to miss a category — production runs PG18 and would have failed
+-- identically.
+--
+-- Done as a loop over the catalogue rather than five more hand-written lines, so
+-- ANY organization-named constraint is caught, including kinds this file does not
+-- anticipate. Both tables are covered because customers/tickets carry NOT NULL
+-- constraints named for the old column too.
+DO $$
+DECLARE
+  c record;
+BEGIN
+  FOR c IN
+    SELECT rel.relname AS tbl, con.conname AS name,
+           replace(con.conname, 'organization', 'company') AS renamed
+    FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    WHERE rel.relnamespace = 'public'::regnamespace
+      AND rel.relname IN ('companies', 'customers', 'tickets')
+      AND con.conname LIKE '%organization%'
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I RENAME CONSTRAINT %I TO %I', c.tbl, c.name, c.renamed);
+  END LOOP;
+END $$;
+
 ALTER INDEX customers_workspace_id_organization_id_idx RENAME TO customers_workspace_id_company_id_idx;
 ALTER INDEX tickets_workspace_id_organization_id_idx   RENAME TO tickets_workspace_id_company_id_idx;
 
