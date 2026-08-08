@@ -108,6 +108,21 @@ export function Customers({ V }) {
           not to let it widen the page. */}
       {!V.custFailed && (
       <div className={PANEL}>
+        {/* A failed REFRESH keeps the table and says so above it, exactly as the
+            queue does. The full illustration above is for a first load, which
+            has no rows to protect; replacing a table somebody is reading because
+            a background call failed loses their place and tells them less. */}
+        {V.custStaleError && (
+          <div className="flex flex-wrap items-center gap-2.5 px-3 py-2 border-b border-[color:var(--border)] bg-[color:var(--danger-soft)] text-[color:var(--danger)] text-[12.5px]">
+            <span className="flex-1 min-w-[180px]">Couldn&apos;t refresh — showing the last list that loaded.</span>
+            <button
+              onClick={V.retryCustomers}
+              className="h-btn-sm px-3 rounded-full border border-current bg-transparent text-current text-[12.5px] cursor-pointer focus-ring"
+            >
+              Try again
+            </button>
+          </div>
+        )}
         <div className={cn('overflow-x-auto transition-opacity duration-200', V.custRefreshing && 'opacity-60 pointer-events-none')}>
         <div className={THEAD} style={{ gridTemplateColumns: LIST_COLS }}>
           <span>name</span><span>email</span><span>organisation</span>

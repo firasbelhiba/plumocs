@@ -2280,7 +2280,14 @@ export default class Console extends React.Component {
       // over white space for a whole round trip, then rows.
       custLoading: S.custLoad === 'loading' && custRows.length === 0,
       custRefreshing: S.custLoad === 'refreshing',
-      custFailed: S.custLoad === 'error',
+      // Split the same way the queue splits, and for the same reason: a failed
+      // FIRST load has nothing to protect, so it gets the full illustration; a
+      // failed REFRESH does, and throwing away a table the reader is using
+      // because a background call failed is a worse answer than saying so above
+      // it. These two screens used to disagree — the queue kept its rows under
+      // an inline strip while customers replaced everything with an error card.
+      custFailed: S.custLoad === 'error' && custRows.length === 0,
+      custStaleError: S.custLoad === 'error' && custRows.length > 0,
       custEmpty: S.custLoad === 'ok' && custRows.length === 0,
       retryCustomers: this.retryCustomers,
 
