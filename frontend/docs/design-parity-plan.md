@@ -405,9 +405,12 @@ block moved to sit directly after `.interactive` to match PM's position at `:526
 *Without this, CS dark mode is unreachable by users and half the audit findings cannot be
 verified.*
 
+**STATUS 2026-08-08:** items 12 and 13 **DONE**. Open Question B answered in PM's favour
+(`.dark` class). Open Question C **still open** and deferred with a reason — see under item 12.
+
 ---
 
-#### 12. Add a ThemeProvider — **M**
+#### 12. Add a ThemeProvider — **M** ✅ DONE 2026-08-08
 
 **CS** — `contexts/` contains only `WebSocketContext.tsx`. `app/layout.jsx:10` hardcodes
 `data-cs-theme="light"`. **PM** `src/contexts/ThemeContext.tsx` (103 lines), mounted at
@@ -433,9 +436,53 @@ sites, and `tailwind.config.ts:10` if the selector changes.
 the `beforeInteractive` inline-script pattern PM uses, or you get a flash of light.
 **Check:** hard reload in dark, no flash; toggle persists across reload.
 
+**DONE 2026-08-08.** `contexts/ThemeContext.tsx` is PM's file: same `Density` union, same
+`plumo_density` key, same `theme` key, same `prefers-color-scheme` bootstrap, same effects,
+same `data-density` removal at `comfortable`. Mounted at `app/layout.jsx` around `{children}`.
+Three deliberate differences, all noted in the file:
+
+- **Open Question B — answered PM's way.** CS is now on `.dark`. `darkMode: 'class'` in
+  `tailwind.config.ts:15`; `[data-cs-theme="dark"]` → `.dark` at `globals.css:203`, and the two
+  descendant rules (`[data-tone]`, `[data-av]`). `data-cs-nav/-rail/-filters` stay attributes —
+  Console still owns those and still stamps them in `syncDoc()`.
+- **Open Question C — still open, and now has a blocking reason.** PM's `terminal` overrides
+  six tokens only: `--bg`, `--surface`, `--surface-2/-3`, `--border`, `--border-strong`. In CS
+  those reach the ported primitives but **not** `components/screens/*`, which run on
+  `--cs-canvas` / `--cs-surface` / `--cs-border`. A verbatim port therefore repaints the
+  buttons, inputs and modals near-black while the shell, queue and rails stay green. Making it
+  whole needs a parallel near-black `--cs-*` ramp that PM has no source for — invention, not a
+  port. **Terminal is cheap only after item 46 retires `--cs-*`.** `Theme` is `'light' |
+  'dark'` and the cycle is two-state until then; the class swap already clears `terminal`.
+- **The no-flash script is a raw `<script>`, not `next/script`.** PM's `beforeInteractive`
+  pattern (`src/app/layout.tsx:120`) does not survive the version gap: on Next 15 an *inline*
+  `beforeInteractive` script is serialised into the RSC flight payload, so it runs after first
+  paint. Verified in the built HTML — the tag landed at index 1586, past `</head>` at 1014,
+  inside a `self.__next_f.push`. `app/layout.jsx` uses `dangerouslySetInnerHTML` as the first
+  child of `<body>`, which emits a parse-time script at index 1077. Same snippet either way.
+
+Console (`components/Console.jsx`) is a class, so it reads the provider through
+`static contextType = ThemeContext` — hence the one additive export PM does not have,
+`export const ThemeContext`. `state.theme` / `state.soft` are gone, `syncDoc()` no longer
+writes `csTheme` / `csSoft`, and `app/page.jsx` no longer passes `theme=` / `softness=` (those
+props seeded the old state and would have fought persistence).
+
+Every `this.context` access is null-guarded. The suites build consoles with `new Console({})`
+and call handlers on the instance rather than rendering, so `this.context` is undefined under
+test; guarding only the readers would have left `toggleTheme` / `cycleDensity` rendering fine
+and then throwing on the first click.
+
+**Check performed, in Chrome at localhost:3000.** Fresh load with no stored theme and OS dark
+→ `<html class="dark">`, `body` background `rgb(11,23,16)`, `--primary` `hsl(145 35% 62%)`
+(green, not PM's sky), then persisted as `theme=dark`. Reload with `theme=dark` stored → class
+present at parse time, no light frame. Driving the live Console instance's `toggleTheme()`
+flipped `dark → light` and rewrote localStorage. The provider reaches the class component:
+`this.context` carries all five members. Backend was not running, so the checks were done on
+the sign-in screen — **the in-app toggle call sites (`Header.jsx:135`, `Sidebar.jsx:115`,
+`Account.jsx:53`) have not been clicked by hand.**
+
 ---
 
-#### 13. Unify the density attribute — **S**
+#### 13. Unify the density attribute — **S** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css:228-229` — `[data-cs-soft="dense"|"soft"]` → 0.85 / 1.15; default
 `balanced` set at `app/layout.jsx:10` matches no rule and falls through to `:root`.
@@ -456,6 +503,33 @@ three different factors on the same screen. Drop the type-size and radius re-sca
 `Console.jsx` density control.
 **Risk:** low. **Check:** cycle all three densities on the Queue and confirm buttons, rows and
 nav items scale together.
+
+**DONE 2026-08-08.** PM `globals.css:106-111` copied verbatim — `:root[data-density='compact']`
+0.85 / `:root[data-density='relaxed']` 1.15, in PM's position between `:root` and the dark
+block. `[data-cs-soft="dense"|"soft"]` gone, and `[data-cs-soft="dense"] [data-snip]` →
+`:root[data-density='compact'] [data-snip]`. The attribute is written by ThemeProvider, not by
+`Console.syncDoc()`, and is *removed* at `comfortable` rather than set to a value that matches
+no rule — which was the old `balanced` bug.
+
+The second re-scaling set is cut to `--cs-rowpy` alone, as specified. `--cs-fs`, `--cs-r-sm`,
+`--cs-r-md`, `--cs-gap`, `--cs-cardpad` and `--cs-qcols` no longer move with density — so type
+size, radius, gaps, card padding and the queue column track are constant across all three
+steps and only the `--density` multiplier plus row padding respond. Note this is a wider cut
+than "type size and radius": `--cs-gap`, `--cs-cardpad` and `--cs-qcols` went too, on the
+literal reading of "keep `--cs-rowpy` only" and PM's "vertical rhythm only". The visible
+consequence is that `relaxed` and `compact` no longer widen or narrow the queue columns.
+
+Vocabulary reached the call sites: `Console.SOFT` → `DENSITIES = ['compact', 'comfortable',
+'relaxed']`, `V.softLabel` → `V.densityLabel`, `V.cycleSoft` → `V.cycleDensity`, updated at
+`screens/Queue.jsx:109,113` and `screens/Account.jsx:57`. **Those two buttons now read
+"comfortable" / "compact" / "relaxed" instead of "balanced" / "dense" / "soft"** — a user-facing
+copy change, which the density item necessarily implies.
+
+**Check performed.** `data-density="compact"` → `--density: 0.85`, `--cs-rowpy: 4px`;
+`relaxed` → `1.15` / `17px`; `--cs-fs` stayed `13.5px` in both, confirming the type-size fork
+is gone. Cycling through the live Console's `cycleDensity()` advanced the attribute and
+persisted it to `plumo_density`. **The Queue itself was not seen** — no backend — so "buttons,
+rows and nav items scale together" is verified at the token level, not visually.
 
 ---
 
@@ -1449,11 +1523,21 @@ Neither app uses a single `dark:` variant today, so this only bites on future po
 **Recommendation: unify on PM's `.dark`.** But CS's attribute also carries `data-cs-soft`,
 `data-cs-nav`, `data-cs-rail`, `data-cs-filters` on the same element, so it may be cleaner to
 keep the attribute and accept that PM ports need one find-replace. **Your call.**
+**ANSWERED 2026-08-08 — unified on PM's `.dark`,** per the recommendation and the standing
+"PM is correct by definition" rule. Landed with item 12. The other four `data-cs-*` attributes
+stay as attributes; only the theme moved to a class.
 
 **C. Does CS get PM's third theme?**
 PM offers light / dark / **terminal** (a near-black variant, `globals.css:176-183`, cycled at
 `ThemeContext.tsx:83-85`). CS has no terminal variant. Strict parity says add it. It is ~8
 lines of CSS. Worth it, or is two themes enough for a support console?
+**UPDATED 2026-08-08 — still unanswered, but it is no longer an ~8-line question.** Terminal
+overrides six base tokens; in CS those six reach the ported primitives but not
+`components/screens/*`, which still run on `--cs-canvas` / `--cs-surface` / `--cs-border`. Ship
+it verbatim today and the buttons, inputs and modals go near-black inside a green shell.
+Completing it means inventing a near-black `--cs-*` ramp PM cannot supply. **Recommendation:
+answer C after item 46, not before.** Item 12 shipped light + dark and left the seam clean —
+the theme union and the toggle are a one-line change each.
 
 **D. Which switch geometry?**
 PM has four and does not agree with itself — `w-11 h-6` (44×24) ×2, `h-5 w-9` (20×36) ×1,

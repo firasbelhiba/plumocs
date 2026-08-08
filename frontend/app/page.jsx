@@ -9,5 +9,5 @@ const Console = dynamic(() => import('@/components/Console'), { ssr: false });
 export default function Page() {
   // The console opens on the inbox; the design's index-of-pages screen was a
   // template artefact and is gone.
-  return <Console theme="light" softness="balanced" role="lead" startScreen="queue" />;
+  return <Console role="lead" startScreen="queue" />;
 }

@@ -54,7 +54,7 @@ export default function Account({ V }) {
           </div>
           <div className="flex flex-col gap-[7px]">
             <span className="text-xs font-medium text-fg">row density</span>
-            <Button variant="secondary" size="sm" onClick={V.cycleSoft}>{V.softLabel}</Button>
+            <Button variant="secondary" size="sm" onClick={V.cycleDensity}>{V.densityLabel}</Button>
           </div>
         </div>
       </div>

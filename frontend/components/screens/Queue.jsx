@@ -106,11 +106,11 @@ export default function Queue({ V }) {
 
         <div className="w-px h-5 bg-[color:var(--border)]" />
 
-        <Button variant="secondary" size="sm" onClick={V.cycleSoft} title="row density" className="flex-none" leftIcon={
+        <Button variant="secondary" size="sm" onClick={V.cycleDensity} title="row density" className="flex-none" leftIcon={
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
-        }>{V.softLabel}</Button>
+        }>{V.densityLabel}</Button>
 
         <div className="relative flex-none">
           <Button variant="secondary" size="sm" onClick={V.toggleSort} rightIcon={

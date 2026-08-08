@@ -12,7 +12,7 @@ const config: Config = {
     './lib/**/*.{js,jsx,ts,tsx}',
     './hooks/**/*.{js,jsx,ts,tsx}',
   ],
-  darkMode: ['class', '[data-cs-theme="dark"]'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {

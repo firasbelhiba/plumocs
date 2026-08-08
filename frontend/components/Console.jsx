@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { adapter } from '@/lib/api/adapter';
+import { ThemeContext } from '@/contexts/ThemeContext';
 import * as api from '@/lib/api/endpoints';
 import Login from './screens/Login';
 import Header from './screens/Header';
@@ -67,6 +68,19 @@ const DAY_KEYS = [
 ];
 
 export default class Console extends React.Component {
+  /**
+   * Theme and density live in the shared ThemeProvider, not in this component's
+   * state: they persist to localStorage, follow the OS colour-scheme preference
+   * on first run, and are stamped onto <html> before hydration.
+   *
+   * Every access is null-guarded because the tests construct `new Console({})`
+   * directly rather than rendering it, so `this.context` is undefined there.
+   * In the app it is always present — `app/layout.jsx` wraps the tree.
+   */
+  static contextType = ThemeContext;
+  theme() { return this.context ? this.context.theme : 'light'; }
+  density() { return this.context ? this.context.density : 'comfortable'; }
+
   STATUS = {
     new: { l: 'new', t: 'st-new' }, open: { l: 'open', t: 'st-open' },
     pending: { l: 'pending', t: 'st-pending' }, 'on-hold': { l: 'on hold', t: 'st-hold' },
@@ -79,12 +93,12 @@ export default class Console extends React.Component {
   CHAN = { email: '✉', api: '⌗', widget: '◲', hashcare: '✚' };
   TAGTONE = { billing: 'tag-billing', bug: 'tag-bug', 'how-to': 'tag-howto', account: 'tag-account', urgent: 'tag-urgent', integration: 'tag-integration' };
   SORTS = [{ id: 'updated', label: 'last updated' }, { id: 'created', label: 'created' }, { id: 'priority', label: 'priority' }, { id: 'sla', label: 'sla due' }];
-  SOFT = ['soft', 'balanced', 'dense'];
+  DENSITIES = ['compact', 'comfortable', 'relaxed'];
   ARC = { 'sla-ok': ['72 100', '#B8CFB4'], 'sla-due': ['30 100', '#FFE8A3'], 'sla-breach': ['8 100', '#FFD4B8'], 'sla-met': ['100 100', '#B8CFB4'], 'sla-paused': ['45 100', '#E2E8F0'], neutral: ['0 100', '#E2E8F0'] };
 
   state = {
     booted: false, loggedIn: true, screen: 'queue',
-    theme: 'light', soft: 'balanced', role: 'agent', avail: 'available',
+    role: 'agent', avail: 'available',
     nav: true, filters: true, rail: true,
     view: 'all-open', sort: 'updated', page: 0,
     f: { status: [], priority: [], channel: [], tag: null, team: null, assignee: null, range: 'any' },
@@ -292,12 +306,10 @@ export default class Console extends React.Component {
   async componentDidMount() {
     const p = this.props || {};
     const seed = {};
-    if (p.theme) seed.theme = p.theme;
-    if (p.softness) seed.soft = p.softness;
     if (p.simulateFailures) seed.failMode = true;
     if (p.startScreen && p.startScreen !== 'ticket' && p.startScreen !== 'login') seed.screen = p.startScreen;
     if (Object.keys(seed).length) this.setState(seed);
-    this.syncDoc(seed.theme || this.state.theme, seed.soft || this.state.soft);
+    this.syncDoc();
     // Read the PM callback outcome before anything else can navigate away, then
     // ask whether this deployment offers the link at all.
     // Before anything else: a returning plumo sign-in carries its tokens in the
@@ -410,10 +422,9 @@ export default class Console extends React.Component {
       this.loadCounts();
     }, 3000);
   }
-  syncDoc(theme, soft) {
+  /** Pane state only — the theme class and data-density belong to ThemeProvider. */
+  syncDoc() {
     const r = document.documentElement;
-    r.dataset.csTheme = theme || this.state.theme;
-    r.dataset.csSoft = soft || this.state.soft;
     r.dataset.csNav = this.state.nav ? 'on' : 'off';
     r.dataset.csRail = this.state.rail ? 'on' : 'off';
     r.dataset.csFilters = this.state.filters ? 'on' : 'off';
@@ -596,10 +607,8 @@ export default class Console extends React.Component {
   onView = (e) => { this.setState({ view: e.currentTarget.dataset.v, page: 0, sel: [] }, () => this.loadQueue({ noFail: true })); };
   toggleSort = () => this.setState(s => ({ menu: s.menu === 'sort' ? null : 'sort' }));
   setSort = (e) => { this.setState({ sort: e.currentTarget.dataset.v, menu: null }, () => this.loadQueue({ noFail: true })); };
-  cycleSoft = () => this.setSoft(this.SOFT[(this.SOFT.indexOf(this.state.soft) + 1) % 3]);
-  setSoft(v) { this.setState({ soft: v }, () => this.syncDoc()); }
-  setTheme(v) { this.setState({ theme: v }, () => this.syncDoc()); }
-  toggleTheme = () => this.setTheme(this.state.theme === 'dark' ? 'light' : 'dark');
+  cycleDensity = () => { if (this.context) this.context.setDensity(this.DENSITIES[(this.DENSITIES.indexOf(this.density()) + 1) % 3]); };
+  toggleTheme = () => { if (this.context) this.context.toggleTheme(); };
   toggleNav = () => this.setState(s => ({ nav: !s.nav }), () => this.syncDoc());
   toggleFilters = () => this.setState(s => ({ filters: !s.filters }), () => this.syncDoc());
   toggleRail = () => this.setState(s => ({ rail: !s.rail }), () => this.syncDoc());
@@ -1737,7 +1746,7 @@ export default class Console extends React.Component {
 
       me: meView, go: this.go, signOut: this.signOut, toggleUser: this.toggleUser, userOpen: S.menu === 'user',
       canAdmin: S.role !== 'agent', toggleAvail: this.toggleAvail, openSheet: this.openSheet,
-      themeAction: S.theme === 'dark' ? 'switch to light' : 'switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
+      themeAction: this.theme() === 'dark' ? 'switch to light' : 'switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
 
       isQueue: S.screen === 'queue' && S.view !== 'my-open', isMine: S.screen === 'queue' && S.view === 'my-open',
       isQueueLike: S.screen === 'queue', isTicket: S.screen === 'ticket',
@@ -1764,7 +1773,7 @@ export default class Console extends React.Component {
       onView: this.onView, saveView: this.saveView,
       sortLabel: (this.SORTS.find(x => x.id === S.sort) || {}).label, sortOpen: S.menu === 'sort',
       toggleSort: this.toggleSort, setSort: this.setSort, sortOptions: this.SORTS.map(o => ({ id: o.id, label: o.label, on: o.id === S.sort })),
-      softLabel: S.soft, cycleSoft: this.cycleSoft, toggleFilters: this.toggleFilters, refresh: this.refresh,
+      densityLabel: this.density(), cycleDensity: this.cycleDensity, toggleFilters: this.toggleFilters, refresh: this.refresh,
       refreshedRel: this.rel(S.refreshed), loading: S.load === 'loading',
 
       facetGroups, chips, removeChip: this.removeChip, toggleFacet: this.toggleFacet, clearFilters: this.clearFilters,

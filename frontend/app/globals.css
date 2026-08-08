@@ -171,7 +171,7 @@ p { margin: 0; }
 
   /* Status icon palette (light). Tuned for the small glyphs in StatusPill, so
      they get their own --status-* namespace rather than reusing theme tokens.
-     Dark overrides live in [data-cs-theme="dark"].
+     Dark overrides live in .dark.
      Two of these bind to var(--plumo-blue) in PM; here they re-anchor to
      var(--primary) so the status glyphs are green, not blue. */
   --status-ring-muted: #cbd5e1; /* someday / let-go ring */
@@ -200,7 +200,22 @@ p { margin: 0; }
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-[data-cs-theme="dark"]{
+/* Density presets — multiplier scales vertical rhythm only (see DENSITY.md). */
+:root[data-density='compact'] {
+  --density: 0.85;
+}
+:root[data-density='relaxed'] {
+  --density: 1.15;
+}
+
+/* Row padding is the one piece of console-specific vertical rhythm still on the
+   old namespace; it rides the same two density steps until item 39 moves the
+   tables onto `h-row`. Type size and radius deliberately do NOT re-scale — PM's
+   density switch touches vertical rhythm only. */
+:root[data-density='relaxed'] { --cs-rowpy:17px; }
+:root[data-density='compact'] { --cs-rowpy:4px; }
+
+.dark{
   --cs-canvas:#0B1710; --cs-surface:#12261A; --cs-soft:#1A3324; --cs-warm:#2A2416;
   --cs-text:#E7F0E9; --cs-muted:#A8BCAE; --cs-border:#26402E; --cs-hover:#173023;
   --cs-brand:color-mix(in srgb, var(--cs-accent-src) 52%, #FFFFFF);
@@ -287,26 +302,18 @@ input::-ms-clear {
   .min-h-textarea { min-height: calc(72px * var(--density)); }
 }
 
-/* The console's own density switch drives the shared --density multiplier. */
-[data-cs-soft="dense"] { --density: 0.85; }
-[data-cs-soft="soft"]  { --density: 1.15; }
-
 @keyframes shimmer { 0% { background-position:-200% 0 } 100% { background-position:200% 0 } }
 .shimmer {
   background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite linear;
 }
-[data-cs-theme="dark"] [data-tone]{--tone-fg:var(--tone-fg-dark);}
-[data-cs-soft="soft"]{--cs-rowpy:17px; --cs-r-sm:12px; --cs-r-md:16px; --cs-fs:14px; --cs-gap:16px; --cs-cardpad:20px;
-  --cs-qcols:28px 106px 96px minmax(220px,1fr) 180px 34px 124px 92px 56px;}
-[data-cs-soft="dense"]{--cs-rowpy:4px; --cs-r-sm:6px; --cs-r-md:8px; --cs-fs:13px; --cs-gap:9px; --cs-cardpad:13px;
-  --cs-qcols:26px 92px 84px minmax(200px,1fr) 156px 30px 108px 82px 48px;}
+.dark [data-tone]{--tone-fg:var(--tone-fg-dark);}
 [data-cs-nav="off"]{--cs-navw:64px;}
 [data-cs-nav="off"] [data-navlabel]{display:none !important;}
 [data-cs-rail="off"] [data-rail]{display:none;}
 [data-cs-filters="off"] [data-filterrail]{display:none;}
-[data-cs-soft="dense"] [data-snip]{display:inline; margin-left:8px;}
+:root[data-density='compact'] [data-snip]{display:inline; margin-left:8px;}
 [data-tone="st-new"]{--tone-hue:#94A3B8;--tone-fg:#475569;--tone-fg-dark:#C3CEDE}
 [data-tone="st-open"]{--tone-hue:#4C9F6E;--tone-fg:#1F4A2E;--tone-fg-dark:#B8CFB4}
 [data-tone="st-pending"]{--tone-hue:#E0A82E;--tone-fg:#7A5F1F;--tone-fg-dark:#F4CE72}
@@ -336,7 +343,7 @@ input::-ms-clear {
 [data-av="5"]{--av-bg:#E9E7FF;--av-fg:#3730A3}
 [data-av="6"]{--av-bg:#E2F2F7;--av-fg:#0E5A70}
 [data-av="ghost"]{--av-bg:transparent;--av-fg:var(--cs-muted);--av-border:0.5px dashed var(--cs-border)}
-[data-cs-theme="dark"] [data-av]{--av-bg:color-mix(in srgb, var(--av-fg) 26%, var(--cs-surface));--av-fg:#E7EDF9}
+.dark [data-av]{--av-bg:color-mix(in srgb, var(--av-fg) 26%, var(--cs-surface));--av-fg:#E7EDF9}
 [data-on="true"]{--cs-onbg:var(--cs-brand-soft);--cs-onfg:var(--cs-brand-ink);--cs-onbd:color-mix(in srgb, var(--cs-brand) 26%, transparent);--cs-onw:500;--cs-onbar:transparent}
 [data-on="false"]{--cs-onbg:transparent;--cs-onfg:var(--cs-muted);--cs-onbd:transparent;--cs-onw:400;--cs-onbar:transparent}
 nav [data-on="true"]{--cs-onbg:color-mix(in srgb, var(--cs-btn) 9%, var(--cs-surface));--cs-onfg:var(--cs-btn);--cs-onbar:var(--cs-btn)}
