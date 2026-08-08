@@ -6,7 +6,7 @@ import { Badge, UserAvatar } from '../common';
 /** Nav row — active state comes from the console's [data-on] token pair. */
 const NAV_ROW =
   'w-full flex items-center gap-2.5 px-2.5 h-navitem py-[9px] rounded-token-sm text-[13.5px] text-left cursor-pointer ' +
-  'border border-transparent transition-colors duration-[var(--dur-instant)] hover:bg-surface-2';
+  'border border-transparent transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
 
 const NAV_ROW_STYLE = {
   borderLeft: '2.5px solid var(--cs-onbar)',
@@ -19,7 +19,7 @@ const SECTION = 'px-3 pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-[
 
 const MENU_ITEM =
   'w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-token-sm border-none bg-transparent ' +
-  'text-[13px] text-fg text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2';
+  'text-[13px] text-fg text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
 
 function NavItem({ screen, icon, label, count, active, onClick }) {
   return (

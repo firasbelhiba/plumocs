@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Button, Input } from '../common';
+import { Button, CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, Input } from '../common';
 
 /* ---- background ---------------------------------------------------------
    The same wide, low-contrast mesh the project-management sign-in uses,
@@ -62,23 +62,19 @@ const ArrowIn = () => (
   </svg>
 );
 
-/** Federated provider button — quiet, bordered, full width. */
+/** Federated provider button — the shared outline button, full width. */
 function Federated({ provider, icon, children, onClick, muted }) {
   return (
-    <button
+    <Button
+      variant="outline"
+      size="md"
       onClick={onClick}
       data-provider={provider}
-      className={[
-        'w-full inline-flex items-center justify-center gap-2.5 h-[44px] px-4 rounded-[10px]',
-        'border border-[color:var(--border)] bg-surface text-[14px] font-medium focus-ring',
-        'transition-colors duration-[var(--dur-fast)]',
-        muted ? 'text-fg-3 hover:text-fg' : 'text-fg',
-        'hover:bg-surface-2 hover:border-[color:var(--primary-soft-border)]',
-      ].join(' ')}
+      leftIcon={icon}
+      className={'w-full justify-center' + (muted ? ' text-fg-3 hover:text-fg' : '')}
     >
-      {icon}
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -180,7 +176,7 @@ export default function Login({ V }) {
             </div>
 
             {V.pmSignInError && (
-              <div className="mb-4 rounded-[var(--r-sm)] bg-[color:var(--danger-soft,rgba(220,60,60,.08))] px-3 py-2 text-[12.5px] text-[color:var(--danger,#c0392b)]">
+              <div className="mb-4 rounded-token bg-[color:var(--danger-soft,rgba(220,60,60,.08))] px-3 py-2 text-[12.5px] text-[color:var(--danger,#c0392b)]">
                 {V.pmSignInError}
               </div>
             )}
@@ -215,7 +211,6 @@ export default function Login({ V }) {
                 placeholder="you@work.com"
                 autoComplete="email"
                 leftIcon={<MailIcon />}
-                className="h-[44px] !rounded-[10px] text-[14px]"
               />
               <Input
                 id="login-password"
@@ -228,7 +223,6 @@ export default function Login({ V }) {
                 placeholder="Enter your password"
                 autoComplete="current-password"
                 leftIcon={<LockIcon />}
-                className="h-[44px] !rounded-[10px] text-[14px]"
                 rightIcon={
                   <button
                     type="button"
@@ -252,12 +246,13 @@ export default function Login({ V }) {
             </div>
 
             <div className="flex items-center justify-between gap-3 mt-4 mb-5">
-              <label className="inline-flex items-center gap-2 text-[13px] text-fg cursor-pointer select-none">
+              <label className={CHECK_LABEL}>
                 <input
                   type="checkbox"
                   checked={V.keepSignedIn}
                   onChange={V.toggleKeepSignedIn}
-                  className="w-[15px] h-[15px] cursor-pointer accent-[color:var(--primary)]"
+                  className={CHECKBOX}
+                  style={CHECKBOX_STYLE}
                 />
                 Keep me signed in
               </label>
@@ -266,7 +261,7 @@ export default function Login({ V }) {
               </Button>
             </div>
 
-            <Button size="lg" onClick={V.signIn} rightIcon={<ArrowIn />} className="w-full h-[44px] rounded-[10px] text-[15px]">
+            <Button size="md" onClick={V.signIn} rightIcon={<ArrowIn />} className="w-full justify-center mt-2">
               Sign in
             </Button>
 
@@ -296,9 +291,9 @@ export default function Login({ V }) {
               onChange={V.onLoginEmail}
               placeholder="you@work.com"
               leftIcon={<MailIcon />}
-              className="h-[44px] !rounded-[10px] text-[14px] mb-4"
+              className="mb-4"
             />
-            <Button size="lg" onClick={V.sendReset} className="w-full h-[44px] rounded-[10px] text-[15px]">
+            <Button size="md" onClick={V.sendReset} className="w-full justify-center">
               Send me a link
             </Button>
             <div className="flex justify-center mt-4">
@@ -322,7 +317,7 @@ export default function Login({ V }) {
               check {V.loginEmail} whenever you&apos;re ready. if it hasn&apos;t landed in a few minutes,
               we&apos;ll happily send another.
             </p>
-            <Button variant="secondary" size="md" onClick={V.sendReset} className="rounded-token-sm">
+            <Button variant="outline" size="md" onClick={V.sendReset}>
               Send it again
             </Button>
             <Button variant="link" size="sm" onClick={V.backToSignin} className="text-[13px]">

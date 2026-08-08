@@ -536,9 +536,20 @@ rows and nav items scale together" is verified at the token level, not visually.
 ### BATCH 4 — Route the controls through the primitives
 *Each item here fixes many screens at once because it deletes a local re-implementation.*
 
+**STATUS 2026-08-08:** items 14–21 all **DONE**. Open Question A answered in the login/signup
+recipe's favour, Open Question D answered `w-11 h-6` — both per the items' own
+recommendations. Nothing was seen in a browser; the checks below are still owed.
+
+*Review pass, same day:* three fixes on top of the batch as delivered. `Switch` was a `<label>`
+and Account nested it inside another one — invalid HTML that double-toggles; it is now a
+`<span>` and both call sites supply the label, matching PM (item 17). `CHECK_LABEL` said `flex`
+where PM says `inline-flex`. Settings' editor check-rows had `CHECK_LABEL`'s string copied out
+by hand instead of importing it, which is the duplication item 16 exists to end. Build and 87
+tests green before and after; no colour moved.
+
 ---
 
-#### 14. Replace eight hand-rolled icon-button geometries with `size="icon"` — **L**
+#### 14. Replace eight hand-rolled icon-button geometries with `size="icon"` — **L** ✅ DONE 2026-08-08
 
 **CS** — eight distinct shapes. **PM** `src/components/common/Button.tsx:27` — one:
 `size: { icon: 'h-btn-md w-8' }` → **32×32, density-scaled, `rounded-full`, `focus-ring`,
@@ -568,9 +579,42 @@ beside them does (at `soft`: `<Button>` 36.8px, icon button still 26px).
 bar (7 controls in a row) and the Ticket composer toolbar at 1180px.
 **Check:** every icon button should now depress on click and show a focus ring on Tab.
 
+**DONE 2026-08-08.** All nine rows of the table above are gone; 14 call sites now render
+`<Button size="icon">`. `outline` where the old shape had a ring (Queue add-filter and refresh,
+Ticket back / overflow / rail, Reports drill close, Header's `IconButton`, Settings deactivate),
+`ghost` where it did not (Queue's three row quick-actions and the bulk-bar close, Ticket's four
+composer format buttons) — **that is `ghost`'s first use in CS, 0 → 8.** The `QUICK_BTN`,
+`TOOL_BTN` and `ICON_BTN` constants are deleted, as is Header's `!w-[30px] !h-[30px]
+!rounded-token-sm` override and Ticket's `!rounded-token-sm` on the rail toggle. Every one of
+them is now 32×32 × density, `rounded-full`, focus-ringed and press-scaled.
+
+Three notes:
+- **The dashed border is gone** from Queue's add-filter button, per "PM has no dashed button".
+  Ticket's `+ add` tag chip is still dashed — it is not in the table above and not an icon
+  button. Left alone.
+- **The bulk bar keeps its own colours.** It is a dark surface, so `ghost`'s `text-fg-2` /
+  `hover:bg-surface-2` are overridden there with `!text-white/70 hover:!bg-white/15`. Geometry,
+  press and focus ring are the shared ones; only the foreground pair is local.
+- **`Settings.jsx` is one call site, not thirty.** The deactivate control named in the table is
+  converted (via `buttonVariants({ variant: 'outline', size: 'icon' })`, matching how that file
+  already borrows `editBtn`). The other ~30 raw `<button>`s there are item 47, as specified.
+
+**One thing this item hands us, flagged not fixed.** PM's `icon` size is `h-btn-md w-8` — the
+height is a token, the width is a literal 32px. In PM those are both 32 and it is a circle. In
+CS `.h-btn-md` is `calc(32px * var(--density))`, and `--density` is 0.85 / 1 / 1.15, so at the
+two non-default densities every icon button is now an oval: 27×32 at compact, 37×32 at roomy.
+The nine shapes deleted above were all explicitly square (`w-7 h-7`, `w-8 h-8`, `w-[26px]
+h-[26px]`, `w-[30px] h-[30px]`) and so survived the density switch; with 14 call sites the
+lozenge is now visible across the app. **Copying PM's string is correct and that is what is
+committed** — `Button.tsx` is byte-identical to PM's and no batch-4 item touches it. But PM's
+value encodes an intent (a square) that CS's density feature breaks, and the fix is a
+one-token change (`w-8` → a `w-btn-md` utility). That is a primitive-level decision with an
+owner, not something to slip into a batch, so: **owner call, and the first thing to look at when
+these are finally seen in a browser at compact density.**
+
 ---
 
-#### 15. Restore `focus-ring` on the 10 focusable elements that lack it — **S**
+#### 15. Restore `focus-ring` on the 10 focusable elements that lack it — **S** ✅ DONE 2026-08-08
 
 **CS:** `Queue.jsx:17` (`QUICK_BTN`), `Queue.jsx:20` (`BULK_BTN`), `Queue.jsx:131` (sort menu
 item), `Ticket.jsx:8` (`MENU_ROW`), `Ticket.jsx:15` (`TOOL_BTN`), `Ticket.jsx:107` (subject
@@ -587,9 +631,14 @@ focusable in `src/`.
 **Risk:** none. **Check:** Tab through the Queue, the Ticket header and the Sidebar.
 **Note:** items 14 and 15 overlap. If 14 lands first, 5 of these disappear.
 
+**DONE 2026-08-08.** 14 landed first, so `QUICK_BTN` and `TOOL_BTN` disappeared into `<Button>`;
+the other eight constants each gained `focus-ring`. Two more focusables not on the list got it
+while the files were open — Ticket's `unassign` row and its canned-response rows, both of which
+are keyboard-reachable menu items with the same defect.
+
 ---
 
-#### 16. One checkbox definition — **S**
+#### 16. One checkbox definition — **S** ✅ DONE 2026-08-08
 
 **CS** — five definitions:
 
@@ -618,9 +667,28 @@ text-fg-2` (`Settings.jsx:606`). Standardise on PM's.
 **Risk:** none. **Check:** Settings in dark mode — both checkboxes the same green.
 **See Open Question A** — PM's own design-system page shows a bare unsized checkbox.
 
+**DONE 2026-08-08. Open Question A answered: the login/signup recipe,** per the recommendation
+and the standing "PM is correct by definition" rule. `components/common/formControls.ts` exports
+`CHECKBOX` (`h-3.5 w-3.5 rounded-token-sm border accent-[color:var(--primary)]`),
+`CHECKBOX_STYLE` (`{ borderColor: 'var(--border-strong)' }`), `CHECK_LABEL` and `RADIO` — all
+four copied from PM verbatim. All five definitions are deleted. **The `--cs-brand` accent fork
+is gone from the tree entirely**; `grep 'accent-' components/screens/` returns nothing but the
+shared constant.
+
+Two consequences worth knowing:
+- **Only three of the five sites still take a checkbox.** Account's notification rows and
+  Settings' business-hours days became switches under item 17. The recipe is live at Queue (row
+  select, select-all, facets), Login (keep me signed in) and Settings' editor check groups.
+- **PM's recipe has no `cursor-pointer`** — PM puts it on the enclosing `<label>`. Queue's
+  select-all and per-row checkboxes are bare inputs with no label, so they lose the pointer
+  cursor. Copied verbatim rather than improved, per the standing rule; flagging it because it is
+  the one place the copy is a small step backwards.
+
+Label rows standardised on PM's `text-[12px] text-fg-2` at all three named sites.
+
 ---
 
-#### 17. Add a switch/toggle and a radio — **M**
+#### 17. Add a switch/toggle and a radio — **M** ✅ DONE 2026-08-08
 
 **CS** — `grep -r 'role="switch"\|aria-checked\|sr-only peer'` over `plumocs/frontend`
 returns **zero**. `grep 'type="radio"'` returns **zero**. Settings rows that PM gives a switch
@@ -645,9 +713,38 @@ Radio: PM `app/design-system/page.tsx:401-406` — `accent-[color:var(--primary)
 future settings row.
 **Risk:** low. **Check:** the "notifications" rows in `Account.jsx` and `Settings.jsx`.
 
+**DONE 2026-08-08. Open Question D answered `w-11 h-6`,** the majority geometry, per this item's
+recommendation. `components/common/Switch.tsx` is 44×24 track / 20px knob / `translate-x-5`,
+`--surface-3` off and `--primary` on, white knob — the timer page's track and knob, plus the
+focus ring (`peer-focus:ring-2 peer-focus:ring-[color:var(--ring)]`) that the three row-shaped
+PM implementations carry (`ProjectSettingsTab`, `AdminSettingsSection`,
+`NotificationPreferencesSection` — identical string in all three; only the timer page omits it).
+`role="switch"` and a `disabled` state are additive; `grep 'role="switch"'` over CS returned
+zero before this.
+
+**The wrapper is a `<span>`, not a `<label>` — deliberately, and this is load-bearing.** PM
+writes the switch two ways: the whole row is a `<label>` and the switch a plain box
+(`NotificationPreferencesSection`, `AdminSettingsSection`), or the row is a `<div>` and the
+switch is its own `<label>` (timer page, `ProjectSettingsTab`). It never nests one in the other,
+because nested `<label>`s are invalid HTML and the inner click bubbles to the outer, which
+forwards it to the same input and toggles it a second time — a switch that visibly does nothing.
+Account had exactly that shape until it was caught in review. So `Switch` renders no label of
+its own and **must sit inside one**: Account's row is PM's `<label>` row, and Settings' hours
+grid wraps it in a `<label>` of its own (that cell was a `<span>`, so this also gains it the
+click-anywhere-on-the-cell target it never had).
+
+Both call sites converted, and **Account's notification card now uses PM's own row**
+(`flex items-center justify-between p-3 rounded-token-sm hover:bg-surface-2 …` with a
+`text-sm text-fg-2` label, copied from `NotificationPreferencesSection.tsx:41-43`). CS's
+on/off label-tinting is dropped — PM does not have it, and with a switch beside the label it was
+saying the same thing twice.
+
+`RADIO` ships as a constant in `formControls.ts` with **no call site** — CS still has zero
+`type="radio"`. It is there so the next radio is not a sixth invention.
+
 ---
 
-#### 18. Invert the secondary-button convention: `secondary` → `outline` — **M**
+#### 18. Invert the secondary-button convention: `secondary` → `outline` — **M** ✅ DONE 2026-08-08
 
 **CS** `components/screens/*` — `secondary` 25×, `outline` 7×, `ghost` **0×**.
 **PM** `src/` — `outline` **111×**, `secondary` 45×, `ghost` **40×**, `primary` 43×,
@@ -664,9 +761,17 @@ should be chromeless — that is PM's third-most-used variant and CS uses it zer
 **Risk:** low technically, high-visibility. **Check:** put the Ticket header side by side with
 PM's issue-detail header.
 
+**DONE 2026-08-08.** All 25 `variant="secondary"` call sites are now `outline`, plus a 26th the
+count missed: `Settings.jsx`'s `editBtn()` helper, which is `buttonVariants({ variant:
+'secondary' })` and drives every edit/revoke button on that screen. **`grep 'variant="secondary"'
+components/screens/` returns nothing.** `ghost` arrived with item 14 (8 uses). The tally is now
+`outline` 33 / `ghost` 8 / `secondary` 0, against PM's 111 / 40 / 45 — CS has no `secondary`
+left at all, where PM keeps 45; if any of those 25 wanted a filled chip, this is the item that
+took it away, and the Ticket-header comparison above is where it would show.
+
 ---
 
-#### 19. Drop the login geometry overrides — **S**
+#### 19. Drop the login geometry overrides — **S** ✅ DONE 2026-08-08
 
 **CS** `screens/Login.jsx:218, 231, 299` — `className="h-[44px] !rounded-[10px] text-[14px]"`
 on three `<Input>`s; `:65-83` (`Federated`) — `h-[44px] px-4 rounded-[10px] text-[14px]`;
@@ -684,9 +789,30 @@ on three `<Input>`s; `:65-83` (`Federated`) — `h-[44px] px-4 rounded-[10px] te
 **Risk:** low, but this will make the login page look markedly tighter. That is the point.
 **Check:** compare against `dbwork/frontend/src/app/login/page.tsx` rendered.
 
+**DONE 2026-08-08.** `h-[44px]`, `!rounded-[10px]` and `text-[14px]` are gone from all three
+`<Input>`s; `Federated` is now `<Button variant="outline" size="md" className="w-full
+justify-center">` — PM's `login/page.tsx:145-170` exactly — with the provider glyph moved to
+`leftIcon`; both `size="lg" … h-[44px] rounded-[10px] text-[15px]` submit buttons are
+`size="md" className="w-full justify-center"`, PM's `:258-266`. `grep 'h-\[44px\]\|rounded-\[10px\]'`
+over `Login.jsx` returns nothing. **The login page is now markedly tighter — 32px controls, 3px
+radius, 13px type — and that is the intent.**
+
+**PM's login shows form-level errors as a banner, not via `error=`** (`login/page.tsx:180-192`),
+so CS's `loginError` banner stays a banner. That is a finding for item 21, not a gap here.
+
+**Two batch-1 leftovers found in this file** (item 2 said to fix both call sites and neither was):
+- `rounded-[var(--r-sm)]` at `:183` — the undefined-variable typo. **Fixed** to `rounded-token`
+  (= `--radius`, 6px, and PM's own error-banner radius). It was resolving to nothing, so that
+  banner had square corners.
+- `--wash-lilac: #A78BFA` at `:12` — **still there, deliberately.** Item 2 says to point it at
+  `var(--epic)` now that `--epic` exists, but `--epic` is `#7c3aed` in light and only `#a78bfa`
+  in dark. Repointing turns the login wash's top-right glow deep violet in light mode, which is
+  a visible colour change and reads like an oversight in the instruction rather than an
+  intention. **Left for whoever owns item 2 to confirm.**
+
 ---
 
-#### 20. Restore the Ticket composer's input chrome — **S**
+#### 20. Restore the Ticket composer's input chrome — **S** ✅ DONE 2026-08-08
 
 **CS** `screens/Ticket.jsx:409-416`:
 `className="!border-none !bg-transparent !rounded-none p-3.5 min-h-[96px] text-[14px] leading-relaxed focus:!shadow-none"`
@@ -704,9 +830,18 @@ say so in the commit.
 
 **Blast radius:** 1 element, used constantly. **Risk:** low. **Check:** Tab into the composer.
 
+**DONE 2026-08-08, taking the flush-inside-the-card concession — saying so here as instructed.**
+The className is now `!border-none !bg-transparent !rounded-none` and nothing else. The card
+already paints the border, radius and fill, so those three stay; **`focus:!shadow-none` is
+gone**, and so are `text-[14px]`, `p-3.5`, `min-h-[96px]` and `leading-relaxed`. The composer is
+now `min-h-textarea` (72px × density, so it responds to the density switch — it did not before),
+`px-2.5 py-2`, `text-[13px]`, and it shows a focus ring. It is a visibly smaller box: 96px → 72px
+at comfortable, and 14px → 13px type on the surface agents write on all day. That is the item as
+specified, but it is the change in this batch most likely to draw a complaint.
+
 ---
 
-#### 21. Wire the `error=` prop into CS forms — **M**
+#### 21. Wire the `error=` prop into CS forms — **M** ✅ DONE 2026-08-08
 
 **CS** `grep 'error='` over `components/screens/` returns **zero**. The `error` prop, the
 `border --danger` state and the `mt-1 text-[11px] font-medium text-[color:var(--danger)]`
@@ -726,6 +861,29 @@ Label contract also diverges where hand-rolled: PM `block text-xs font-medium te
 **Blast radius:** every form in CS — Login, the new-conversation modal, Settings (3 fields).
 **Risk:** low. **Check:** submit the new-conversation modal empty; the error should appear
 under the field, not only as a toast.
+
+**DONE 2026-08-08.** `error=` is reachable at last — `grep 'error='` over
+`components/screens/` now returns three sites where it returned zero.
+
+- **New-conversation modal.** `Console.jsx:806-816` no longer toasts its two validation
+  failures; it sets `newError: { field, text }`, which `renderVals` splits into
+  `newSubjectError` / `newCustomerError` for the `<Input>` and the `<Select>`. Typing in either
+  field clears it. The complaint now sits under the field it is about and stays there while the
+  field is being corrected, instead of drifting away on a 3.6s timer.
+- **`fieldInput()` is deleted, not completed** — the plan offered both and deleting was the
+  cheaper correct one. Its three call sites (holiday date, api-key name, inbound address) are
+  `<Input>` now, which brings back the missing `disabled:` line — **a disabled field in Settings
+  looked enabled until today** — and the error border. Passing `label=` to `<Input>` also
+  retires the two hand-rolled labels at the old `:434,540` (12.5px / 400 / `--text-2` / 6px) for
+  PM's `block text-xs font-medium text-fg mb-1`.
+- **The inbound-address banner is now `error={V.inboundError}`** on the field itself. The save
+  button beside it gets `mt-5` so its top edge meets the field's rather than the label's.
+- **Login keeps its banner** — PM does too, see the note under item 19. Not a gap.
+
+**Not done, and not in this item's list:** the invite modal's `inviteError` is still a banner
+above the field, though "that address doesn't look quite right" is as field-level as they come.
+Its other message is a server error that may not be about the address at all, which is why it
+was left. Worth a line in item 47 or a follow-up.
 
 ---
 
@@ -1513,6 +1671,10 @@ would cost CS something real.
 `signup/page.tsx:324` use `h-3.5 w-3.5 rounded-token-sm border` + `borderColor:
 var(--border-strong)`. PM ships both. **Recommendation: the login/signup recipe** — it is the
 specified one and it is what CS is closest to. Confirm.
+**ANSWERED 2026-08-08 — the login/signup recipe,** per the recommendation. Landed with item 16
+as `CHECKBOX` / `CHECKBOX_STYLE` in `components/common/formControls.ts`. One wrinkle noted
+there: PM's string has no `cursor-pointer` (it lives on PM's enclosing `<label>`), so Queue's
+two label-less checkboxes lost the pointer cursor. Copied verbatim rather than improved.
 
 **B. `.dark` class or `[data-cs-theme]` attribute?**
 PM: `darkMode: 'class'` (`tailwind.config.ts:9`), `.dark` on `<html>`. CS: `darkMode:
@@ -1544,6 +1706,11 @@ PM has four and does not agree with itself — `w-11 h-6` (44×24) ×2, `h-5 w-9
 `w-8 h-4` (32×16) in the design-system reference. Item 17 recommends `w-11 h-6` on the
 majority. If you would rather fix PM first and then port, say so — it is the one place where
 "copy PM" has no single answer.
+**ANSWERED 2026-08-08 — `w-11 h-6`,** the majority, per the recommendation. Landed with item 17
+as `components/common/Switch.tsx`: the timer page's track and knob with the focus ring the three
+row-shaped implementations share. CS now has a single switch geometry where PM has four — if PM
+is ever reconciled, this is the file that follows it. Note the component is not a `<label>` and
+requires one around it; see item 17 for why.
 
 **E. Search: live field or command palette?**
 PM's header search is a **button** that opens a command palette (`Header.tsx:189-214`, `h-7`,

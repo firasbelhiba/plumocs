@@ -4,29 +4,28 @@ import { Button, Input, TonePill, UserAvatar } from '../common';
 
 const RESULT_ROW =
   'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border-none bg-transparent ' +
-  'text-left text-fg cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2';
+  'text-left text-fg cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
 
 const GROUP_LABEL = 'px-2.5 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 
+/** The shared icon button, with `relative` so the unread pip can hang off it. */
 const IconButton = ({ label, onClick, children, className = '' }) => (
-  <button
+  <Button
+    variant="outline"
+    size="icon"
     onClick={onClick}
     aria-label={label}
     title={label}
-    className={
-      'flex-none grid place-items-center w-8 h-8 rounded-full border border-[color:var(--border)] bg-surface ' +
-      'text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:text-fg focus-ring relative ' +
-      className
-    }
+    className={'flex-none relative ' + className}
   >
     {children}
-  </button>
+  </Button>
 );
 
 export default function Header({ V }) {
   return (
     <header className="flex-none flex items-center gap-3.5 px-4 py-2 h-topbar relative z-fixed border-b border-[color:var(--border)] bg-[color:color-mix(in_srgb,var(--surface)_86%,transparent)] backdrop-blur-md">
-      <IconButton label="collapse sidebar" onClick={V.toggleNav} className="!w-[30px] !h-[30px] !rounded-token-sm">
+      <IconButton label="collapse sidebar" onClick={V.toggleNav}>
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 6h16M4 12h16M4 18h16" />
         </svg>

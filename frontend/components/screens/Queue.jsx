@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, EmptyState, Skeleton, TonePill, UserAvatar } from '../common';
+import { Button, CHECKBOX, CHECKBOX_STYLE, EmptyState, Skeleton, TonePill, UserAvatar } from '../common';
 
 /** Pill whose on/off colour comes from the console's [data-on] token pair. */
 const ON_PILL_STYLE = {
@@ -12,12 +12,9 @@ const ON_PILL_STYLE = {
 const ON_PILL =
   'inline-flex items-center gap-1.5 rounded-full cursor-pointer whitespace-nowrap transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
 
-const CHECKBOX = 'w-3.5 h-3.5 cursor-pointer accent-[color:var(--primary)]';
 const RAIL_HEAD = 'text-[12px] font-medium text-fg';
-const QUICK_BTN =
-  'grid place-items-center w-[26px] h-[26px] rounded-full border-none bg-transparent text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-[color:var(--primary-soft)] hover:text-[color:var(--primary)]';
 const BULK_BTN =
-  'h-btn-sm px-3 rounded-full border-none text-[12.5px] text-white cursor-pointer transition-colors duration-[var(--dur-instant)]';
+  'h-btn-sm px-3 rounded-full border-none text-[12.5px] text-white cursor-pointer transition-colors duration-[var(--dur-instant)] focus-ring';
 
 const splitName = (n = '') => [n.split(' ')[0] ?? '', n.split(' ').slice(1).join(' ')];
 
@@ -48,22 +45,24 @@ export default function Queue({ V }) {
               <span className="tabular-nums opacity-75">{count}</span>
             </button>
           ))}
-          <button
+          <Button
+            variant="outline"
+            size="icon"
             onClick={V.saveView}
             aria-label="save this filter set as a view"
             title="save this filter set as a view"
-            className="grid place-items-center w-[30px] h-[30px] flex-none rounded-full border border-dashed border-[color:var(--border)] bg-transparent text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:text-[color:var(--primary)] hover:border-[color:var(--primary)]"
+            className="flex-none"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 5v14M5 12h14" />
             </svg>
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* toolbar */}
       <div className="flex-none flex items-center gap-2.5 px-4 py-2.5 border-b border-[color:var(--border)]">
-        <Button variant="secondary" size="sm" onClick={V.toggleFilters} leftIcon={
+        <Button variant="outline" size="sm" onClick={V.toggleFilters} leftIcon={
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 6h16M7 12h10M10 18h4" />
           </svg>
@@ -93,27 +92,29 @@ export default function Queue({ V }) {
           updated {V.refreshedRel}
         </span>
 
-        <button
+        <Button
+          variant="outline"
+          size="icon"
           onClick={V.refresh}
           aria-label="refresh the list"
           title="refresh"
-          className="grid place-items-center w-7 h-7 flex-none rounded-full border border-[color:var(--border)] bg-surface text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:text-[color:var(--primary)] focus-ring"
+          className="flex-none"
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6" />
           </svg>
-        </button>
+        </Button>
 
         <div className="w-px h-5 bg-[color:var(--border)]" />
 
-        <Button variant="secondary" size="sm" onClick={V.cycleDensity} title="row density" className="flex-none" leftIcon={
+        <Button variant="outline" size="sm" onClick={V.cycleDensity} title="row density" className="flex-none" leftIcon={
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
         }>{V.densityLabel}</Button>
 
         <div className="relative flex-none">
-          <Button variant="secondary" size="sm" onClick={V.toggleSort} rightIcon={
+          <Button variant="outline" size="sm" onClick={V.toggleSort} rightIcon={
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 9l6 6 6-6" />
             </svg>
@@ -128,7 +129,7 @@ export default function Queue({ V }) {
                   onClick={V.setSort}
                   data-v={o.id}
                   data-on={String(o.on)}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2"
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring"
                   style={{ background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' }}
                 >
                   {o.label}
@@ -157,7 +158,7 @@ export default function Queue({ V }) {
               <span className={RAIL_HEAD}>{g.label}</span>
               {g.options.map((o) => (
                 <label key={o.id} className="flex items-center gap-2.5 py-0.5 text-[13px] text-fg-2 cursor-pointer">
-                  <input type="checkbox" checked={o.on} onChange={V.toggleFacet} data-k={g.kind} data-v={o.id} className={CHECKBOX} />
+                  <input type="checkbox" checked={o.on} onChange={V.toggleFacet} data-k={g.kind} data-v={o.id} className={CHECKBOX} style={CHECKBOX_STYLE} />
                   <span className="flex-1">{o.label}</span>
                   <span className="tabular-nums text-[11.5px] opacity-80">{o.count}</span>
                 </label>
@@ -207,7 +208,7 @@ export default function Queue({ V }) {
             className="flex-none grid items-center px-4 py-2 border-b border-[color:var(--border)] bg-bg text-[11px] uppercase tracking-[1.4px] text-fg-3"
             style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)' }}
           >
-            <input type="checkbox" checked={V.allSelected} onChange={V.toggleAll} aria-label="select all conversations" className={CHECKBOX} />
+            <input type="checkbox" checked={V.allSelected} onChange={V.toggleAll} aria-label="select all conversations" className={CHECKBOX} style={CHECKBOX_STYLE} />
             <span>status</span><span data-col="prio">priority</span><span>subject</span><span>customer</span><span />
             <span data-col="tags">tags</span><span>sla</span>
             <span className="text-right">upd.</span>
@@ -271,7 +272,7 @@ export default function Queue({ V }) {
                   style={{ gridTemplateColumns: 'var(--cs-qcols)', gap: 'var(--cs-gap)', paddingTop: 'var(--cs-rowpy)', paddingBottom: 'var(--cs-rowpy)', fontSize: 'var(--cs-fs)' }}
                 >
                   <span data-stop="1" onClick={V.stop} className="flex items-center">
-                    <input type="checkbox" checked={row.selected} onChange={V.toggleSel} data-id={row.id} aria-label="select conversation" className={CHECKBOX} />
+                    <input type="checkbox" checked={row.selected} onChange={V.toggleSel} data-id={row.id} aria-label="select conversation" className={CHECKBOX} style={CHECKBOX_STYLE} />
                   </span>
 
                   <TonePill tone={row.statusTone} dot size="md">{row.statusLabel}</TonePill>
@@ -323,17 +324,17 @@ export default function Queue({ V }) {
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 flex gap-[5px] p-1 rounded-full bg-surface border border-[color:var(--border)] shadow-card"
                     style={{ opacity: 'var(--q-op)', pointerEvents: 'var(--q-pe)' }}
                   >
-                    <button onClick={V.quickAssign} data-id={row.id} title="i'll take this" aria-label="i'll take this" className={QUICK_BTN}>
+                    <Button variant="ghost" size="icon" onClick={V.quickAssign} data-id={row.id} title="i'll take this" aria-label="i'll take this">
                       <img src="/assets/icons/icon-agent.svg" alt="" className="w-[15px] h-[15px] block" />
-                    </button>
-                    <button onClick={V.quickStatus} data-id={row.id} title="wait on them" aria-label="wait on them" className={QUICK_BTN}>
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={V.quickStatus} data-id={row.id} title="wait on them" aria-label="wait on them">
                       <img src="/assets/icons/icon-snooze.svg" alt="" className="w-[15px] h-[15px] block" />
-                    </button>
-                    <button onClick={V.quickOpen} data-id={row.id} title="open conversation" aria-label="open conversation" className={QUICK_BTN}>
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={V.quickOpen} data-id={row.id} title="open conversation" aria-label="open conversation">
                       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 5h5v5M19 5l-7 7M18 14v4a1.8 1.8 0 01-1.8 1.8H6.8A1.8 1.8 0 015 18V8.8A1.8 1.8 0 016.8 7h4" />
                       </svg>
-                    </button>
+                    </Button>
                   </span>
                 </div>
               );
@@ -343,8 +344,8 @@ export default function Queue({ V }) {
           <div className="flex-none flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[color:var(--border)] bg-surface text-[12.5px] text-fg-3">
             <span className="tabular-nums">{V.pageLabel}</span>
             <div className="flex gap-1.5">
-              <Button variant="secondary" size="sm" onClick={V.prevPage}>back</Button>
-              <Button variant="secondary" size="sm" onClick={V.nextPage}>next</Button>
+              <Button variant="outline" size="sm" onClick={V.prevPage}>back</Button>
+              <Button variant="outline" size="sm" onClick={V.nextPage}>next</Button>
             </div>
           </div>
 
@@ -366,15 +367,20 @@ export default function Queue({ V }) {
               >
                 close
               </button>
-              <button
+              {/* The bulk bar is a dark surface, so the ghost variant's
+                  foreground/hover pair is overridden here — the geometry, the
+                  press and the focus ring are the shared ones. */}
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={V.clearSel}
                 aria-label="clear selection"
-                className="grid place-items-center w-[26px] h-[26px] rounded-full border-none bg-transparent text-white/70 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-white/15 hover:text-white"
+                className="!text-white/70 hover:!bg-white/15 hover:!text-white"
               >
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
-              </button>
+              </Button>
             </div>
           )}
         </section>

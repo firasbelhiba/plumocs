@@ -110,7 +110,7 @@ export default class Console extends React.Component {
     settingsTab: 'overview', menu: null, menuQ: '',
     q: '', results: null,
     toasts: [], confirm: null, sheet: false, newT: false,
-    newSubject: '', newCustomer: '', newPriority: 'normal', newBody: '',
+    newSubject: '', newCustomer: '', newPriority: 'normal', newBody: '', newError: null,
     notifs: [], secret: null,
     loginEmail: '', loginPw: '', loginError: false, pwShown: false, loginView: 'signin', drill: null,
     now: Date.now(), refreshed: Date.now(), failMode: false,
@@ -795,19 +795,28 @@ export default class Console extends React.Component {
   openNewTicket = () => this.setState(s => ({
     newT: true,
     menu: null,
+    newError: null,
     // default to whatever the select will actually show
     newCustomer: s.newCustomer || this.api?.customers?.[0]?.id || '',
   }));
-  closeNewTicket = () => this.setState({ newT: false });
-  onNewSubject = (e) => this.setState({ newSubject: e.target.value });
+  closeNewTicket = () => this.setState({ newT: false, newError: null });
+  onNewSubject = (e) => this.setState({ newSubject: e.target.value, newError: null });
   onNewBody = (e) => this.setState({ newBody: e.target.value });
-  onNewCustomer = (e) => this.setState({ newCustomer: e.target.value });
+  onNewCustomer = (e) => this.setState({ newCustomer: e.target.value, newError: null });
   onNewPriority = (e) => this.setState({ newPriority: e.currentTarget.dataset.v });
   submitNew = async () => {
     const s = this.state;
-    if (!s.newSubject.trim()) { this.toast('a line about what happened helps us route it — anything is fine', 'bad'); return; }
-    if (!s.newCustomer) { this.toast('pick who this is for and we\'ll open it', 'bad'); return; }
-    this.setState({ newT: false });
+    // Field-level, not a toast: the complaint belongs under the field it is
+    // about, and it has to still be there while the field is being corrected.
+    if (!s.newSubject.trim()) {
+      this.setState({ newError: { field: 'subject', text: 'a line about what happened helps us route it — anything is fine' } });
+      return;
+    }
+    if (!s.newCustomer) {
+      this.setState({ newError: { field: 'customer', text: "pick who this is for and we'll open it" } });
+      return;
+    }
+    this.setState({ newT: false, newError: null });
     try {
       const t = await this.api.createTicket({ subject: s.newSubject.trim().toLowerCase(), customerId: s.newCustomer, priority: s.newPriority, body: s.newBody });
       this.setState({ newSubject: '', newBody: '' });
@@ -1961,6 +1970,8 @@ export default class Console extends React.Component {
       sheet: S.sheet, closeSheet: this.closeSheet,
       newT: S.newT, closeNewTicket: this.closeNewTicket, openNewTicket: this.openNewTicket,
       newSubject: S.newSubject, newBody: S.newBody, newCustomer: S.newCustomer, submitNew: this.submitNew,
+      newSubjectError: S.newError?.field === 'subject' ? S.newError.text : '',
+      newCustomerError: S.newError?.field === 'customer' ? S.newError.text : '',
       onNewSubject: this.onNewSubject, onNewBody: this.onNewBody, onNewCustomer: this.onNewCustomer, onNewPriority: this.onNewPriority,
       newPriorityOptions: Object.keys(this.PRIO).map(id => ({ id, label: this.PRIO[id].l, on: S.newPriority === id })),
       customerOptions: (A ? A.customers : []).map(c => ({ id: c.id, label: c.name + ' · ' + this.orgName(c.org) })),

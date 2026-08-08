@@ -3,21 +3,20 @@
 import { sx } from '../sx';
 import { buttonVariants } from '../common/Button';
 import { cn } from '@/lib/utils';
-import { Button, Input, Modal, Select, Textarea, UserAvatar } from '../common';
+import { Button, CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, Input, Modal, Select, Switch, Textarea, UserAvatar } from '../common';
 
 /* Settings keeps its dense bespoke layout, but every control below borrows the
-   shared components' own class strings (buttonVariants / the Input recipe) so
-   geometry, colour and focus rings match Button and Input exactly. */
+   shared components' own class strings (buttonVariants) so geometry, colour and
+   focus rings match Button exactly. Text fields use <Input> itself — the local
+   copy of its class string was missing the disabled and error states, so a
+   disabled field here looked enabled. */
 const tabBtn = () => cn(
   'w-full px-2.5 py-[9px] rounded-token-sm border-none text-[13px] text-left cursor-pointer',
-  'transition-colors duration-[var(--dur-instant)] hover:bg-surface-2',
+  'transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring',
 );
-const editBtn = () => buttonVariants({ variant: 'secondary', size: 'sm' });
+const editBtn = () => buttonVariants({ variant: 'outline', size: 'sm' });
+const iconBtn = () => buttonVariants({ variant: 'outline', size: 'icon' });
 const primaryBtn = () => cn(buttonVariants({ variant: 'primary', size: 'md' }), 'whitespace-nowrap');
-const fieldInput = () => cn(
-  'flex h-input w-full rounded-token-sm border bg-surface px-2.5 py-1.5 text-[13px] text-fg placeholder:text-fg-3',
-  'border-[color:var(--border)] focus:outline-none focus:border-[color:var(--primary)] focus-ring',
-);
 
 /**
  * A panel whose rows could not be fetched says so, in place, rather than
@@ -122,7 +121,7 @@ export default function Settings({ V }) {
                   <span className={sx('display:flex;gap:6px;justify-content:flex-end')}>
                     {u.canEdit && <button onClick={V.editUser} data-id={u.id} className={editBtn()}>edit</button>}
                     {u.canDeactivate && (
-                      <button onClick={V.askDeactivate} data-id={u.id} data-name={u.name} aria-label={'deactivate ' + u.name} title={'deactivate ' + u.name} className={sx('display:grid;place-items:center;width:26px;height:26px;border:0.5px solid var(--cs-border);border-radius:50%;background:var(--cs-surface);color:var(--cs-muted);cursor:pointer', { hover: 'background:var(--cs-hover);color:var(--cs-text)' })}>
+                      <button onClick={V.askDeactivate} data-id={u.id} data-name={u.name} aria-label={'deactivate ' + u.name} title={'deactivate ' + u.name} className={iconBtn()}>
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
                       </button>
                     )}
@@ -186,7 +185,7 @@ export default function Settings({ V }) {
               size="md"
               footer={
                 <>
-                  <Button variant="secondary" size="md" onClick={V.closeInvite}>not now</Button>
+                  <Button variant="outline" size="md" onClick={V.closeInvite}>not now</Button>
                   <Button size="md" onClick={V.submitInvite} disabled={V.inviteBusy}>
                     {V.inviteBusy ? 'sending…' : 'send the invitation'}
                   </Button>
@@ -296,17 +295,18 @@ export default function Settings({ V }) {
                   <span>{d.day}</span>
                   <span className={sx('font-variant-numeric:tabular-nums;color:var(--cs-muted)')}>{d.open}</span>
                   <span className={sx('font-variant-numeric:tabular-nums;color:var(--cs-muted)')}>{d.close}</span>
-                  <span className={sx('text-align:right')}>
-                    <input
-                      type="checkbox"
+                  {/* The label is what makes the track clickable — Switch's
+                      input is sr-only and the component is not a label itself. */}
+                  <label className={sx('text-align:right;cursor:pointer')}>
+                    {/* Writes on flip, so it reads as a switch. */}
+                    <Switch
                       checked={d.on}
                       disabled={!V.canManageDesk || !V.hoursReady || V.hoursBusy}
                       onChange={V.toggleHoursDay}
                       data-day={d.key}
                       aria-label={'work on ' + d.day}
-                      className={sx('width:15px;height:15px;accent-color:var(--cs-brand);cursor:pointer')}
                     />
-                  </span>
+                  </label>
                 </div>
               ))}
             </div>
@@ -330,7 +330,9 @@ export default function Settings({ V }) {
               </div>
               {V.canManageDesk && (
                 <div className={sx('display:flex;gap:8px;align-items:center;flex-wrap:wrap')}>
-                  <input type="date" value={V.holidayDraft} onChange={V.onHolidayDraft} aria-label="holiday date" className={cn(fieldInput(), 'max-w-[200px]')} />
+                  <div className={sx('width:200px')}>
+                    <Input type="date" value={V.holidayDraft} onChange={V.onHolidayDraft} aria-label="holiday date" />
+                  </div>
                   <button onClick={V.addHoliday} disabled={!V.hoursReady || V.hoursBusy} className={editBtn()}>add a holiday</button>
                 </div>
               )}
@@ -429,15 +431,14 @@ export default function Settings({ V }) {
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:16px;display:flex;flex-direction:column;gap:12px')}>
               <span className={sx('font-size:13.5px;font-weight:500')}>new key</span>
               <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end')}>
-                <label className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>
-                  name
-                  <input
+                <div className={sx('flex:1;min-width:200px')}>
+                  <Input
+                    label="name"
                     value={V.keyName}
                     onChange={V.onKeyName}
                     placeholder="4hacks chatbot"
-                    className={fieldInput()}
                   />
-                </label>
+                </div>
                 <button onClick={V.genKey} className={primaryBtn()}>generate key</button>
               </div>
               <div className={sx('display:flex;flex-direction:column;gap:7px')}>
@@ -529,24 +530,23 @@ export default function Settings({ V }) {
 
                 {V.emailErr && <LoadNote>{V.emailErr}</LoadNote>}
 
-                {V.inboundError && (
-                  <div className="px-3 py-2.5 rounded-token-sm text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
-                    {V.inboundError}
-                  </div>
-                )}
-
-                <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end')}>
-                  <label className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--cs-muted)')}>receiving address
-                    <input
+                {/* The rejection sits under the address it is about, rather
+                    than in a banner two rows above it. */}
+                <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start')}>
+                  <div className={sx('flex:1;min-width:220px')}>
+                    <Input
+                      label="receiving address"
                       type="email"
                       value={V.inboundDraft}
                       onChange={V.onInboundDraft}
+                      error={V.inboundError}
                       placeholder="help@yourcompany.com"
                       autoComplete="off"
-                      className={fieldInput()}
                     />
-                  </label>
-                  <button onClick={V.saveInbound} disabled={V.inboundBusy} className={primaryBtn()}>
+                  </div>
+                  {/* 20px = the label's 16px line box + its 4px margin, so the
+                      button's top edge meets the field's, not the label's. */}
+                  <button onClick={V.saveInbound} disabled={V.inboundBusy} className={cn(primaryBtn(), 'mt-5')}>
                     {V.inboundBusy ? 'saving…' : 'save'}
                   </button>
                 </div>
@@ -576,7 +576,7 @@ export default function Settings({ V }) {
           size="md"
           footer={
             <>
-              <Button variant="secondary" size="md" onClick={V.closeEditor}>not now</Button>
+              <Button variant="outline" size="md" onClick={V.closeEditor}>not now</Button>
               <Button size="md" onClick={V.submitEditor} disabled={V.editorBusy}>
                 {V.editorBusy ? 'saving…' : V.editorOk}
               </Button>
@@ -603,10 +603,10 @@ export default function Settings({ V }) {
                 <fieldset key={f.name} className="flex flex-col gap-1.5">
                   <legend className="text-xs font-medium text-fg mb-1">{f.label}</legend>
                   {f.options.map(o => (
-                    <label key={o.value} className="flex items-center gap-2 text-[13px] text-fg-2">
+                    <label key={o.value} className={CHECK_LABEL}>
                       <input type="checkbox" data-f={f.name} value={o.value} checked={o.on}
                         onChange={V.onEditorField}
-                        className={sx('width:14px;height:14px;accent-color:var(--cs-brand);cursor:pointer')} />
+                        className={CHECKBOX} style={CHECKBOX_STYLE} />
                       {o.label}
                     </label>
                   ))}

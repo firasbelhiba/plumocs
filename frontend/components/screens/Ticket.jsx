@@ -6,14 +6,10 @@ const ON_ROW_STYLE = { background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fo
 const MENU =
   'absolute top-[calc(100%+7px)] p-1.5 z-popover rounded-token bg-surface border border-[color:var(--border)] shadow-modal animate-fade-in';
 const MENU_ROW =
-  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2';
+  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border-none text-[13px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring';
 const RAIL_CARD = 'rounded-token border border-[color:var(--border)] p-4 flex flex-col';
 const RAIL_LABEL = 'text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 const RAIL_KV = 'flex justify-between gap-2.5 text-[12.5px] text-fg-3';
-const ICON_BTN =
-  'flex-none grid place-items-center w-[30px] h-[30px] rounded-full border border-[color:var(--border)] bg-surface text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:text-fg focus-ring';
-const TOOL_BTN =
-  'grid place-items-center w-7 h-7 rounded-token-sm border-none bg-transparent text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:text-fg';
 const Caret = () => (
   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
     <path d="M6 9l6 6 6-6" />
@@ -82,11 +78,11 @@ export default function Ticket({ V }) {
     <div className="flex-1 flex flex-col min-h-0">
       {/* toolbar */}
       <div className="flex-none flex items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface relative z-sticky">
-        <button onClick={V.backToQueue} aria-label="back to the inbox" title="back to the inbox" className={ICON_BTN}>
+        <Button variant="outline" size="icon" onClick={V.backToQueue} aria-label="back to the inbox" title="back to the inbox" className="flex-none">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 6l-6 6 6 6" />
           </svg>
-        </button>
+        </Button>
         <span className="tabular-nums text-fg-3 text-[13px] flex-none">#{V.tNum}</span>
 
         {V.subjEdit && (
@@ -104,7 +100,7 @@ export default function Ticket({ V }) {
           <button
             onClick={V.editSubject}
             title="click to rename"
-            className="flex-1 min-w-0 text-left px-2 py-1.5 rounded-token-sm border border-transparent bg-transparent text-fg text-[16px] font-medium tracking-[-.3px] cursor-text truncate transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:border-[color:var(--border)]"
+            className="flex-1 min-w-0 text-left px-2 py-1.5 rounded-token-sm border border-transparent bg-transparent text-fg text-[16px] font-medium tracking-[-.3px] cursor-text truncate transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:border-[color:var(--border)] focus-ring"
           >
             {V.tSubject}
           </button>
@@ -112,7 +108,7 @@ export default function Ticket({ V }) {
 
         {/* status */}
         <div className="relative flex-none">
-          <Button variant="secondary" size="sm" onClick={V.openStatusMenu} rightIcon={<Caret />}>
+          <Button variant="outline" size="sm" onClick={V.openStatusMenu} rightIcon={<Caret />}>
             <TonePill tone={V.tStatusTone} dot className="!bg-transparent !px-0">{V.tStatus}</TonePill>
           </Button>
           {V.statusOpen && (
@@ -129,7 +125,7 @@ export default function Ticket({ V }) {
 
         {/* priority */}
         <div className="relative flex-none">
-          <Button variant="secondary" size="sm" onClick={V.openPriorityMenu} rightIcon={<Caret />}>
+          <Button variant="outline" size="sm" onClick={V.openPriorityMenu} rightIcon={<Caret />}>
             <TonePill tone={V.tPrioTone} glyph={<span className="text-[11px]">{V.tPrioGlyph}</span>} className="!bg-transparent !px-0">
               {V.tPrio}
             </TonePill>
@@ -161,7 +157,7 @@ export default function Ticket({ V }) {
           {V.assigneeOpen && (
             <div data-anim="in" className={MENU + ' right-0 w-[262px] !p-2'}>
               <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="find an agent…" aria-label="search agents" className="!rounded-full mb-1.5" />
-              <Button size="sm" onClick={V.assignMe} className="w-full mb-1 justify-start" variant="secondary"
+              <Button size="sm" onClick={V.assignMe} className="w-full mb-1 justify-start" variant="outline"
                 style={{ background: 'var(--primary-soft)', color: 'var(--cs-brand-ink)' }}>
                 assign to me
               </Button>
@@ -180,7 +176,7 @@ export default function Ticket({ V }) {
                   );
                 })}
               </div>
-              <button onClick={V.unassign} className="w-full px-2.5 py-2 mt-1 border-none border-t border-[color:var(--border)] bg-transparent text-fg-3 text-[13px] text-left cursor-pointer hover:text-fg">
+              <button onClick={V.unassign} className="w-full px-2.5 py-2 mt-1 border-none border-t border-[color:var(--border)] bg-transparent text-fg-3 text-[13px] text-left cursor-pointer hover:text-fg focus-ring">
                 unassign
               </button>
             </div>
@@ -189,7 +185,7 @@ export default function Ticket({ V }) {
 
         {/* team */}
         <div className="relative flex-none">
-          <Button variant="secondary" size="sm" onClick={V.openTeamMenu} rightIcon={<Caret />} className="text-fg-3">{V.tTeam}</Button>
+          <Button variant="outline" size="sm" onClick={V.openTeamMenu} rightIcon={<Caret />} className="text-fg-3">{V.tTeam}</Button>
           {V.teamOpen && (
             <div data-anim="in" className={MENU + ' right-0 w-[150px]'}>
               {V.teamList.map((o) => (
@@ -227,11 +223,11 @@ export default function Ticket({ V }) {
 
         {/* overflow */}
         <div className="relative flex-none">
-          <button onClick={V.openOverflow} aria-label="more actions" className={ICON_BTN}>
+          <Button variant="outline" size="icon" onClick={V.openOverflow} aria-label="more actions" className="flex-none">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="5.5" r=".7" /><circle cx="12" cy="12" r=".7" /><circle cx="12" cy="18.5" r=".7" />
             </svg>
-          </button>
+          </Button>
           {V.overflowOpen && (
             <div data-anim="in" className={MENU + ' right-0 w-[190px]'}>
               <button onClick={V.mergeTicket} className={MENU_ROW}>merge into another conversation</button>
@@ -246,11 +242,11 @@ export default function Ticket({ V }) {
           )}
         </div>
 
-        <button onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className={ICON_BTN + ' !rounded-token-sm'}>
+        <Button variant="outline" size="icon" onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className="flex-none">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 5h16v14H4zM15 5v14" />
           </svg>
-        </button>
+        </Button>
       </div>
 
       {/* SLA strip */}
@@ -353,7 +349,7 @@ export default function Ticket({ V }) {
                           {m.hasFiles && (
                             <div className="flex gap-[7px] flex-wrap pt-0.5">
                               {m.files.map((file, i) => (
-                                <Button key={i} variant="secondary" size="sm" leftIcon={<ClipIcon />}>
+                                <Button key={i} variant="outline" size="sm" leftIcon={<ClipIcon />}>
                                   {file.name}<span className="text-fg-3">{file.size}</span>
                                 </Button>
                               ))}
@@ -377,7 +373,7 @@ export default function Ticket({ V }) {
               <span className="text-[12px] font-medium" style={{ color: 'var(--cs-brand-ink)' }}>this article might help</span>
               <span className="text-[12.5px] text-fg-3">rotating an account key without locking anyone out</span>
             </div>
-            <Button variant="secondary" size="sm" onClick={V.mock} data-msg="article added to your reply ✿" className="whitespace-nowrap">
+            <Button variant="outline" size="sm" onClick={V.mock} data-msg="article added to your reply ✿" className="whitespace-nowrap">
               add to reply
             </Button>
           </div>
@@ -406,35 +402,39 @@ export default function Ticket({ V }) {
               <span className="text-[11.5px] text-fg-3">press r to jump here</span>
             </div>
 
+            {/* Only the three overrides that let it sit flush inside the card
+                survive: the card already draws the border, radius and fill.
+                Size, padding and — the load-bearing one — the focus ring are
+                the shared Textarea's own. */}
             <Textarea
               ref={V.replyRef}
               value={V.draft}
               onChange={V.onDraft}
               placeholder={V.composerPlaceholder}
               rows={4}
-              className="!border-none !bg-transparent !rounded-none p-3.5 min-h-[96px] text-[14px] leading-relaxed focus:!shadow-none"
+              className="!border-none !bg-transparent !rounded-none"
             />
 
             <div className="flex items-center gap-2 px-3 py-2.5 border-t border-[color:var(--border)] flex-wrap">
               <div className="flex gap-0.5">
-                <button aria-label="bold" title="bold" className={TOOL_BTN + ' text-[13px] font-medium'}>B</button>
-                <button aria-label="italic" title="italic" className={TOOL_BTN + ' text-[13px] italic'}>i</button>
-                <button aria-label="bulleted list" title="list" className={TOOL_BTN}>
+                <Button variant="ghost" size="icon" aria-label="bold" title="bold" className="text-[13px]">B</Button>
+                <Button variant="ghost" size="icon" aria-label="italic" title="italic" className="text-[13px] italic">i</Button>
+                <Button variant="ghost" size="icon" aria-label="bulleted list" title="list">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 7h11M9 12h11M9 17h11M5 7h.01M5 12h.01M5 17h.01" />
                   </svg>
-                </button>
-                <button aria-label="add a link" title="link" className={TOOL_BTN}>
+                </Button>
+                <Button variant="ghost" size="icon" aria-label="add a link" title="link">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10 13a4 4 0 005.7 0l2.3-2.3a4 4 0 10-5.7-5.7L11 6.3" />
                     <path d="M14 11a4 4 0 00-5.7 0L6 13.3a4 4 0 105.7 5.7L13 17.7" />
                   </svg>
-                </button>
+                </Button>
               </div>
               <i className="w-px h-5 bg-[color:var(--border)]" />
 
               <div className="relative">
-                <Button variant="secondary" size="sm" onClick={V.openCanned} leftIcon={
+                <Button variant="outline" size="sm" onClick={V.openCanned} leftIcon={
                   <img src="/assets/icons/icon-knowledge-base.svg" alt="" className="w-[15px] h-[15px] block flex-none" />
                 }>
                   canned responses
@@ -447,7 +447,7 @@ export default function Ticket({ V }) {
                   >
                     <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="search responses…" aria-label="search canned responses" className="!rounded-full mb-1.5" />
                     {V.cannedFiltered.map((r) => (
-                      <button key={r.id} onClick={V.insertCanned} data-v={r.id} className="w-full flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm border-none bg-transparent text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2">
+                      <button key={r.id} onClick={V.insertCanned} data-v={r.id} className="w-full flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm border-none bg-transparent text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring">
                         <span className="flex items-center gap-2 w-full">
                           <span className="flex-1 text-[13px] font-medium text-fg">{r.title}</span>
                           <span className="text-[11px] text-fg-3">{r.team}</span>
@@ -459,10 +459,10 @@ export default function Ticket({ V }) {
                 )}
               </div>
 
-              <Button variant="secondary" size="sm" leftIcon={<ClipIcon size={14} />}>attach</Button>
+              <Button variant="outline" size="sm" leftIcon={<ClipIcon size={14} />}>attach</Button>
               <span className="flex-1" />
-              <Button variant="secondary" size="sm" onClick={V.onSendPending} className="whitespace-nowrap">send &amp; set pending</Button>
-              <Button variant="secondary" size="sm" onClick={V.onSendResolved} className="whitespace-nowrap">send &amp; resolve</Button>
+              <Button variant="outline" size="sm" onClick={V.onSendPending} className="whitespace-nowrap">send &amp; set pending</Button>
+              <Button variant="outline" size="sm" onClick={V.onSendResolved} className="whitespace-nowrap">send &amp; resolve</Button>
               <Button size="md" onClick={V.onSend} className="whitespace-nowrap">{V.sendLabel}</Button>
             </div>
           </div>

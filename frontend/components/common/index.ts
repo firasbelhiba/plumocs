@@ -59,6 +59,9 @@ export { Icon } from './Icon';
 export type { IconName } from './Icon';
 export { Kbd } from './Kbd';
 export { Segment } from './Segment';
+export { Switch } from './Switch';
+export type { SwitchProps } from './Switch';
+export { CHECKBOX, CHECKBOX_STYLE, CHECK_LABEL, RADIO } from './formControls';
 export { Progress } from './Progress';
 export { AvatarGroup } from './AvatarGroup';
 

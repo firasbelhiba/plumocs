@@ -20,7 +20,7 @@ export function NotFound({ V }) {
       </p>
       <div className="flex gap-2 mt-1">
         <Button onClick={V.go} data-s="queue" size="md">back to the inbox</Button>
-        <Button onClick={V.focusSearch} variant="secondary" size="md">search for it instead</Button>
+        <Button onClick={V.focusSearch} variant="outline" size="md">search for it instead</Button>
       </div>
     </div>
   );
@@ -41,7 +41,7 @@ export function Oops({ V }) {
       </p>
       <div className="flex gap-2 mt-1">
         <Button onClick={V.go} data-s="queue" size="md">try again</Button>
-        <Button onClick={V.mock} data-msg="we've told the team — thank you ✿" variant="secondary" size="md">
+        <Button onClick={V.mock} data-msg="we've told the team — thank you ✿" variant="outline" size="md">
           tell the team
         </Button>
       </div>

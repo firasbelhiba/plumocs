@@ -1,11 +1,12 @@
 'use client';
 
-import { Button, Input, Segment, UserAvatar } from '../common';
+import { Button, Input, Segment, Switch, UserAvatar } from '../common';
 
 const CARD = 'rounded-token bg-surface border border-[color:var(--border)] shadow-card p-5 flex flex-col gap-3.5';
 const CARD_TITLE = 'text-[14px] font-medium';
-const CHECK_ROW = 'flex items-center gap-2.5 text-[13px] cursor-pointer';
-const CHECKBOX = 'w-[15px] h-[15px] cursor-pointer accent-[color:var(--primary)]';
+/** The shared notification-preference row, verbatim. */
+const PREF_ROW =
+  'flex items-center justify-between p-3 rounded-token-sm hover:bg-surface-2 transition-colors cursor-pointer';
 
 export default function Account({ V }) {
   return (
@@ -50,11 +51,11 @@ export default function Account({ V }) {
         <div className="flex gap-5 flex-wrap">
           <div className="flex flex-col gap-[7px]">
             <span className="text-xs font-medium text-fg">theme</span>
-            <Button variant="secondary" size="sm" onClick={V.toggleTheme}>{V.themeAction}</Button>
+            <Button variant="outline" size="sm" onClick={V.toggleTheme}>{V.themeAction}</Button>
           </div>
           <div className="flex flex-col gap-[7px]">
             <span className="text-xs font-medium text-fg">row density</span>
-            <Button variant="secondary" size="sm" onClick={V.cycleDensity}>{V.densityLabel}</Button>
+            <Button variant="outline" size="sm" onClick={V.cycleDensity}>{V.densityLabel}</Button>
           </div>
         </div>
       </div>
@@ -77,20 +78,21 @@ export default function Account({ V }) {
           ['mentions in internal notes', true],
           ['a quiet summary at the end of the day', false],
         ].map(([label, on]) => (
-          <label key={label} className={CHECK_ROW + (on ? ' text-fg' : ' text-fg-3')}>
-            <input
-              type="checkbox"
+          // These write the moment they move, so they are switches, not
+          // checkboxes waiting on a save button this card does not have.
+          <label key={label} className={PREF_ROW}>
+            <span className="text-sm text-fg-2">{label}</span>
+            <Switch
               defaultChecked={on}
               onChange={V.mock}
               data-msg="preference saved"
-              className={CHECKBOX}
+              aria-label={label}
             />
-            {label}
           </label>
         ))}
       </div>
 
-      <Button variant="secondary" size="md" onClick={V.signOut} className="self-start">sign out</Button>
+      <Button variant="outline" size="md" onClick={V.signOut} className="self-start">sign out</Button>
     </div>
   );
 }

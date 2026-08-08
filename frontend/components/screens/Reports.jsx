@@ -1,6 +1,6 @@
 'use client';
 
-import { Progress, StatCard, TonePill, UserAvatar } from '../common';
+import { Button, Progress, StatCard, TonePill, UserAvatar } from '../common';
 
 const PANEL = 'rounded-token bg-surface border border-[color:var(--border)] shadow-card';
 const THEAD =
@@ -57,15 +57,17 @@ export default function Reports({ V }) {
               <span className="text-[13px] text-fg-3 leading-relaxed">{V.drillNote}</span>
             </div>
             <span className="text-[30px] font-medium tracking-[-1px] tabular-nums">{V.drillValue}</span>
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={V.clearDrill}
               aria-label="close this breakdown"
-              className="grid place-items-center w-[30px] h-[30px] rounded-full border border-[color:var(--border)] bg-surface text-fg-3 cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:text-fg focus-ring"
+              className="flex-none"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-            </button>
+            </Button>
           </div>
 
           <div className="flex flex-col gap-1.5">

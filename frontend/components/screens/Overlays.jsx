@@ -31,7 +31,7 @@ export default function Overlays({ V }) {
         size="sm"
         footer={
           <>
-            <Button variant="secondary" size="md" onClick={V.confirmCancel}>keep it as is</Button>
+            <Button variant="outline" size="md" onClick={V.confirmCancel}>keep it as is</Button>
             <Button variant={V.confirmDanger ? 'danger' : 'primary'} size="md" onClick={V.confirmOk}>
               {V.confirmOkLabel}
             </Button>
@@ -48,7 +48,7 @@ export default function Overlays({ V }) {
         size="lg"
         footer={
           <>
-            <Button variant="secondary" size="md" onClick={V.closeNewTicket}>not now</Button>
+            <Button variant="outline" size="md" onClick={V.closeNewTicket}>not now</Button>
             <Button size="md" onClick={V.submitNew}>start it</Button>
           </>
         }
@@ -58,10 +58,13 @@ export default function Overlays({ V }) {
             for when someone reaches you outside the usual channels.
           </p>
 
+          {/* Validation belongs under the field that failed. A toast said what
+              was wrong somewhere else on the screen and then took itself away. */}
           <Input
             label="subject"
             value={V.newSubject}
             onChange={V.onNewSubject}
+            error={V.newSubjectError}
             placeholder="what's going on?"
             className="h-btn-lg text-[14px]"
           />
@@ -70,6 +73,7 @@ export default function Overlays({ V }) {
             label="customer"
             value={V.newCustomer}
             onChange={V.onNewCustomer}
+            error={V.newCustomerError}
             options={V.customerOptions.map((o) => ({ value: o.id, label: o.label }))}
           />
 
