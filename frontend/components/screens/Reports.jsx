@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, Progress, StatCard, TonePill, UserAvatar } from '../common';
+import { cn } from '@/lib/utils';
+import { Button, EmptyState, Progress, Skeleton, StatCard, TonePill, UserAvatar } from '../common';
 
 /* PM's dominant card is flat and bordered — 64 shadowless instances against 21
    with `shadow-card` — so the shadow is reserved for things that float
@@ -34,6 +35,98 @@ function BarRow({ label, n, pct }) {
   );
 }
 
+/**
+ * The page's shape, held while its ten numbers are in flight.
+ *
+ * This screen had no loading state at all: for the whole of the fetch it was
+ * three headings and a bare legend over white space, and then five KPI cards, a
+ * chart and an agent table appeared at once and shoved everything down. Every
+ * block below reuses the constant its real counterpart uses — `PANEL`, `THEAD`,
+ * `AGENT_COLS`, the 184px chart box, the `minmax(168px,1fr)` KPI grid — so the
+ * layout is defined once and the swap is invisible.
+ */
+function BarSkeleton({ i }) {
+  // The same fixed height table PM's DashboardSkeleton uses, so the bars read as
+  // data rather than as a row of equal blocks.
+  const HEIGHTS = [55, 40, 70, 50, 85, 45, 60, 35, 75, 50];
+  return (
+    <div className="flex-1 flex flex-col items-center justify-end gap-[7px] h-full">
+      <div className="w-full flex items-end justify-center gap-1" style={{ height: '100%' }}>
+        <Skeleton className="w-[42%] rounded-token-sm" style={{ height: `${HEIGHTS[i % 10]}%`, animationDelay: `${i * 100}ms` }} />
+        <Skeleton className="w-[42%] rounded-token-sm" style={{ height: `${HEIGHTS[(i + 3) % 10]}%`, animationDelay: `${i * 100 + 50}ms` }} />
+      </div>
+      <Skeleton className="h-2.5 w-6 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+    </div>
+  );
+}
+
+function ReportsSkeleton() {
+  return (
+    <div className="flex flex-col gap-4" aria-hidden="true">
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))' }}>
+        {/* `StatCard`'s own box, measured: p-4 around a 14px `leading-tight`
+            label, `mt-2`, and a 32px `text-2xl` value row — 88px. The first
+            pass drew a 10px label and a 28px value with no line boxes, came to
+            80, and every card, chart and table below it moved 8px when the
+            numbers landed. */}
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className="bg-surface rounded-token border border-[color:var(--border)] shadow-card p-4">
+            <div className="flex items-center h-[14px]">
+              <Skeleton className="h-2.5 w-24 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+            </div>
+            <div className="mt-2 flex items-center gap-2 h-8">
+              <Skeleton className="h-7 w-16 rounded-token-sm" style={{ animationDelay: `${i * 100 + 50}ms` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(320px,1.6fr)_minmax(240px,1fr)]">
+        <div className={PANEL + ' p-4 flex flex-col gap-3.5'}>
+          <div className="flex items-center gap-3.5 flex-wrap">
+            <span className="text-[13.5px] font-medium">Created vs resolved</span>
+          </div>
+          <div className="flex items-end gap-3.5 h-[184px]">
+            {[0, 1, 2, 3, 4, 5, 6].map((i) => <BarSkeleton key={i} i={i} />)}
+          </div>
+        </div>
+
+        <div className={PANEL + ' p-4 flex flex-col gap-3'}>
+          <span className="text-[13.5px] font-medium">Where they come from</span>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col gap-1.5">
+              <Skeleton className="h-2.5 rounded-full" style={{ width: `${52 + ((i * 11) % 26)}%`, animationDelay: `${i * 100}ms` }} />
+              <Skeleton className="h-1.5 w-full rounded-full" style={{ animationDelay: `${i * 100 + 40}ms` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={PANEL + ' overflow-hidden'}>
+        <div className="overflow-x-auto">
+          <div className={THEAD} style={{ gridTemplateColumns: AGENT_COLS }}>
+            <span>agent</span>
+            <span className="text-right">open</span>
+            <span className="text-right">resolved</span>
+            <span className="text-right">avg. time</span>
+          </div>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className={TROW} style={{ gridTemplateColumns: AGENT_COLS }}>
+              <span className="flex items-center gap-2.5">
+                <Skeleton variant="circular" className="h-6 w-6 flex-none" style={{ animationDelay: `${i * 100}ms` }} />
+                <Skeleton className="h-3 rounded-full" style={{ width: `${44 + ((i * 9) % 26)}%`, animationDelay: `${i * 100}ms` }} />
+              </span>
+              <Skeleton className="h-3 w-8 justify-self-end rounded-full" style={{ animationDelay: `${i * 100 + 30}ms` }} />
+              <Skeleton className="h-3 w-8 justify-self-end rounded-full" style={{ animationDelay: `${i * 100 + 60}ms` }} />
+              <Skeleton className="h-3 w-12 justify-self-end rounded-full" style={{ animationDelay: `${i * 100 + 90}ms` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Reports({ V }) {
   return (
     // Page padding and width from PM's reports page (`reports/page.tsx:313`):
@@ -48,6 +141,35 @@ export default function Reports({ V }) {
         </p>
       </div>
 
+      {V.reportsLoading && <ReportsSkeleton />}
+
+      {V.reportsFailed && (
+        <EmptyState
+          illustration="error"
+          title="Couldn't load the reports"
+          description="The numbers didn't come back. Nothing on the desk has changed."
+          action={{ label: 'Try again', onClick: V.retryReports }}
+        />
+      )}
+
+      {/* A failed *refresh* keeps the last numbers and says they are the last
+          numbers. Before this the catch was empty, so the previous run's KPIs
+          stayed under the heading "Last 7 days" indefinitely with nothing to say
+          they were neither current nor confirmed. */}
+      {V.reportsStaleError && (
+        <div className="flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-token-sm bg-[color:var(--danger-soft)] text-[color:var(--danger)] text-[12.5px]">
+          <span className="flex-1 min-w-[200px]">Couldn&apos;t refresh — these are the last figures that loaded.</span>
+          <button
+            onClick={V.retryReports}
+            className="h-btn-sm px-3 rounded-full border border-current bg-transparent text-current text-[12.5px] cursor-pointer focus-ring"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!V.reportsLoading && !V.reportsFailed && (
+      <div className={cn('flex flex-col gap-4 transition-opacity duration-200', V.reportsRefreshing && 'opacity-60 pointer-events-none')}>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))' }}>
         {/* StatCard is a plain surface in the shared library — wrap it to make
             the KPI a drill-down affordance without forking the component. */}
@@ -113,6 +235,25 @@ export default function Reports({ V }) {
             </div>
             <div className="flex flex-col gap-2.5">
               <span className="text-[13px] font-medium">Conversations behind this</span>
+              {/* These three used to be fetched for all five KPIs during
+                  loadReports, blocking the numbers above on data for a panel
+                  that is shut until a card is clicked. They are fetched when the
+                  panel opens now, so they have their own small wait. */}
+              {V.drillTicketsLoading && [0, 1, 2].map((i) => (
+                // 39px, not 34: `px-2.5 py-2` around a 21px text row plus the
+                // border is what the real button measures, and three rows two
+                // pixels short each is a 15px shuffle when they land.
+                <div key={i} className="flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border border-[color:var(--border)] bg-bg h-[39px]" aria-hidden="true">
+                  <Skeleton className="h-2.5 w-8 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+                  <Skeleton className="h-2.5 flex-1 rounded-full" style={{ maxWidth: `${58 + ((i * 13) % 26)}%`, animationDelay: `${i * 100 + 40}ms` }} />
+                  <Skeleton className="h-4 w-14 rounded-full" style={{ animationDelay: `${i * 100 + 80}ms` }} />
+                </div>
+              ))}
+              {V.drillTicketsFailed && (
+                <span className="text-[12.5px] text-[color:var(--danger)]">
+                  Couldn&apos;t load the examples. The breakdown above is unaffected.
+                </span>
+              )}
               {V.drillTickets.map((x) => (
                 <button
                   key={x.id}
@@ -196,6 +337,8 @@ export default function Reports({ V }) {
         })}
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 }

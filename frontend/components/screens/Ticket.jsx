@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Breadcrumb, Button, Dropdown, DropdownItem, Input, Segment, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
+import { Breadcrumb, Button, Dropdown, DropdownItem, EmptyState, Input, Segment, Skeleton, Textarea, TonePill, UserAvatar } from '../common';
 import { buttonVariants } from '../common/Button';
 import { KnowledgeBaseGlyph, SlaGlyph } from './glyphs';
 
@@ -98,9 +98,192 @@ function RichText({ text }) {
   );
 }
 
+/**
+ * The conversation screen, while there is no conversation.
+ *
+ * Only the thread had a skeleton before; everything else drew as fact. At 900ms
+ * into an open the screen said `#` for the number, an empty subject, empty
+ * status and priority pills, "Unassigned · On it" for a ticket that was
+ * assigned, "First response ⟨blank⟩ · Resolution ⟨blank⟩ · ⟨blank⟩ policy", "CC
+ * —", "Source —", a hardcoded knowledge-base suggestion, a hardcoded CSAT score
+ * — and twenty-six live controls including a composer you could type a reply
+ * into and press Send.
+ *
+ * Every block here wears the class string of the thing it replaces, so the
+ * toolbar keeps its height, the SLA strip keeps its band, and the rail keeps its
+ * 322px column and its card stack.
+ */
+const Pill = ({ w, delay = 0 }) => (
+  <Skeleton className={`h-btn-md ${w} rounded-full flex-none`} style={{ animationDelay: `${delay}ms` }} />
+);
+
+/**
+ * A bar that occupies a taller line than it draws.
+ *
+ * Measured, both states side by side: the real toolbar is 65px because the
+ * subject control is 40px tall, and the real SLA strip is 36px because its rows
+ * of 12.5px text with a 15px glyph come to 21px. A skeleton made of `h-btn-md`
+ * pills and `h-2.5` bars came to 57px and 25px, so the whole conversation and
+ * its rail dropped 19px the instant the ticket landed. The bar keeps its slim
+ * drawn height; the box around it keeps the row's real one.
+ */
+const Line = ({ box, bar, delay = 0, className = '' }) => (
+  <span className={`flex items-center ${box} ${className}`} aria-hidden="true">
+    <Skeleton className={`${bar} rounded-full w-full`} style={{ animationDelay: `${delay}ms` }} />
+  </span>
+);
+
+function TicketToolbarSkeleton() {
+  return (
+    <div className="flex-none flex flex-wrap items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface" aria-hidden="true">
+      <Skeleton className="h-btn-md w-btn-md w-8 rounded-token-sm flex-none" />
+      <Line box="h-[21px] w-12 flex-none" bar="h-3" delay={30} />
+      {/* 40px tall: the height of the subject button it stands in for. And
+          `min-w-0`, because that button is the toolbar's only elastic child —
+          at 375px it squeezes to 55px so the status and priority pills stay on
+          the first row. A `min-w-[140px]` floor here refused to squeeze, pushed
+          the pills onto a third row, and made the mobile skeleton 149px against
+          the real 107 — the desktop match hid it. */}
+      <Line box="h-10 flex-1 min-w-0" bar="h-5" delay={60} />
+      <Pill w="w-24" delay={90} />
+      <Pill w="w-20" delay={120} />
+      <Pill w="w-36" delay={150} />
+      <Pill w="w-20" delay={180} />
+    </div>
+  );
+}
+
+function TicketSlaSkeleton() {
+  return (
+    <div
+      className="flex-none flex flex-wrap items-center gap-x-3.5 gap-y-1 px-[18px] py-[7px] border-b border-[color:var(--border)] bg-surface-2"
+      aria-hidden="true"
+    >
+      <Line box="h-[21px] w-40" bar="h-2.5" />
+      <Line box="h-[21px] w-32" bar="h-2.5" delay={60} />
+      <Line box="h-[21px] w-24" bar="h-2.5" delay={120} />
+    </div>
+  );
+}
+
+/** The rail's five cards, at their real widths, in their real order. */
+function TicketRailSkeleton() {
+  return (
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      <div className={RAIL_CARD + ' gap-3'}>
+        <div className="flex items-center gap-3">
+          <Skeleton variant="circular" className="h-10 w-10 flex-none" />
+          <div className="min-w-0 flex flex-col gap-1.5 flex-1">
+            <Skeleton className="h-3.5 w-32 rounded-full" style={{ animationDelay: '40ms' }} />
+            <Skeleton className="h-3 w-24 rounded-full" style={{ animationDelay: '80ms' }} />
+          </div>
+        </div>
+        <Skeleton className="h-8 w-full rounded-token-sm" style={{ animationDelay: '120ms' }} />
+        <div className="flex flex-col gap-1.5">
+          <Skeleton className="h-3 w-40 rounded-full" style={{ animationDelay: '160ms' }} />
+          <Skeleton className="h-3 w-32 rounded-full" style={{ animationDelay: '200ms' }} />
+        </div>
+      </div>
+      {[0, 1, 2].map((card) => (
+        <div key={card} className={RAIL_CARD + ' gap-2.5'}>
+          <Skeleton className="h-2.5 w-16 rounded-full" style={{ animationDelay: `${card * 100}ms` }} />
+          {[0, 1, 2].map((r) => (
+            <Skeleton
+              key={r}
+              className="h-3 rounded-full"
+              style={{ width: `${58 + ((card * 7 + r * 11) % 34)}%`, animationDelay: `${card * 100 + r * 40}ms` }}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Ticket({ V }) {
   const [custFirst, custLast] = splitName(V.custName);
   const [asgFirst, asgLast] = splitName(V.tAssigneeName);
+
+  /* The conversation could not be fetched. `ticketLoad: 'error'` has been set
+     here since the screen was written and nothing read it: the three thread
+     skeletons simply vanished and the blank, partly-false ticket stayed on
+     screen forever, with no error, no retry, and a composer that accepted a
+     reply and silently dropped it. */
+  if (V.ticketFailed) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-none px-4 pt-3 bg-surface">
+          <Breadcrumb items={[{ label: 'Home' }, { label: 'Inbox' }]} />
+        </div>
+        <div className="flex-none flex items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface">
+          <Button variant="outline" size="icon" onClick={V.backToQueue} aria-label="Back to the inbox" title="Back to the inbox" className="flex-none">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </Button>
+        </div>
+        <div data-scroll className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8">
+          <div className="max-w-[520px] mx-auto">
+            <EmptyState
+              illustration="error"
+              title="Couldn't open this conversation"
+              description="The thread didn't come back. Nothing has been sent and nothing has changed."
+              action={{ label: 'Try again', onClick: V.retryTicket }}
+              secondaryAction={{ label: 'Back to the inbox', onClick: V.backToQueue }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* Everything below the breadcrumb is the conversation's own record. Until
+     there is one, the screen holds its shape and claims nothing. */
+  if (!V.ticketReady) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-none px-4 pt-3 bg-surface">
+          <Breadcrumb items={[{ label: 'Home' }, { label: 'Inbox' }]} />
+        </div>
+        <TicketToolbarSkeleton />
+        {/* The pane switch stays live below `lg` — it is the only way to reach
+            the details column, and it works on a conversation that has not
+            landed as well as on one that has. It sits *between* the toolbar and
+            the SLA strip because that is where the real screen puts it; a
+            skeleton that draws the same three bands in a different order is a
+            reshuffle on land, and on mobile it is a visible one. */}
+        <div className="flex-none lg:hidden px-4 py-2 border-b border-[color:var(--border)] bg-surface">
+          <Segment options={PANES} value={V.ticketPane} onChange={V.setTicketPane} />
+        </div>
+        <TicketSlaSkeleton />
+        <div className="flex-1 flex min-h-0">
+          <div className={cn('flex-1 min-w-0 flex-col bg-bg lg:flex', V.ticketPane === 'conversation' ? 'flex' : 'hidden')}>
+            <div className="flex-1 flex flex-col gap-3.5 px-[18px] py-5" aria-hidden="true">
+              <Skeleton className="h-[66px] w-[72%] rounded-token" />
+              <Skeleton className="h-[86px] w-[84%] rounded-token self-end" style={{ animationDelay: '100ms' }} />
+              <Skeleton className="h-[52px] w-[64%] rounded-token" style={{ animationDelay: '200ms' }} />
+            </div>
+            {/* The composer is not drawn at all. It used to be fully live over a
+                null ticket: you could type a reply and press Send, and `send()`
+                would no-op without a word. */}
+            <div className="flex-none mx-[18px] mb-[18px] h-[188px] rounded-token border border-[color:var(--border)] bg-surface flex items-center justify-center text-[12.5px] text-fg-3">
+              Opening the conversation…
+            </div>
+          </div>
+          <aside
+            className={cn(
+              'flex-none overflow-y-auto p-3.5 bg-surface border-l border-[color:var(--border)] flex-col gap-3',
+              'w-full lg:w-[322px]',
+              V.ticketPane === 'details' ? 'flex' : 'hidden',
+              V.railOn ? 'lg:flex' : 'lg:hidden',
+            )}
+          >
+            <TicketRailSkeleton />
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -202,10 +385,20 @@ export default function Ticket({ V }) {
             aria-expanded={V.assigneeOpen}
             className="inline-flex items-center gap-2 pl-1.5 pr-3 h-btn-md rounded-full border border-[color:var(--border)] bg-surface text-fg text-[13px] whitespace-nowrap cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-ring"
           >
-            <UserAvatar firstName={asgFirst} lastName={asgLast} size="sm" />
-            {V.tAssigneeName}
-            <i data-tone="sla-met" className="w-[5px] h-[5px] rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
-            <span className="text-[12px] text-fg-3">On it</span>
+            {V.tAssigneeUnknown
+              ? <Skeleton variant="circular" className="h-6 w-6 flex-none" />
+              : <UserAvatar firstName={asgFirst} lastName={asgLast} size="sm" />}
+            {V.tAssigneeUnknown
+              ? <Skeleton className="h-2.5 w-20 rounded-full" />
+              : V.tAssigneeName}
+            {/* The green dot and the words "On it" were unconditional, so they
+                sat beside the word "Unassigned" on every unassigned ticket. */}
+            {V.tAssigned && !V.tAssigneeUnknown && (
+              <>
+                <i data-tone="sla-met" className="w-[5px] h-[5px] rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
+                <span className="text-[12px] text-fg-3">On it</span>
+              </>
+            )}
             <Caret />
           </button>
           {V.assigneeOpen && (
@@ -216,6 +409,23 @@ export default function Ticket({ V }) {
                 Assign to me
               </Button>
               <div data-scroll className="max-h-[232px] overflow-y-auto">
+                {/* The people list arrives with the reference wave, not with the
+                    shell. An empty menu is indistinguishable from a desk with
+                    one agent on it. */}
+                {V.agentListPending && [0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-2.5 px-2.5 py-2 h-[36px]" aria-hidden="true">
+                    <Skeleton variant="circular" className="h-6 w-6 flex-none" style={{ animationDelay: `${i * 100}ms` }} />
+                    <Skeleton className="h-2.5 flex-1 rounded-full" style={{ maxWidth: `${52 + ((i * 13) % 30)}%`, animationDelay: `${i * 100 + 40}ms` }} />
+                  </div>
+                ))}
+                {/* Four avatars pulsing for the rest of the session, because the
+                    people call 500'd once, would be a promise nothing is going
+                    to keep. Say it, and point at the retry that already exists. */}
+                {V.agentListFailed && (
+                  <div className="px-2.5 py-2.5 text-[12.5px] text-fg-3">
+                    Couldn&apos;t load the people list. Use <b className="font-medium">Try again</b> at the top of the console.
+                  </div>
+                )}
                 {V.agentList.map((a) => {
                   const [f, l] = splitName(a.name);
                   return (
@@ -355,14 +565,6 @@ export default function Ticket({ V }) {
               <i className="w-[7px] h-[7px] rounded-full flex-none bg-[color:var(--primary)]" />
               <span className="flex-1">A teammate added a reply while you were reading</span>
               <Button size="sm" onClick={V.reloadTicket}>Refresh</Button>
-            </div>
-          )}
-
-          {V.ticketLoading && (
-            <div className="flex-1 flex flex-col gap-3.5 px-[18px] py-5">
-              <Skeleton className="h-[66px] w-[72%] rounded-token" />
-              <Skeleton className="h-[86px] w-[84%] rounded-token self-end" />
-              <Skeleton className="h-[52px] w-[64%] rounded-token" />
             </div>
           )}
 
@@ -516,6 +718,17 @@ export default function Ticket({ V }) {
                     className={PANEL + ' bottom-full mb-2 left-0 w-[340px] max-h-[330px] overflow-y-auto !p-2'}
                   >
                     <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="Search responses…" aria-label="Search canned responses" className="!rounded-full mb-1.5" />
+                    {V.cannedPending && [0, 1, 2].map((i) => (
+                      <div key={i} className="flex flex-col gap-1 px-2.5 py-2.5" aria-hidden="true">
+                        <Skeleton className="h-3 w-40 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+                        <Skeleton className="h-2.5 w-full rounded-full" style={{ animationDelay: `${i * 100 + 40}ms` }} />
+                      </div>
+                    ))}
+                    {V.cannedFailed && (
+                      <div className="px-2.5 py-2.5 text-[12.5px] text-fg-3">
+                        Couldn&apos;t load your saved responses. Use <b className="font-medium">Try again</b> at the top of the console.
+                      </div>
+                    )}
                     {V.cannedFiltered.map((r) => (
                       <button key={r.id} role="menuitem" onClick={V.insertCanned} data-v={r.id} className="w-full flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm border-none bg-transparent text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-visible:bg-surface-2 focus-ring">
                         <span className="flex items-center gap-2 w-full">

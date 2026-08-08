@@ -16,7 +16,7 @@ import Account from './screens/Account';
 import Settings from './screens/Settings';
 import { NotFound, Oops } from './screens/EdgeScreens';
 import Overlays from './screens/Overlays';
-import { LogoLoader } from './common';
+import { ErrorScreen, LogoLoader } from './common';
 
 /**
  * "30m" / "4h" / "2d" → minutes, and back. SLA targets are stored as a minute
@@ -121,11 +121,23 @@ export default class Console extends React.Component {
     ticketPane: 'conversation',
     view: 'all-open', sort: 'updated', page: 0,
     f: { status: [], priority: [], channel: [], tag: null, team: null, assignee: null, range: 'any' },
-    rows: [], total: 0, pageSize: 25, counts: {}, facets: { status: {}, priority: {}, channel: {}, tag: {} },
-    load: 'loading', sel: [], hover: null, cursor: 0,
+    rows: [], total: 0, pageSize: 25, counts: null, facets: null,
+    // Three modes, PM's (`useIssuesListData.ts:532-538`): `load` is the cold
+    // one and puts skeletons on screen; `refreshing` keeps the real rows and
+    // dims them; a silent refetch sets neither. `countsLoad` is separate
+    // because the badges arrive on their own call and must not read 0 before
+    // they do.
+    load: 'loading', refreshing: false, countsLoad: 'idle',
+    sel: [], hover: null, cursor: 0,
     ticket: null, ticketLoad: 'idle', remote: false,
     mode: 'reply', draft: '', sending: false, subjEdit: false, subjDraft: '',
+    // The desk's reference data — people, teams, tags, canned responses,
+    // customers. Off the boot critical path now, so every screen that reads it
+    // has to be able to say "not yet" instead of printing a default.
+    refs: 'idle', bootError: null,
     customers: [], customer: null, custQ: '',
+    custLoad: 'idle', customerLoad: 'idle', reportsLoad: 'idle',
+    searching: false, drillLoad: 'idle',
     settingsTab: 'overview', menu: null, menuQ: '',
     q: '', results: null,
     sheet: false, newT: false,
@@ -136,7 +148,7 @@ export default class Console extends React.Component {
     pwCur: '', pwNew: '', pwConfirm: '', reportsAt: 0,
     keepSignedIn: true, serviceUp: true,
     keyName: '', keyKind: 'chatbot',
-    invites: [], invitesLoad: 'idle',
+    invites: [], invitesLoad: 'idle', settingsLoad: {}, inboundTouched: false,
     inviteOpen: false, inviteEmail: '', inviteRole: 'agent', inviteTeam: '', inviteBusy: false, inviteError: '',
     // settings panels own their rows once opened — see loadSettingsTab
     settings: {}, settingsErr: {},
@@ -212,10 +224,7 @@ export default class Console extends React.Component {
       .adoptPmSession({ accessToken, refreshToken })
       .then(async () => {
         const me = await adapter.bootstrap();
-        this.setState(
-          { booted: true, loggedIn: true, loginError: false, role: me.role, avail: me.availability ?? 'available', notifs: adapter.notifications, screen: 'queue' },
-          () => { this.loadQueue({ noFail: true }); this.loadCounts(); },
-        );
+        this.enterConsole(me, { loginError: false, screen: 'queue' });
       })
       .catch((e) => this.setState({ booted: true, loggedIn: false, pmSignInError: e?.message || 'Plumo sign-in failed' }));
     return true;
@@ -298,8 +307,23 @@ export default class Console extends React.Component {
     }
   };
 
-  setDrill = (e) => this.setState({ drill: e.currentTarget.dataset.k });
-  clearDrill = () => this.setState({ drill: null });
+  /**
+   * Open a KPI's breakdown, and only then fetch the three sample conversations
+   * behind it. They used to be five awaited ticket-list calls inside
+   * loadReports, blocking the numbers on data for a panel that is closed until
+   * this handler runs.
+   */
+  setDrill = (e) => {
+    const k = e.currentTarget.dataset.k;
+    this.setState({ drill: k });
+    const d = this.api?.drilldowns?.[k];
+    if (!d || d.tickets) return;
+    this.setState({ drillLoad: 'loading' });
+    this.api.loadDrilldownTickets(k)
+      .then(() => { if (this.state.drill === k) this.setState({ drillLoad: 'ok' }); })
+      .catch(() => { if (this.state.drill === k) this.setState({ drillLoad: 'error' }); });
+  };
+  clearDrill = () => this.setState({ drill: null, drillLoad: 'idle' });
   openAccount = () => this.setState({ screen: 'account', menu: null });
   SETTINGS_CARDS = [
     { v: 'team', name: 'Team & users', meta: '8 people · 2 teams', blurb: 'Who is here, what they can reach, and who is available right now.' },
@@ -347,22 +371,98 @@ export default class Console extends React.Component {
     }
     try {
       const me = await adapter.bootstrap();
-      this.setState(
-        { booted: true, loggedIn: true, role: me.role, avail: me.availability ?? 'available', notifs: adapter.notifications },
-        () => {
-          this.loadQueue({ noFail: true });
-          this.loadCounts();
-          if ((p.startScreen || '') === 'ticket') this.openTicket('tk1042');
-          if ((p.startScreen || '') === 'customers') this.loadCustomers();
-          if ((p.startScreen || '') === 'reports') this.loadReports();
-        },
-      );
+      this.enterConsole(me, {}, () => {
+        if ((p.startScreen || '') === 'ticket') this.openTicket('tk1042');
+        if ((p.startScreen || '') === 'customers') this.loadCustomers();
+        if ((p.startScreen || '') === 'reports') this.loadReports();
+      });
     } catch (e) {
-      this.setState({ booted: true, loggedIn: false });
-      this.pingService();
-      if (e?.offline) this.toast('Network error. Please check your connection.', 'bad');
+      this.bootFailed(e);
     }
   }
+
+  /**
+   * The one place a boot failure is read.
+   *
+   * It used to be `{ booted: true, loggedIn: false }` for anything at all, so a
+   * 500 on one of the eleven calls bootstrap made dropped you on the sign-in
+   * screen with a valid session in storage, no message, and a footer reading
+   * "all systems operational". The only honest reading of that was "I have been
+   * logged out". Now only a 401 means that — the session really is dead — and
+   * everything else keeps you signed in and says what happened, with a button
+   * that tries again.
+   */
+  bootFailed(e) {
+    if (e?.status === 401 || e?.status === 403) {
+      this.setState({ booted: true, loggedIn: false, bootError: null });
+      this.pingService();
+      return;
+    }
+    this.setState({ booted: true, loggedIn: false, bootError: e ?? new Error('Boot failed') });
+    this.pingService();
+  }
+
+  retryBoot = async () => {
+    this.setState({ booted: false, bootError: null });
+    try {
+      const me = await adapter.bootstrap();
+      this.enterConsole(me);
+    } catch (e) {
+      this.bootFailed(e);
+    }
+  };
+
+  /**
+   * Cross from "who are you" to a drawn console.
+   *
+   * Wave 1 has landed and that is all the shell needs. Everything below runs
+   * *after* the first paint and in parallel: the reference caches, the first
+   * page of the inbox, the view badges. Each owns its own flag and its own
+   * loading affordance, which is the difference between PM's several short
+   * waits and the one long one CS used to have.
+   */
+  enterConsole(me, extra, after) {
+    this.setState(
+      {
+        booted: true, loggedIn: true, bootError: null,
+        role: me.role, avail: me.availability ?? 'available',
+        ...(extra || {}),
+      },
+      () => {
+        // Order matters, and it is not cosmetic: Chrome allows six connections
+        // per origin over HTTP/1.1, so the tenth call in a burst waits a whole
+        // round trip for a slot. The inbox and its badges are the screen the
+        // reader is actually looking at, so they take the first two; the
+        // reference caches, which nothing on that screen needs in order to
+        // render honestly, fill what is left and queue for the rest.
+        this.loadQueue({ noFail: true });
+        this.loadCounts();
+        this.loadReference();
+        if (after) after();
+      },
+    );
+  }
+
+  /**
+   * Wave 2, in the background.
+   *
+   * Nothing waits on it. What it fills is the assignee menu, the tag filters,
+   * the team list and the canned responses — so while it is in flight those
+   * read as loading rather than as empty, and if it fails there is a bar at the
+   * top of the console saying so with a retry, instead of an inbox that
+   * silently cannot name anybody.
+   */
+  async loadReference() {
+    if (!this.api) return;
+    this.setState({ refs: 'loading' });
+    try {
+      await this.api.loadReference();
+      this.setState({ refs: 'ok', notifs: this.api.notifications });
+    } catch (e) {
+      this.setState({ refs: 'error' });
+    }
+  }
+  retryReference = () => this.loadReference();
 
   /** Footer status dot on the sign-in screen — a real liveness check. */
   pingService() {
@@ -424,7 +524,9 @@ export default class Console extends React.Component {
     if (this.queueTimer || this.state.screen === 'ticket') return;
     this.queueTimer = setTimeout(() => {
       this.queueTimer = null;
-      if (this.state.screen === 'queue') this.loadQueue({ noFail: true });
+      // Silent: a socket event is not something the reader asked for, so it
+      // must not dim or blank a list they are reading.
+      if (this.state.screen === 'queue') this.loadQueue({ noFail: true, silent: true });
     }, 2000);
   }
 
@@ -522,35 +624,81 @@ export default class Console extends React.Component {
     this.props && this.props.confirm ? this.props.confirm(options) : Promise.resolve(false);
   dirty() { return this.state.draft.trim().length > 0; }
 
+  /**
+   * The inbox, in PM's three modes (`useIssuesListData.ts:532-538`).
+   *
+   * cold    — nothing on screen yet: skeleton rows, `load: 'loading'`.
+   * refresh — the reader changed the view, a filter, the sort or the page: keep
+   *           the rows they can see and dim them, so the list they are looking
+   *           at is never the wrong list *presented as the right one*.
+   * silent  — a socket event or a post-mutation refetch: neither flag, nothing
+   *           moves.
+   *
+   * `loadingRows` used to be `load === 'loading' && rows.length === 0`, which
+   * collapsed refresh into silent: clicking "Breaching" left all 25 "All open"
+   * rows on screen under a Breaching pill already styled as selected.
+   */
   async loadQueue(opts) {
     const s = this.state;
+    const o = opts || {};
     if (!this.api) return;
-    this.setState({ load: 'loading' });
+    const cold = s.rows.length === 0;
+    if (o.silent) { /* nothing moves */ }
+    else if (cold) this.setState({ load: 'loading', refreshing: false });
+    else this.setState({ refreshing: true });
     try {
-      if (s.failMode && !(opts || {}).noFail) this.api.simulateNextFailure();
+      if (s.failMode && !o.noFail) this.api.simulateNextFailure();
       const res = await this.api.listTickets({ view: s.view, filters: s.f, sort: s.sort, me: this.me().id, page: s.page });
-      this.setState({ rows: res.rows, total: res.total, pageSize: res.pageSize, load: 'ok', refreshed: Date.now(), cursor: 0 });
-    } catch (e) { this.setState({ load: 'error' }); }
+      this.setState({ rows: res.rows, total: res.total, pageSize: res.pageSize, load: 'ok', refreshing: false, refreshed: Date.now(), cursor: 0 });
+    } catch (e) {
+      // A failed *refresh* keeps the last good rows — PM does the same
+      // (`useDashboardData.ts:727-743`) — and the error is reported beside
+      // them rather than replacing them. Only a cold failure clears the list.
+      this.setState({ load: 'error', refreshing: false });
+    }
   }
   async loadCounts() {
     if (!this.api) return;
+    this.setState((s) => ({ countsLoad: s.countsLoad === 'ok' ? 'ok' : 'loading' }));
     try {
       const { views, facets } = await this.api.refreshCounts();
-      this.setState({ counts: views, facets });
-    } catch (e) { }
+      this.setState({ counts: views, facets, countsLoad: 'ok' });
+    } catch (e) {
+      // Leave whatever counts were already true on screen; only say "unknown"
+      // if we have never had any.
+      this.setState((s) => ({ countsLoad: s.counts ? 'ok' : 'error' }));
+    }
   }
 
   async loadReports() {
     if (!this.api) return;
+    this.setState({ reportsLoad: 'loading' });
     try {
       await this.api.loadReports();
-      this.setState({ reportsAt: Date.now() });
-    } catch (e) { }
+      this.setState({ reportsAt: Date.now(), reportsLoad: 'ok' });
+    } catch (e) {
+      // `catch (e) { }` here is why a failed /reports left the previous run's
+      // KPIs under the heading "Last 7 days", indefinitely, with nothing to
+      // say they were neither.
+      this.setState({ reportsLoad: 'error' });
+    }
   }
+  retryReports = () => this.loadReports();
+
   async loadCustomers() {
     if (!this.api) return;
-    try { const rows = await this.api.listCustomers(this.state.custQ); this.setState({ customers: rows }); } catch (e) { }
+    const cold = this.state.customers.length === 0;
+    this.setState(cold ? { custLoad: 'loading' } : { custLoad: 'refreshing' });
+    try {
+      const rows = await this.api.listCustomers(this.state.custQ);
+      this.setState({ customers: rows, custLoad: 'ok' });
+    } catch (e) {
+      // Was silent, so searching "zzzz-nobody" while /customers was failing
+      // left all fourteen customers on screen, presented as the matches.
+      this.setState({ custLoad: 'error' });
+    }
   }
+  retryCustomers = () => this.loadCustomers();
 
   go = (e) => { this.navTo(e.currentTarget.dataset.s); };
   async navTo(screen) {
@@ -583,16 +731,21 @@ export default class Console extends React.Component {
   }
   openRow = (e) => { this.openTicket(e.currentTarget.dataset.id); };
   async openTicket(id) {
-    this.setState({ screen: 'ticket', ticketLoad: 'loading', ticket: null, remote: false, mode: 'reply', draft: '', menu: null, q: '', results: null });
+    this.setState({ screen: 'ticket', ticketLoad: 'loading', ticketId: id, ticket: null, remote: false, mode: 'reply', draft: '', menu: null, q: '', results: null, searching: false });
     try {
       // the adapter marks the ticket seen; the "someone replied" banner is WS-driven
       const t = await this.api.getTicket(id);
       this.setState({ ticket: t, ticketLoad: 'ok' });
     } catch (e) {
       if (e?.status === 404 || e?.status === 400) { this.setState({ screen: 'notfound', ticketLoad: 'idle' }); return; }
+      // `ticketLoad: 'error'` was set here and read by nobody: `renderVals`
+      // exposed only `ticketLoading` and `ticketReady`, and `ticketReady` was
+      // never referenced in Ticket.jsx. The screen sat on a blank, partly-false
+      // conversation forever, with a live composer.
       this.setState({ ticketLoad: 'error' });
     }
   }
+  retryTicket = () => { if (this.state.ticketId) this.openTicket(this.state.ticketId); };
   /**
    * Re-fetch the open ticket in place, leaving the composer alone.
    *
@@ -637,9 +790,21 @@ export default class Console extends React.Component {
   backToQueue = () => { this.navTo('queue'); };
   openCustomer = async (e) => {
     const id = e.currentTarget.dataset.id;
-    this.setState({ screen: 'customer', customer: null, q: '', results: null, menu: null });
-    try { this.setState({ customer: await this.api.getCustomer(id) }); } catch (err) { }
+    this.showCustomer(id);
   };
+  async showCustomer(id) {
+    this.setState({ screen: 'customer', customerId: id, customer: null, customerLoad: 'loading', q: '', results: null, searching: false, menu: null });
+    try {
+      const c = await this.api.getCustomer(id);
+      this.setState({ customer: c, customerLoad: 'ok' });
+    } catch (err) {
+      // Was `catch (err) { }`, which left the profile showing a `?` avatar, a
+      // bare `·` where the name goes, and a confident "Open right now: 0" for
+      // somebody with two open conversations.
+      this.setState({ customerLoad: 'error' });
+    }
+  }
+  retryCustomer = () => { if (this.state.customerId) this.showCustomer(this.state.customerId); };
 
   onView = (e) => { this.setState({ view: e.currentTarget.dataset.v, page: 0, sel: [] }, () => this.loadQueue({ noFail: true })); };
   setSort = (v) => { this.setState({ sort: v }, () => this.loadQueue({ noFail: true })); };
@@ -721,9 +886,34 @@ export default class Console extends React.Component {
     if (!ok) return;
     return this.bulk({ status: 'closed' }, n + ' closed successfully');
   };
+  /**
+   * Carry the display names along with an optimistic id change.
+   *
+   * Rows name their own assignee and team (`assigneeName` / `teamName`, from the
+   * API's include) instead of looking them up in a cache that may not have
+   * arrived. That makes an optimistic patch that sets `assigneeId` alone a
+   * regression waiting to happen: the row would keep the *previous* assignee's
+   * name beside the new id until the next refetch. Resolve the name here, from
+   * the same caches the menu was populated from, and let `null` mean "the server
+   * will tell us" — which renders as "not known yet", never as "Unassigned".
+   */
+  #optimistic(patch) {
+    const out = { ...patch, updatedAt: Date.now() };
+    if ('assigneeId' in patch) {
+      out.assigneeName = patch.assigneeId ? (this.agent(patch.assigneeId)?.name ?? null) : null;
+    }
+    if ('teamId' in patch) {
+      out.teamName = patch.teamId
+        ? ((this.api ? this.api.teams : []).find((t) => t.id === patch.teamId)?.name ?? null)
+        : null;
+    }
+    return out;
+  }
+
   async bulk(patch, label) {
     const ids = this.state.sel, prev = this.state.rows;
-    this.setState(s => ({ rows: s.rows.map(r => ids.includes(r.id) ? { ...r, ...patch, updatedAt: Date.now() } : r), sel: [] }));
+    const applied = this.#optimistic(patch);
+    this.setState(s => ({ rows: s.rows.map(r => ids.includes(r.id) ? { ...r, ...applied } : r), sel: [] }));
     try {
       if (this.state.failMode) this.api.simulateNextFailure();
       await Promise.all(ids.map(id => this.api.patchTicket(id, patch)));
@@ -733,7 +923,7 @@ export default class Console extends React.Component {
 
   async patch(id, patch, label) {
     const prevRows = this.state.rows, prevT = this.state.ticket;
-    const applied = { ...patch, updatedAt: Date.now() };
+    const applied = this.#optimistic(patch);
     this.setState(s => ({
       rows: s.rows.map(r => r.id === id ? { ...r, ...applied } : r),
       ticket: s.ticket && s.ticket.id === id
@@ -1078,31 +1268,47 @@ export default class Console extends React.Component {
     tags: { load: () => api.tags.list() },
     // Both are admin-only reads; asking as anyone else is a guaranteed 403.
     hooks: { load: () => api.webhooks.list(), adminOnly: true },
+    // Keys used to ride along in bootstrap for every admin — two more requests
+    // before the first ticket row, for a panel almost nobody opens. It loads
+    // itself now, like the other five.
+    keys: { load: () => this.api.refreshApiKeys(), adminOnly: true },
     email: {
       load: () => api.email.inboundAddress(),
       adminOnly: true,
-      then: (row) => this.setState({ inboundDraft: row?.inboundEmail ?? '', inboundError: '' }),
+      then: (row) => this.setState((s) => ({
+        // Never overwrite what the admin has already typed. The GET was landing
+        // on top of a half-typed address with no warning — the direct cost of
+        // rendering the form before the data.
+        inboundDraft: s.inboundTouched ? s.inboundDraft : (row?.inboundEmail ?? ''),
+        inboundError: '',
+      })),
     },
   };
 
+  /** Which settings panels have finished their own read, so a panel can show a
+      skeleton instead of the shape bootstrap happened to leave behind. */
   loadSettingsTab = async (tab) => {
     const src = this.SETTINGS_SOURCES[tab];
     if (!src || !this.api) return;
     if (src.adminOnly && this.state.role !== 'admin') return;
+    this.setState((s) => ({ settingsLoad: { ...s.settingsLoad, [tab]: 'loading' } }));
     try {
       const rows = await src.load();
       this.setState((s) => ({
         settings: { ...s.settings, [tab]: rows },
         settingsErr: { ...s.settingsErr, [tab]: '' },
+        settingsLoad: { ...s.settingsLoad, [tab]: 'ok' },
       }));
       if (src.then) src.then(rows);
     } catch (e) {
       // Say the panel is stale rather than presenting bootstrap's copy as current.
       this.setState((s) => ({
         settingsErr: { ...s.settingsErr, [tab]: this.apiMessage(e, 'Failed to load data') },
+        settingsLoad: { ...s.settingsLoad, [tab]: 'error' },
       }));
     }
   };
+  retrySettingsTab = () => this.loadSettingsTab(this.state.settingsTab);
 
   /**
    * Keep the console's copy of the people list in step with a write.
@@ -1496,7 +1702,7 @@ export default class Console extends React.Component {
 
   /* ---- inbound address ---- */
 
-  onInboundDraft = (e) => this.setState({ inboundDraft: e.target.value, inboundError: '' });
+  onInboundDraft = (e) => this.setState({ inboundDraft: e.target.value, inboundError: '', inboundTouched: true });
   saveInbound = async () => {
     const v = this.state.inboundDraft.trim();
     // An empty field means "switch the channel off", which the API takes as an
@@ -1507,7 +1713,7 @@ export default class Console extends React.Component {
       const res = await api.email.setInboundAddress(next);
       this.setState((s) => ({
         settings: { ...s.settings, email: res },
-        inboundDraft: res?.inboundEmail ?? '', inboundBusy: false,
+        inboundDraft: res?.inboundEmail ?? '', inboundBusy: false, inboundTouched: false,
       }));
       this.toast(res?.inboundEmail
         ? 'This desk now receives mail at ' + res.inboundEmail
@@ -1581,10 +1787,10 @@ export default class Console extends React.Component {
       // to 92% and never completes.
       this.setState({ booted: false, signInBusy: false });
       const me = await this.api.bootstrap();
-      this.setState(
-        { booted: true, loggedIn: true, loginError: false, loginPw: '', role: me.role, avail: me.availability ?? 'available', notifs: this.api.notifications, screen: 'queue' },
-        () => { this.loadQueue({ noFail: true }); this.loadCounts(); },
-      );
+      // One request wide now, not eleven. The loader is on screen for the
+      // length of `/auth/me` and then the console draws, with the inbox, the
+      // badges and the reference caches all arriving under it.
+      this.enterConsole(me || {}, { loginError: false, loginPw: '', screen: 'queue' });
     } catch (e) {
       // The error itself, not a boolean. Login.jsx's loginErrorMessage reads
       // `status` and `code` off it to tell a 429 and a switched-off membership
@@ -1605,13 +1811,20 @@ export default class Console extends React.Component {
   onQ = async (e) => {
     const q = e.target.value;
     this.setState({ q });
-    if (!q) { this.#searchSeq++; this.setState({ results: null }); return; }
+    if (!q) { this.#searchSeq++; this.setState({ results: null, searching: false, searchError: false }); return; }
     // sequence guard: a slow response for "bil" must not overwrite "billing"
     const seq = ++this.#searchSeq;
+    // `results` is cleared as well as flagged. Keeping the last answer while a
+    // new query is in flight meant typing `zzz-nothing-matches` showed three
+    // "Refund for duplicate charge…" tickets *under the new query* for a whole
+    // round trip, and then flipped to "No results found".
+    this.setState({ searching: true, searchError: false, results: null });
     try {
       const r = await this.api.search(q);
-      if (seq === this.#searchSeq) this.setState({ results: r });
-    } catch (err) { }
+      if (seq === this.#searchSeq) this.setState({ results: r, searching: false });
+    } catch (err) {
+      if (seq === this.#searchSeq) this.setState({ searching: false, searchError: true });
+    }
   };
   #searchSeq = 0;
   onQFocus = () => { };
@@ -1665,6 +1878,27 @@ export default class Console extends React.Component {
   renderVals() {
     const S = this.state, A = this.api;
     const me = this.me();
+    /**
+     * Has the reference wave landed?
+     *
+     * Everything below that used to read a cache and print a default when it
+     * missed now asks this first. `agents` being empty is a fact about the
+     * network, not a fact about the desk, and the two must not render the same.
+     */
+    const refsReady = S.refs === 'ok';
+    /**
+     * Is the reference wave still coming?
+     *
+     * Not the same question as `!refsReady`, and the difference is the whole
+     * point: a wave that has *failed* is not still coming. Every menu below
+     * that shows loading rows asks this one, because a shimmer keyed on
+     * `!refsReady` pulses for the rest of the session once the wave 500s —
+     * which is the same lie as a count that reads 0, told more slowly.
+     */
+    const refsWaiting = S.refs === 'idle' || S.refs === 'loading';
+    /** Have the view badges and facet counts ever arrived? A count nobody has
+        been told yet is `null` here and renders as a small shimmer, not as 0. */
+    const countsKnown = S.counts != null;
     const meView = {
       name: me.name, initials: this.initials(me.name), role: me.role, av: me.av, avail: S.avail,
       first: (me.name || '').split(' ')[0] || '', last: (me.name || '').split(' ').slice(1).join(' ') || '',
@@ -1678,11 +1912,20 @@ export default class Console extends React.Component {
       const st = this.STATUS[t.status] || this.STATUS.open;
       const pr = this.PRIO[t.priority] || this.PRIO.normal;
       const sla = this.sla(t);
+      // The row names its own assignee (the API includes them). The cache is a
+      // fallback, and when both miss on a ticket that *has* an assignee the row
+      // says "not known yet" rather than "Unassigned" — those are different
+      // facts and only one of them was ever being drawn.
+      const asgName = t.assigneeName ?? (a ? a.name : null);
+      const asgUnknown = !!t.assigneeId && !asgName;
       return {
         id: t.id, num: t.num, subject: t.subject, snippet: t.snippet, unread: !!t.unread, status: t.status, tags: t.tags,
         statusLabel: st.l, statusTone: st.t, prioLabel: pr.l, prioTone: pr.t, prioGlyph: pr.g,
         custName: t.customerName ?? c.name, custOrg: t.customerOrg ?? this.orgName(c.org),
-        assigneeName: a ? a.name : 'Unassigned', assigneeInitials: a ? this.initials(a.name) : '?', assigneeAv: a ? a.av : 'ghost',
+        assigneeName: asgName ?? (asgUnknown ? '' : 'Unassigned'),
+        assigneeInitials: asgName ? this.initials(asgName) : '?',
+        assigneeAv: asgName ? (a ? a.av : 1) : 'ghost',
+        assigneeUnknown: asgUnknown,
         tagChips: (t.tags || []).slice(0, 2).map(g => ({ label: g, tone: this.TAGTONE[g] || 'neutral' })),
         hasMoreTags: (t.tags || []).length > 2, tagMore: '+' + ((t.tags || []).length - 2),
         slaLabel: sla.label, slaTone: sla.tone, slaTitle: sla.title,
@@ -1693,7 +1936,14 @@ export default class Console extends React.Component {
     });
 
     const fc = S.facets || { status: {}, priority: {}, channel: {}, tag: {} };
-    const opt = (kind, id, label) => ({ id, label, count: (fc[kind] || {})[id] || 0, on: (S.f[kind] || []).includes(id) });
+    // `count: null` means "not known yet"; the rail renders a shimmer for it.
+    // `|| 0` used to mean the whole refine rail read 0 across every facet on a
+    // cold start, which is a claim about the desk rather than about the fetch.
+    const opt = (kind, id, label) => ({
+      id, label,
+      count: countsKnown ? ((fc[kind] || {})[id] || 0) : null,
+      on: (S.f[kind] || []).includes(id),
+    });
     const facetGroups = [
       { kind: 'status', label: 'Status', options: ['new', 'open', 'pending', 'on-hold', 'resolved', 'closed'].map(id => opt('status', id, (this.STATUS[id] || {}).l || id)) },
       { kind: 'priority', label: 'Priority', options: ['urgent', 'high', 'normal', 'low'].map(id => opt('priority', id, (this.PRIO[id] || {}).l || id)) },
@@ -1703,7 +1953,21 @@ export default class Console extends React.Component {
       // fictional customer in the original demo data and is not a channel
       // anybody has.
       { kind: 'channel', label: 'Channel', options: [['chatbot', 'Chatbot'], ['email', 'Email'], ['api', 'API'], ['widget', 'Widget']].map(p => opt('channel', p[0], p[1])) },
-      { kind: 'tag', label: 'Tag', options: (A ? A.tags : []).map(t => ({ id: t.id, label: t.label, count: (fc.tag || {})[t.id] || 0, on: S.f.tag === t.id })) },
+      {
+        kind: 'tag', label: 'Tag',
+        // The tag vocabulary is reference data, so it arrives after the shell.
+        // An empty group with nothing to say is indistinguishable from a desk
+        // with no tags; `pending` is what tells them apart. It goes false the
+        // moment the wave fails — the strip under the header carries that news,
+        // and four bars pulsing forever would only contradict it.
+        pending: refsWaiting && (A ? A.tags : []).length === 0,
+        failed: S.refs === 'error' && (A ? A.tags : []).length === 0,
+        options: (A ? A.tags : []).map(t => ({
+          id: t.id, label: t.label,
+          count: countsKnown ? ((fc.tag || {})[t.id] || 0) : null,
+          on: S.f.tag === t.id,
+        })),
+      },
     ];
     const chips = [];
     const CHIP_LABEL = { status: (v) => (this.STATUS[v] || {}).l || v, priority: (v) => (this.PRIO[v] || {}).l || v };
@@ -1721,6 +1985,8 @@ export default class Console extends React.Component {
     const t = S.ticket;
     const tc = t ? (t.customerFull || this.cust(t.customerId)) : null;
     const ta = t ? this.agent(t.assigneeId) : null;
+    const taName = t ? (t.assigneeName ?? (ta ? ta.name : null)) : null;
+    const taUnknown = !!(t && t.assigneeId && !taName);
     const tsla = this.sla(t);
     // dueAt is genuinely null when no policy applies — which is every chatbot
     // conversation, since the human clock only starts at handoff. `null - now`
@@ -1833,7 +2099,22 @@ export default class Console extends React.Component {
       // you are signed in, so neither branch below is safe to render. `booted`
       // gates both; before this the console guessed "signed in" and drew the
       // whole shell against empty data.
-      isBooting: !S.booted, isLogin: S.booted && !S.loggedIn, inApp: S.booted && S.loggedIn,
+      isBooting: !S.booted,
+      // A boot that failed for any reason other than "your session is over" is
+      // its own screen now, with a retry — not the sign-in form.
+      isBootError: S.booted && !S.loggedIn && !!S.bootError,
+      bootErrorDetail: S.bootError ? (S.bootError.message || String(S.bootError)) : '',
+      bootOffline: !!S.bootError?.offline || S.bootError?.status === 0,
+      retryBoot: this.retryBoot,
+      isLogin: S.booted && !S.loggedIn && !S.bootError, inApp: S.booted && S.loggedIn,
+
+      // The reference wave. `refsPending` is what every menu built from a cache
+      // reads to show a loading row instead of an empty one; `refsFailed` puts a
+      // retryable strip under the header rather than leaving an inbox that
+      // silently cannot name an agent, a team or a tag.
+      refsReady, refsPending: S.refs === 'loading' || S.refs === 'idle',
+      refsFailed: S.refs === 'error', retryReference: this.retryReference,
+
       loginEmail: S.loginEmail, loginPw: S.loginPw, loginError: S.loginError,
       pwType: S.pwShown ? 'text' : 'password', pwToggleLabel: S.pwShown ? 'Hide' : 'Show',
       onLoginEmail: this.onLoginEmail, onLoginPw: this.onLoginPw, togglePw: this.togglePw, signIn: this.signIn, forgot: this.forgot,
@@ -1855,7 +2136,14 @@ export default class Console extends React.Component {
       isReports: S.screen === 'reports', isSettings: S.screen === 'settings',
 
       q: S.q, onQ: this.onQ, onQFocus: this.onQFocus, searchRef: this.searchRef,
-      searchOpen: !!(S.q && S.results),
+      // The panel opens as soon as there is a query, and says which of the three
+      // things is true — looking, found nothing, or could not ask. It used to be
+      // `!!(S.q && S.results)`, with `results` holding the *previous* query's
+      // answer, so a new query showed the old query's hits for a round trip.
+      searchOpen: !!S.q,
+      searching: !!S.searching,
+      searchFailed: !!S.searchError,
+      searchEmpty: !!(S.results && S.results.tickets.length === 0 && S.results.customers.length === 0),
       resTickets: (S.results ? S.results.tickets : []).map(r => ({ id: r.id, num: r.num, subject: r.subject, statusLabel: (this.STATUS[r.status] || {}).l, statusTone: (this.STATUS[r.status] || {}).t })),
       resCustomers: (S.results ? S.results.customers : []).map(c => ({ id: c.id, name: c.name, orgName: c.orgName, initials: this.initials(c.name), av: this.cust(c.id).av })),
       resNoTickets: !!(S.results && S.results.tickets.length === 0),
@@ -1865,23 +2153,48 @@ export default class Console extends React.Component {
       hasUnreadNotif: S.notifs.some(n => n.unread),
       notifs: S.notifs.map(n => ({ id: n.id, text: n.text, unread: n.unread, rel: this.rel(n.at), tone: n.kind === 'sla' ? 'sla-breach' : n.kind === 'mention' ? 'st-open' : 'sla-met', glyph: n.kind === 'sla' ? '!' : n.kind === 'mention' ? '@' : '↦' })),
 
-      cAll: S.counts['all-open'] || 0, cUn: S.counts.unassigned || 0, cMy: S.counts['my-open'] || 0,
-      cBr: S.counts.breaching || 0, cPd: S.counts.pending || 0, cRe: S.counts.resolved || 0,
-      cBot: S.counts['bot-handled'] || 0,
+      // `null`, not 0, until the counts call has answered. Seven confident
+      // zeros beside seven view names, printed while the inbox's own skeletons
+      // were shimmering, was the console's loudest lie.
+      countsKnown,
+      // A shimmer that never resolves is its own lie — it says "still loading"
+      // about a call that has already given up. When the counts fail outright
+      // the badges say "unknown" instead of pulsing forever.
+      countsFailed: S.countsLoad === 'error',
+      cAll: countsKnown ? (S.counts['all-open'] || 0) : null,
+      cUn: countsKnown ? (S.counts.unassigned || 0) : null,
+      cMy: countsKnown ? (S.counts['my-open'] || 0) : null,
+      cBr: countsKnown ? (S.counts.breaching || 0) : null,
+      cPd: countsKnown ? (S.counts.pending || 0) : null,
+      cRe: countsKnown ? (S.counts.resolved || 0) : null,
+      cBot: countsKnown ? (S.counts['bot-handled'] || 0) : null,
       vAll: S.view === 'all-open', vUn: S.view === 'unassigned', vMy: S.view === 'my-open', vBot: S.view === 'bot-handled',
       vBr: S.view === 'breaching', vPd: S.view === 'pending', vRe: S.view === 'resolved',
       onView: this.onView, saveView: this.saveView,
       sortLabel: (this.SORTS.find(x => x.id === S.sort) || {}).label,
       setSort: this.setSort, sortOptions: this.SORTS.map(o => ({ id: o.id, label: o.label, on: o.id === S.sort })),
       densityLabel: this.density(), cycleDensity: this.cycleDensity, toggleFilters: this.toggleFilters, filtersOn: S.filters, refresh: this.refresh,
-      refreshedRel: this.rel(S.refreshed), loading: S.load === 'loading',
+      // The toolbar spinner covers both waits: the cold one, where the list is
+      // skeletons, and the refresh, where the list is real but dimmed.
+      refreshedRel: this.rel(S.refreshed), loading: S.load === 'loading' || !!S.refreshing,
+      // Has a list ever come back? `refreshed` is seeded in the constructor, so
+      // it is a fact about when the tab opened, not about when the inbox was
+      // read, until this is true.
+      everLoaded: S.load === 'ok' || S.rows.length > 0,
 
       facetGroups, chips, removeChip: this.removeChip, toggleFacet: this.toggleFacet, clearFilters: this.clearFilters,
       assigneeOptions, setAssigneeFilter: this.setAssigneeFilter,
       teamOptions: (A ? A.teams : []).map(x => ({ id: x.id, label: x.name, on: S.f.team === x.id })), setTeamFilter: this.setTeamFilter,
       rangeOptions: [['any', 'Any time'], ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']].map(p => ({ id: p[0], label: p[1], on: S.f.range === p[0] })), setRange: this.setRange,
 
-      rows, loadingRows: S.load === 'loading' && rows.length === 0, hasError: S.load === 'error',
+      rows,
+      // cold → skeletons; refresh → the real rows, dimmed; error with rows still
+      // on screen → an inline strip above them rather than a full-size empty
+      // state *inserted between the header and 25 live rows*.
+      loadingRows: S.load === 'loading' && rows.length === 0,
+      refreshingRows: !!S.refreshing,
+      hasError: S.load === 'error' && rows.length === 0,
+      staleError: S.load === 'error' && rows.length > 0,
       isEmpty: S.load === 'ok' && rows.length === 0,
       skeletons: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ id: 'sk' + n })),
       onRowEnter: this.onRowEnter, onRowLeave: this.onRowLeave, toggleSel: this.toggleSel, toggleAll: this.toggleAll, stop: this.stop,
@@ -1889,15 +2202,32 @@ export default class Console extends React.Component {
       hasSelection: sel.length > 0, selCount: sel.length, clearSel: this.clearSel,
       quickAssign: this.quickAssign, quickStatus: this.quickStatus, quickOpen: this.quickOpen,
       bulkAssign: this.bulkAssign, bulkPending: this.bulkPending, bulkTag: this.bulkTag, bulkClose: this.bulkClose,
-      pageLabel: S.total === 0 ? 'Nothing to show' : (S.page * S.pageSize + 1) + '–' + Math.min(S.total, (S.page + 1) * S.pageSize) + ' of ' + S.total,
+      // "Nothing to show" is a statement about the desk and was being printed
+      // before anything had been asked. It waits for an answer now.
+      pageLabel: S.load === 'loading' && rows.length === 0 ? ''
+        : S.load === 'error' && rows.length === 0 ? ''
+        : S.total === 0 ? 'Nothing to show'
+        : (S.page * S.pageSize + 1) + '–' + Math.min(S.total, (S.page + 1) * S.pageSize) + ' of ' + S.total,
+      pageNav: !(S.load === 'loading' && rows.length === 0),
       prevPage: this.prevPage, nextPage: this.nextPage,
 
-      ticketLoading: S.ticketLoad === 'loading', ticketReady: S.ticketLoad === 'ok' && !!t,
+      // `ticketReady` gates the whole conversation screen now. It existed
+      // before and Ticket.jsx never referenced it, which is how the screen came
+      // to draw a complete, blank, partly-false ticket — "Unassigned · On it",
+      // "Target —", an empty status pill and a live composer — over nothing.
+      ticketReady: S.ticketLoad === 'ok' && !!t,
+      ticketFailed: S.ticketLoad === 'error', retryTicket: this.retryTicket,
       tNum: t ? t.num : '', tSubject: t ? t.subject : '', tStatus: t ? (this.STATUS[t.status] || {}).l : '',
       tStatusTone: t ? (this.STATUS[t.status] || {}).t : 'neutral', tPrio: t ? ((this.PRIO[t.priority] || {}).l || t.priority) : '',
       tPrioTone: t ? (this.PRIO[t.priority] || {}).t : 'neutral', tPrioGlyph: t ? (this.PRIO[t.priority] || {}).g : '',
-      tTeam: t ? (((A ? A.teams : []).find(x => x.id === t.teamId) || {}).name || '') : '',
-      tAssigneeName: ta ? ta.name : 'Unassigned', tAssigneeInitials: ta ? this.initials(ta.name) : '?', tAssigneeAv: ta ? ta.av : 'ghost',
+      tTeam: t ? (t.teamName ?? ((A ? A.teams : []).find(x => x.id === t.teamId) || {}).name ?? '') : '',
+      tAssigneeName: taName ?? (taUnknown ? '' : 'Unassigned'),
+      tAssigneeInitials: taName ? this.initials(taName) : '?',
+      tAssigneeAv: taName ? (ta ? ta.av : 1) : 'ghost',
+      tAssigneeUnknown: taUnknown,
+      // Whether anybody is actually on it. The green dot and the words "On it"
+      // were unconditional, so they sat next to the word "Unassigned".
+      tAssigned: !!(t && t.assigneeId),
       thread, tSlaLabel: tsla.label, tSlaTone: tsla.tone, tSlaTitle: tsla.title, tPaused: !!(t && t.sla.paused),
       frLabel: t ? (t.sla.firstResponse.metAt ? 'met ' + this.rel(t.sla.firstResponse.metAt) + ' ago' : frLeft == null ? 'no target' : (frLeft < 0 ? 'overdue by ' + this.dur(-frLeft) : 'due in ' + this.dur(frLeft))) : '',
       frTone: t ? (t.sla.firstResponse.metAt ? 'sla-met' : frLeft == null ? 'neutral' : t.sla.paused ? 'sla-paused' : frLeft < 0 ? 'sla-breach' : frLeft < 1800000 ? 'sla-due' : 'sla-ok') : 'neutral',
@@ -1926,6 +2256,10 @@ export default class Console extends React.Component {
       statusOptions: Object.keys(this.STATUS).map(id => ({ id, label: this.STATUS[id].l, tone: this.STATUS[id].t, on: !!(t && t.status === id) })),
       prioOptions: Object.keys(this.PRIO).map(id => ({ id, label: this.PRIO[id].l, tone: this.PRIO[id].t, glyph: this.PRIO[id].g, on: !!(t && t.priority === id) })),
       agentList, menuQ: S.menuQ, onMenuQ: this.onMenuQ,
+      agentListPending: refsWaiting && (A ? A.agents : []).length === 0,
+      agentListFailed: S.refs === 'error' && (A ? A.agents : []).length === 0,
+      cannedPending: refsWaiting && (A ? A.cannedResponses : []).length === 0,
+      cannedFailed: S.refs === 'error' && (A ? A.cannedResponses : []).length === 0,
       teamList: (A ? A.teams : []).map(x => ({ id: x.id, label: x.name, on: !!(t && t.teamId === x.id) })),
       setStatus: this.setStatus, setPriority: this.setPriority, setAssignee: this.setAssignee, assignMe: this.assignMe, unassign: this.unassign,
       setTeam: this.setTeam, addTag: this.addTag, removeTag: this.removeTag,
@@ -1942,11 +2276,34 @@ export default class Console extends React.Component {
       onSend: this.onSend, onSendPending: this.onSendPending, onSendResolved: this.onSendResolved,
 
       custRows, custQ: S.custQ, onCustQ: this.onCustQ,
+      // The customers table had no loading state at all — six column headings
+      // over white space for a whole round trip, then rows.
+      custLoading: S.custLoad === 'loading' && custRows.length === 0,
+      custRefreshing: S.custLoad === 'refreshing',
+      custFailed: S.custLoad === 'error',
+      custEmpty: S.custLoad === 'ok' && custRows.length === 0,
+      retryCustomers: this.retryCustomers,
+
       cName: cust ? cust.name : '', cInitials: cust ? this.initials(cust.name) : '', cAv: cust ? cust.av : 1,
       cEmail: cust ? cust.email : '', cOrg: cust ? cust.orgName : '', cPhone: cust ? cust.phone : '', cTz: cust ? cust.tz : '',
-      cTotal: cust ? cust.stats.total : 0, cOpen: cust ? cust.stats.open : 0, cAvg: cust ? cust.stats.avgResolution : '',
-      cLastSeen: cust && cust.stats.lastSeen ? this.rel(cust.stats.lastSeen) : '—', custTickets, customerReady: !!cust,
+      // These four were `cust ? … : 0`. "Open right now: 0" for somebody with
+      // two open conversations is the same mistake as the queue badges, and it
+      // was on screen for the whole fetch.
+      cTotal: cust ? cust.stats.total : null, cOpen: cust ? cust.stats.open : null,
+      cAvg: cust ? cust.stats.avgResolution : null,
+      cLastSeen: cust ? (cust.stats.lastSeen ? this.rel(cust.stats.lastSeen) : '—') : null,
+      custTickets, customerReady: !!cust,
+      customerLoading: S.customerLoad === 'loading',
+      customerFailed: S.customerLoad === 'error',
+      retryCustomer: this.retryCustomer,
 
+      // Reports had no loading state of any kind: nine seconds of headings over
+      // nothing, then five KPI cards appearing at once and shoving the page down.
+      reportsLoading: S.reportsLoad === 'loading' && rep.kpis.length === 0,
+      reportsRefreshing: S.reportsLoad === 'loading' && rep.kpis.length > 0,
+      reportsFailed: S.reportsLoad === 'error' && rep.kpis.length === 0,
+      reportsStaleError: S.reportsLoad === 'error' && rep.kpis.length > 0,
+      retryReports: this.retryReports,
       kpis: rep.kpis,
       volume: rep.volume.map(v => {
         const hC = Math.round(v.created / maxVol * 96), hR = Math.round(v.resolved / maxVol * 96);
@@ -1973,6 +2330,8 @@ export default class Console extends React.Component {
       pmSignInError: S.pmSignInError || '', signInWithPm: this.signInWithPm,
       connectPm: this.connectPm, disconnectPm: this.disconnectPm,
       drillOpen: !!S.drill, noDrill: !S.drill, setDrill: this.setDrill, clearDrill: this.clearDrill,
+      drillTicketsLoading: S.drillLoad === 'loading',
+      drillTicketsFailed: S.drillLoad === 'error',
       drillTitle: dd ? dd.title : '', drillValue: dd ? dd.value : '', drillNote: dd ? dd.note : '', drillAxis: dd ? dd.axis : '',
       drillPoints: dd ? dd.series.map((v, i) => (i / (dd.series.length - 1) * 100).toFixed(1) + ',' + (36 - (v - Math.min(...dd.series)) / ((Math.max(...dd.series) - Math.min(...dd.series)) || 1) * 32).toFixed(1)).join(' ') : '',
       drillFirst: dd ? dd.series[0] : '', drillLast: dd ? dd.series[dd.series.length - 1] : '',
@@ -1986,6 +2345,14 @@ export default class Console extends React.Component {
       tabTeam: S.settingsTab === 'team', tabSla: S.settingsTab === 'sla', tabHours: S.settingsTab === 'hours',
       tabCanned: S.settingsTab === 'canned', tabTags: S.settingsTab === 'tags', tabHooks: S.settingsTab === 'hooks',
       tabKeys: S.settingsTab === 'keys', tabEmail: S.settingsTab === 'email',
+      // Which settings panel is still reading its own rows, so the panel can
+      // keep its shape instead of drawing a table of nothing under its headings.
+      settingsLoading: (S.settingsLoad || {})[S.settingsTab] === 'loading',
+      settingsFailed: (S.settingsLoad || {})[S.settingsTab] === 'error',
+      retrySettingsTab: this.retrySettingsTab,
+      // The team table is built from the reference wave, not from a panel read.
+      teamLoading: refsWaiting && (A ? A.agents : []).length === 0,
+      teamFailed: S.refs === 'error' && (A ? A.agents : []).length === 0,
       teamRows: (A ? A.agents : []).map(a => ({ id: a.id, name: a.name, email: a.email, role: a.role, av: a.av, initials: this.initials(a.name), teamName: ((A ? A.teams : []).find(t2 => t2.id === a.team) || {}).name, avail: a.avail, lastRel: a.lastActive < 60 ? a.lastActive + 'm ago' : Math.round(a.lastActive / 60) + 'h ago', availTone: a.avail === 'available' ? 'sla-met' : 'sla-paused',
         // Both writes are @Roles('admin'), so offering them to a lead would be
         // offering them a 403. Never on your own row: the backend has no
@@ -1993,7 +2360,7 @@ export default class Console extends React.Component {
         canEdit: S.role === 'admin', canDeactivate: S.role === 'admin' && a.id !== me.id,
       })),
       ...settingsRows,
-      keyRows: A ? A.apiKeys : [],
+      keyRows: Array.isArray(stg.keys) ? stg.keys : (A ? A.apiKeys : []),
       secret: S.secret, hasSecret: !!S.secret, copySecret: this.copySecret,
       keyName: S.keyName, onKeyName: this.onKeyName,
       keyKind: S.keyKind, setKeyKind: this.setKeyKind,
@@ -2037,6 +2404,10 @@ export default class Console extends React.Component {
 
       inboundDraft: S.inboundDraft, onInboundDraft: this.onInboundDraft, saveInbound: this.saveInbound,
       inboundBusy: !!S.inboundBusy, inboundError: S.inboundError || '',
+      // "Inbound mail is off" was rendered for the whole of the GET, telling an
+      // admin the channel was switched off when it was not. It waits for the
+      // answer now, and the field waits with it.
+      inboundKnown: stg.email !== undefined,
       inboundOn: !!(stg.email && stg.email.inboundEmail),
 
       // invitations. `canInvite` is admin and only admin — the endpoints are,
@@ -2063,6 +2434,10 @@ export default class Console extends React.Component {
       onNewSubject: this.onNewSubject, onNewBody: this.onNewBody, onNewCustomer: this.onNewCustomer, onNewPriority: this.onNewPriority,
       newPriorityOptions: Object.keys(this.PRIO).map(id => ({ id, label: this.PRIO[id].l, on: S.newPriority === id })),
       customerOptions: (A ? A.customers : []).map(c => ({ id: c.id, label: c.name + ' · ' + this.orgName(c.org) })),
+      // The customer list is reference data; an empty <select> while it is in
+      // flight looks like a desk with no customers.
+      customerOptionsPending: refsWaiting && (A ? A.customers : []).length === 0,
+      customerOptionsFailed: S.refs === 'error' && (A ? A.customers : []).length === 0,
     };
   }
 
@@ -2079,10 +2454,45 @@ export default class Console extends React.Component {
             <LogoLoader />
           </div>
         )}
+        {/* A boot that failed for a reason other than "you are signed out" used
+            to render the sign-in form — with a valid session still in storage,
+            no message, and a footer reading "all systems operational". */}
+        {V.isBootError && (
+          <ErrorScreen
+            illustration="/brand/empty-states/plumo-500.svg"
+            badge={V.bootOffline ? 'offline' : '500'}
+            title={V.bootOffline ? "Can't reach the desk" : "Couldn't open your desk"}
+            description={
+              V.bootOffline
+                ? 'Your connection dropped on the way in. Nothing is lost — try again once you are back.'
+                : 'You are still signed in. Something on our side did not answer.'
+            }
+            primaryAction={{ label: 'Try again', onClick: V.retryBoot }}
+            secondaryAction={{ label: 'Sign out', onClick: V.signOut }}
+            details={V.bootErrorDetail}
+          />
+        )}
         {V.isLogin && <Login V={V} />}
         {V.inApp && (
           <div className="h-screen flex flex-col overflow-hidden bg-bg text-fg">
             <Header V={V} />
+            {/* The reference wave failed. The inbox still works — it names its
+                own customers and assignees — but the menus built from these
+                caches cannot fill, so say which ones and offer the retry, rather
+                than leaving an agent wondering where everybody went. */}
+            {V.refsFailed && (
+              <div className="flex-none flex flex-wrap items-center gap-2.5 px-4 py-2 border-b border-[color:var(--border)] bg-[color:var(--danger-soft)] text-[color:var(--danger)] text-[12.5px]">
+                <span className="flex-1 min-w-[200px]">
+                  Some of your desk didn&apos;t load — people, teams, tags and canned responses may be missing.
+                </span>
+                <button
+                  onClick={V.retryReference}
+                  className="h-btn-sm px-3 rounded-full border border-current bg-transparent text-current text-[12.5px] cursor-pointer focus-ring"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
             <div className="flex-1 flex min-h-0">
               {/* Desktop rail. PM keeps it out of the flow entirely below `md`
                   (`DashboardLayout.tsx:76-80`) rather than shrinking it, and

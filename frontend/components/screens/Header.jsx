@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Button, Input, TonePill, UserAvatar } from '../common';
+import { Button, Input, Skeleton, TonePill, UserAvatar } from '../common';
 
 const RESULT_ROW =
   'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-token-sm border-none bg-transparent ' +
@@ -72,24 +72,55 @@ const SearchGlyph = () => (
     between the desktop slot (flush) and the mobile row (inside its padding). */
 const Results = ({ V, inset }) => (
   <div role="listbox" data-scroll className={PANEL + ' ' + inset + ' p-2 max-h-[420px] overflow-auto'}>
-    <div className={GROUP_LABEL}>conversations</div>
-    {V.resTickets.map((r) => (
-      <button key={r.id} onClick={V.openRow} data-id={r.id} className={RESULT_ROW}>
-        <span className="tabular-nums text-fg-3 text-[12.5px]">#{r.num}</span>
-        <span className="flex-1 text-[13.5px] truncate">{r.subject}</span>
-        <TonePill tone={r.statusTone}>{r.statusLabel}</TonePill>
-      </button>
-    ))}
-    {V.resNoTickets && <div className="px-2.5 py-2 text-[13px] text-fg-3">No results found</div>}
+    {/* Three states, and they are three different sentences. The panel used to
+        open only when `results` was set, and `results` held the *previous*
+        query's answer — so typing a term that matches nothing showed the last
+        term's hits, under the new term, for a whole round trip, and the very
+        first query of a session showed nothing at all while it ran. */}
+    {V.searching && (
+      <div className="flex flex-col gap-1 p-1" aria-live="polite">
+        <span className={GROUP_LABEL}>searching…</span>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-2.5 px-2.5 py-2 h-[34px]" aria-hidden="true">
+            <Skeleton className="h-2.5 w-8 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+            <Skeleton className="h-2.5 flex-1 rounded-full" style={{ maxWidth: `${58 + ((i * 13) % 26)}%`, animationDelay: `${i * 100 + 40}ms` }} />
+          </div>
+        ))}
+      </div>
+    )}
 
-    <div className={GROUP_LABEL + ' border-t border-[color:var(--border)] mt-1.5 !pt-2.5'}>customers</div>
-    {V.resCustomers.map((c) => (
-      <button key={c.id} onClick={V.openCustomer} data-id={c.id} className={RESULT_ROW}>
-        <UserAvatar firstName={c.name?.split(' ')[0]} lastName={c.name?.split(' ').slice(1).join(' ')} size="sm" />
-        <span className="flex-1 text-[13.5px]">{c.name}</span>
-        <span className="text-[12.5px] text-fg-3">{c.orgName}</span>
-      </button>
-    ))}
+    {V.searchFailed && (
+      <div className="px-2.5 py-3 text-[13px] text-[color:var(--danger)]">
+        Search didn&apos;t answer. Try again in a moment.
+      </div>
+    )}
+
+    {!V.searching && !V.searchFailed && V.searchEmpty && (
+      <div className="px-2.5 py-3 text-[13px] text-fg-3">No results found</div>
+    )}
+
+    {!V.searching && !V.searchFailed && !V.searchEmpty && (
+      <>
+        <div className={GROUP_LABEL}>conversations</div>
+        {V.resTickets.map((r) => (
+          <button key={r.id} onClick={V.openRow} data-id={r.id} className={RESULT_ROW}>
+            <span className="tabular-nums text-fg-3 text-[12.5px]">#{r.num}</span>
+            <span className="flex-1 text-[13.5px] truncate">{r.subject}</span>
+            <TonePill tone={r.statusTone}>{r.statusLabel}</TonePill>
+          </button>
+        ))}
+        {V.resNoTickets && <div className="px-2.5 py-2 text-[13px] text-fg-3">No conversations match</div>}
+
+        <div className={GROUP_LABEL + ' border-t border-[color:var(--border)] mt-1.5 !pt-2.5'}>customers</div>
+        {V.resCustomers.map((c) => (
+          <button key={c.id} onClick={V.openCustomer} data-id={c.id} className={RESULT_ROW}>
+            <UserAvatar firstName={c.name?.split(' ')[0]} lastName={c.name?.split(' ').slice(1).join(' ')} size="sm" />
+            <span className="flex-1 text-[13.5px]">{c.name}</span>
+            <span className="text-[12.5px] text-fg-3">{c.orgName}</span>
+          </button>
+        ))}
+      </>
+    )}
   </div>
 );
 

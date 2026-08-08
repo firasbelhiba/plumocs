@@ -12,6 +12,7 @@ import {
   Input,
   Modal,
   Select,
+  Skeleton,
   Switch,
   Textarea,
   TonePill,
@@ -103,15 +104,54 @@ const TABS = [
  * borrow the SLA-breach tone, which is a support-domain colour standing in for a
  * plain failure.
  */
-const LoadNote = ({ children }) => (
-  <div className="px-3 py-2.5 rounded-token-sm text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
-    {children}
+const LoadNote = ({ children, onRetry }) => (
+  <div className="flex flex-wrap items-center gap-2.5 px-3 py-2.5 rounded-token-sm text-[13px] bg-[color:var(--danger-soft)] text-[color:var(--danger)]">
+    <span className="flex-1 min-w-[200px]">{children}</span>
+    {/* Saying a panel is stale and giving no way to un-stale it left the reader
+        with a full page reload as their only move. */}
+    {onRetry && (
+      <button
+        onClick={onRetry}
+        className="h-btn-sm px-3 rounded-full border border-current bg-transparent text-current text-[12.5px] cursor-pointer focus-ring"
+      >
+        Try again
+      </button>
+    )}
   </div>
 );
 
 const Ellipsis = ({ className, children }) => (
   <span className={cn('truncate', className)}>{children}</span>
 );
+
+/**
+ * Rows for a settings table that has not answered yet.
+ *
+ * Every table on this screen is the same `THEAD` / `TROW` pair over its own
+ * COLS constant, so one skeleton serves all of them and takes the constant its
+ * table takes — which is what stops the two drifting. `cells` are the widths,
+ * in the column order the real row uses.
+ *
+ * These panels used to lean on the bootstrap caches to cover their own read, so
+ * they never looked empty. Two of them — webhooks and API keys — no longer ride
+ * along in boot at all, so without this an admin opening either would get a
+ * table of column headings over nothing for a whole round trip.
+ */
+const TableSkeleton = ({ cols, cells, rows = 4 }) =>
+  Array.from({ length: rows }).map((_, i) => (
+    <div key={i} className={TROW} style={{ gridTemplateColumns: cols }} aria-hidden="true">
+      {cells.map((w, c) => (
+        <Skeleton
+          key={c}
+          className="h-3 rounded-full"
+          style={{
+            width: typeof w === 'number' ? `${w - ((i * 6) % 16)}%` : w,
+            animationDelay: `${i * 100 + c * 30}ms`,
+          }}
+        />
+      ))}
+    </div>
+  ));
 
 export default function Settings({ V }) {
   return (
@@ -249,6 +289,19 @@ export default function Settings({ V }) {
                 <span>last active</span>
                 <span className="text-right">actions</span>
               </div>
+              {/* The people table is built from the reference wave, not from a
+                  panel read, so a cold boot straight into Settings finds it
+                  empty for as long as that wave takes. */}
+              {V.teamLoading && V.teamRows.length === 0 && (
+                <TableSkeleton cols={TEAM_COLS} cells={[64, 78, '50%', '54%', '58%', '40%']} rows={5} />
+              )}
+              {/* And when that wave failed, five rows of bars pulsing under the
+                  headings would be a promise nobody is going to keep. */}
+              {V.teamFailed && V.teamRows.length === 0 && (
+                <div className="px-3 py-8 text-center text-[13px] text-fg-3">
+                  Couldn&apos;t load your people. Use <b className="font-medium">Try again</b> at the top of the console.
+                </div>
+              )}
               {V.teamRows.map((u) => (
                 <div key={u.id} className={TROW} style={{ gridTemplateColumns: TEAM_COLS }}>
                   <span className="flex items-center gap-2.5 min-w-0">
@@ -447,7 +500,7 @@ export default function Settings({ V }) {
                 </button>
               )}
             </div>
-            {V.slaErr && <LoadNote>{V.slaErr}</LoadNote>}
+            {V.slaErr && <LoadNote onRetry={V.retrySettingsTab}>{V.slaErr}</LoadNote>}
             <div className={TABLE}>
               <div className={THEAD} style={{ gridTemplateColumns: SLA_COLS }}>
                 <span>name</span>
@@ -457,6 +510,9 @@ export default function Settings({ V }) {
                 <span>hours</span>
                 <span className="text-right" />
               </div>
+              {V.settingsLoading && V.slaRows.length === 0 && (
+                <TableSkeleton cols={SLA_COLS} cells={[62, 58, '46%', '46%', '52%', '40%']} rows={3} />
+              )}
               {V.slaRows.map((p) => (
                 <div key={p.id} className={TROW} style={{ gridTemplateColumns: SLA_COLS }}>
                   <span className="font-medium">{p.name}</span>
@@ -486,7 +542,7 @@ export default function Settings({ V }) {
               <h1 className={PAGE_TITLE}>Business hours</h1>
               <p className={PAGE_SUB}>SLA clocks rest when your team does.</p>
             </div>
-            {V.hoursErr && <LoadNote>{V.hoursErr}</LoadNote>}
+            {V.hoursErr && <LoadNote onRetry={V.retrySettingsTab}>{V.hoursErr}</LoadNote>}
 
             {/* No calendar at all is a real state, not a loading one — the
                 clocks then run around the clock. Say that rather than show an
@@ -586,8 +642,21 @@ export default function Settings({ V }) {
                 </button>
               )}
             </div>
-            {V.cannedErr && <LoadNote>{V.cannedErr}</LoadNote>}
+            {V.cannedErr && <LoadNote onRetry={V.retrySettingsTab}>{V.cannedErr}</LoadNote>}
             <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3">
+              {/* This one is a card grid, not a table, so it gets the card's
+                  own shape: title row, two body lines, tag chip. */}
+              {V.settingsLoading && V.cannedRows.length === 0 && [0, 1, 2].map((i) => (
+                <div key={i} className={PANEL + ' p-4 flex flex-col gap-2'} aria-hidden="true">
+                  <span className="flex items-center gap-2">
+                    <Skeleton className="h-3.5 flex-1 rounded-full" style={{ maxWidth: `${56 + ((i * 11) % 24)}%`, animationDelay: `${i * 100}ms` }} />
+                    <Skeleton className="h-2.5 w-16 rounded-full" style={{ animationDelay: `${i * 100 + 30}ms` }} />
+                  </span>
+                  <Skeleton className="h-3 w-full rounded-full" style={{ animationDelay: `${i * 100 + 60}ms` }} />
+                  <Skeleton className="h-3 w-4/5 rounded-full" style={{ animationDelay: `${i * 100 + 90}ms` }} />
+                  <Skeleton className="h-4 w-20 rounded-token-sm" style={{ animationDelay: `${i * 100 + 120}ms` }} />
+                </div>
+              ))}
               {V.cannedRows.map((r) => (
                 <div key={r.id} className={PANEL + ' p-4 flex flex-col gap-2'}>
                   <span className="flex items-center gap-2">
@@ -619,8 +688,11 @@ export default function Settings({ V }) {
                 it, so it never changes.
               </p>
             </div>
-            {V.tagsErr && <LoadNote>{V.tagsErr}</LoadNote>}
+            {V.tagsErr && <LoadNote onRetry={V.retrySettingsTab}>{V.tagsErr}</LoadNote>}
             <div className={TABLE}>
+              {V.settingsLoading && V.tagRows.length === 0 && (
+                <TableSkeleton cols={TAG_COLS} cells={[54, '58%', '40%']} rows={4} />
+              )}
               {V.tagRows.map((t) => (
                 <div key={t.id} className={TROW} style={{ gridTemplateColumns: TAG_COLS }}>
                   <TonePill tone={t.tone} size="md" dot>
@@ -660,7 +732,7 @@ export default function Settings({ V }) {
                 </button>
               )}
             </div>
-            {V.hooksErr && <LoadNote>{V.hooksErr}</LoadNote>}
+            {V.hooksErr && <LoadNote onRetry={V.retrySettingsTab}>{V.hooksErr}</LoadNote>}
             <div className={TABLE}>
               <div className={THEAD} style={{ gridTemplateColumns: HOOK_COLS }}>
                 <span>endpoint</span>
@@ -668,6 +740,9 @@ export default function Settings({ V }) {
                 <span>status</span>
                 <span className="text-right">last delivery</span>
               </div>
+              {V.settingsLoading && V.hookRows.length === 0 && (
+                <TableSkeleton cols={HOOK_COLS} cells={[78, 62, '46%', '56%']} rows={3} />
+              )}
               {V.hookRows.map((w) => (
                 <div key={w.id} className={TROW} style={{ gridTemplateColumns: HOOK_COLS }}>
                   <Ellipsis className="font-mono text-[12px]">{w.url}</Ellipsis>
@@ -763,6 +838,9 @@ export default function Settings({ V }) {
                 <span className="text-right">last used</span>
                 <span className="text-right" />
               </div>
+              {V.settingsLoading && V.keyRows.length === 0 && (
+                <TableSkeleton cols={KEY_COLS} cells={[70, 80, '64%', '58%', '40%']} rows={3} />
+              )}
               {V.keyRows.map((k) => (
                 <div key={k.id} className={TROW} style={{ gridTemplateColumns: KEY_COLS }}>
                   <span className="flex items-center gap-1.5 min-w-0">
@@ -811,19 +889,23 @@ export default function Settings({ V }) {
                   </p>
                 </div>
 
-                {V.emailErr && <LoadNote>{V.emailErr}</LoadNote>}
+                {V.emailErr && <LoadNote onRetry={V.retrySettingsTab}>{V.emailErr}</LoadNote>}
 
                 {/* The rejection sits under the address it is about, rather
                     than in a banner two rows above it. */}
                 <div className="flex gap-2.5 flex-wrap items-start">
                   <div className="flex-1 min-w-[220px]">
+                    {/* Disabled until the current address is known. Typing into
+                        it while the GET was in flight got the typing silently
+                        replaced when the response landed. */}
                     <Input
                       label="Receiving address"
                       type="email"
                       value={V.inboundDraft}
                       onChange={V.onInboundDraft}
                       error={V.inboundError}
-                      placeholder="help@yourcompany.com"
+                      disabled={!V.inboundKnown}
+                      placeholder={V.inboundKnown ? 'help@yourcompany.com' : 'Reading the current address…'}
                       autoComplete="off"
                     />
                   </div>
@@ -831,16 +913,23 @@ export default function Settings({ V }) {
                       button's top edge meets the field's, not the label's. */}
                   <button
                     onClick={V.saveInbound}
-                    disabled={V.inboundBusy}
+                    disabled={V.inboundBusy || !V.inboundKnown}
                     className={cn(primaryBtn(), 'mt-5')}
                   >
                     {V.inboundBusy ? 'Saving…' : 'Save'}
                   </button>
                 </div>
 
-                <TonePill tone={V.inboundOn ? 'sla-met' : 'sla-paused'} size="md">
-                  {V.inboundOn ? 'Receiving mail' : 'Inbound mail is off'}
-                </TonePill>
+                {/* "Inbound mail is off" was printed for the whole of the GET,
+                    telling an admin the channel was switched off when it was
+                    not. There is a third state and this is it. */}
+                {V.inboundKnown ? (
+                  <TonePill tone={V.inboundOn ? 'sla-met' : 'sla-paused'} size="md">
+                    {V.inboundOn ? 'Receiving mail' : 'Inbound mail is off'}
+                  </TonePill>
+                ) : (
+                  <Skeleton className="h-[22px] w-32 rounded-full" />
+                )}
               </div>
             )}
 

@@ -50,12 +50,22 @@ export default function Overlays({ V }) {
             className="h-btn-lg text-[14px]"
           />
 
+          {/* The customer list arrives with the reference wave, so for the first
+              moments of a session it is empty — and an empty <select> reads as
+              "this desk has no customers" rather than "not yet". */}
           <Select
             label="Customer"
             value={V.newCustomer}
             onChange={V.onNewCustomer}
             error={V.newCustomerError}
-            options={V.customerOptions.map((o) => ({ value: o.id, label: o.label }))}
+            disabled={V.customerOptionsPending || V.customerOptionsFailed}
+            options={
+              V.customerOptionsPending
+                ? [{ value: '', label: 'Loading customers…' }]
+                : V.customerOptionsFailed
+                  ? [{ value: '', label: "Couldn't load customers" }]
+                  : V.customerOptions.map((o) => ({ value: o.id, label: o.label }))
+            }
           />
 
           <div className="flex flex-col gap-[7px]">

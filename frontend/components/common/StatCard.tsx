@@ -6,7 +6,9 @@ import { Sparkline } from './Sparkline';
 
 interface StatCardProps {
   label: string;
-  value: number | string;
+  /** A node, not just a scalar, so a caller whose number has not arrived can
+      pass a `Skeleton` rather than a placeholder zero. */
+  value: ReactNode;
   icon?: ReactNode;
   colorClass?: string;
   /** @deprecated — colored icon tile is no longer rendered (kept for API compat) */

@@ -238,7 +238,24 @@ class Adapter {
     }
   }
 
-  // ---- bootstrap: everything renderVals reads synchronously ----------------------
+  // ---- boot, in two waves ---------------------------------------------------------
+  //
+  // Wave 1 (`bootstrap`) is one request and it is the only thing the shell waits
+  // on: who you are. Wave 2 (`loadReference`) is the desk's reference data —
+  // people, teams, tags, canned responses, customers, notifications — which the
+  // console reads out of these caches but does not need in order to draw
+  // anything. It runs *after* the shell paints, alongside the queue fetch, and
+  // its readiness is a flag the console renders honestly rather than a gate.
+  //
+  // This is PM's shape: `GET /auth/bootstrap` alone blocks, and the eight list
+  // calls behind it are fired once the shell is up, each owned by whoever needs
+  // it (`dbwork/frontend/src/lib/api/auth.ts:15-20`). CS used to await all
+  // eleven — auth.me alone, then eight, then two more for admins — behind one
+  // full-screen loader, which is four sequential round trips where PM has one.
+  //
+  // The two admin lists that used to ride along here (`webhooks`, `apiKeys`)
+  // are gone from boot entirely: they feed two Settings panels, and those
+  // panels already load themselves when opened (`SETTINGS_SOURCES`).
 
   async bootstrap() {
     const me = await api.auth.me();
@@ -256,6 +273,17 @@ class Adapter {
       setSession({ ...s, workspace: me.workspace });
     }
 
+    this.#connectSocket();
+    return me;
+  }
+
+  /**
+   * Wave 2. Everything the caches hold, in one parallel burst, off the critical
+   * path. Nothing here gates the shell; the console tracks whether it has landed
+   * and says so where it matters (an assignee it cannot name yet, a tag list it
+   * cannot fill yet) rather than printing a confident default.
+   */
+  async loadReference() {
     const [usersRes, teamsRes, tagsRes, cannedRes, customersRes, notifsRes, slaRes, hoursRes] = await Promise.all([
       api.users.list(),
       api.teams.list(),
@@ -291,35 +319,7 @@ class Adapter {
       hours: p.businessHours ? 'business hours' : '24/7',
     }));
     this.businessHours = this.#mapBusinessHours(hoursRes[0]);
-
-    // admin-only panes — tolerate 403 for agents/leads
-    if (me.role === 'admin') {
-      const [hooks, keys] = await Promise.all([
-        api.webhooks.list().catch(() => []),
-        api.apiKeys.list().catch(() => []),
-      ]);
-      this.webhooks = hooks.map((w) => ({
-        id: w.id,
-        url: w.url,
-        events: (w.events ?? []).join(', '),
-        status: !w.isActive ? 'disabled' : w.lastDelivery?.status === 'failed' ? 'failing' : 'active',
-        last: w.lastDelivery ? this.#rel(ms(w.lastDelivery.createdAt)) + ' ago' : '—',
-      }));
-      this.apiKeys = keys.map((k) => ({
-        id: k.id,
-        name: k.name,
-        scope: (k.scopes ?? []).join(', '),
-        team: k.team?.name ?? 'All teams',
-        created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'Never',
-      }));
-    } else {
-      this.webhooks = [];
-      this.apiKeys = [];
-    }
-
-    this.#connectSocket();
-    return me;
+    return this;
   }
 
   #ingestCustomers(rows) {
@@ -430,7 +430,15 @@ class Adapter {
       customerName: t.customer?.name,
       customerOrg: t.customer?.company?.name,
       assigneeId: t.assigneeId,
+      // The list and the detail both `include` the assignee and the team
+      // (`backend/src/tickets/tickets.service.ts:56-73`), so the row can name
+      // them itself. It used to look both up in the `agents`/`teams` caches,
+      // which meant an assigned conversation read "Unassigned" for as long as
+      // those caches were empty — and after the boot split they are empty for
+      // the first moments of every session.
+      assigneeName: t.assignee?.name ?? null,
       teamId: t.teamId,
+      teamName: t.team?.name ?? null,
       createdAt: ms(t.createdAt),
       updatedAt,
       sla: this.#mapSla(t),
@@ -716,14 +724,26 @@ class Adapter {
         series: resolvedSeries, breakdown: agentBreakdown, view: 'resolved',
       },
     };
-    // attach three sample conversations per drill-down
-    await Promise.all(
-      Object.values(this.drilldowns).map(async (d) => {
-        const res = await api.tickets.list({ view: d.view, limit: 3 }).catch(() => ({ data: [] }));
-        d.tickets = res.data.map((t) => ({ id: t.id, num: t.number, subject: t.subject, status: uiStatus(t.status) }));
-      }),
-    );
     return this.reports;
+  }
+
+  /**
+   * The three sample conversations behind one KPI, fetched when that KPI is
+   * actually opened.
+   *
+   * These used to be five awaited ticket-list calls at the end of loadReports,
+   * so the page's numbers waited on data for a panel that is closed until a card
+   * is clicked — two of the three request waves the Reports screen spent, for
+   * something nobody had asked to see. `tickets` is left undefined until this
+   * runs, which is how the panel knows to show its own small loading state
+   * rather than an empty list.
+   */
+  async loadDrilldownTickets(key) {
+    const d = this.drilldowns[key];
+    if (!d || d.tickets) return [];
+    const res = await api.tickets.list({ view: d.view, limit: 3 });
+    d.tickets = res.data.map((t) => ({ id: t.id, num: t.number, subject: t.subject, status: uiStatus(t.status) }));
+    return d.tickets;
   }
 
   // ---- api keys (settings pane) ----------------------------------------------------------

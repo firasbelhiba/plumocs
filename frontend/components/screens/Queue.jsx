@@ -70,6 +70,23 @@ const BULK_BTN =
 
 const splitName = (n = '') => [n.split(' ')[0] ?? '', n.split(' ').slice(1).join(' ')];
 
+/**
+ * A number that is not known yet.
+ *
+ * Every count on this screen used to fall back to 0 — the seven view badges,
+ * every facet in the refine rail — so a cold inbox read "All open 0 · Unassigned
+ * 0 · Mine 0" while its own skeleton rows were shimmering underneath. Zero is a
+ * claim; this is the absence of one. Sized to the digits it replaces so nothing
+ * shifts when the real number lands.
+ */
+const Count = ({ value, failed, className }) => {
+  if (value != null) return <span className={cn('tabular-nums', className)}>{value}</span>;
+  // The count call gave up. A shimmer here would keep promising a number that
+  // is not coming.
+  if (failed) return <span className={cn('tabular-nums opacity-60', className)} title="Couldn't be counted">—</span>;
+  return <Skeleton className={cn('h-2.5 w-3.5 rounded-full inline-block align-middle', className)} />;
+};
+
 export default function Queue({ V }) {
   const views = [
     ['all-open', 'All open', V.vAll, V.cAll],
@@ -94,7 +111,7 @@ export default function Queue({ V }) {
           {views.map(([v, label, on, count]) => (
             <button key={v} onClick={V.onView} data-v={v} className={onPill(on, 'h-btn-sm px-3 text-[13px]')}>
               {label}
-              <span className="tabular-nums opacity-75">{count}</span>
+              <Count value={count} failed={V.countsFailed} className="opacity-75" />
             </button>
           ))}
           <Button
@@ -140,7 +157,11 @@ export default function Queue({ V }) {
         <span className="flex items-center gap-1.5 text-[12px] text-fg-3 tabular-nums">
           {/* The shared spinner, not an 11px CSS ring at 1.1s: 16px SVG at 1s. */}
           {V.loading && <LoadingSpinner size="sm" />}
-          Updated {V.refreshedRel}
+          {/* "Updated now" was printed from the constructor's timestamp, so a
+              cold inbox said its list had been refreshed a minute ago while its
+              own skeleton rows were still shimmering. It is a claim about a
+              fetch, and it waits for one. */}
+          {V.everLoaded ? `Updated ${V.refreshedRel}` : 'Loading…'}
         </span>
 
         <Button
@@ -211,11 +232,30 @@ export default function Queue({ V }) {
           {V.facetGroups.map((g) => (
             <div key={g.kind} className="flex flex-col gap-[7px]">
               <span className={RAIL_HEAD}>{g.label}</span>
+              {/* The tag vocabulary arrives with the reference wave, after the
+                  shell. Four rows the size of the real ones, so the rail does
+                  not jump when they land — and so an empty group is never
+                  mistaken for a desk that has no tags. */}
+              {g.pending && [0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-2.5 py-0.5 h-[21px]">
+                  <Skeleton className="h-3.5 w-3.5 rounded-token-sm flex-none" />
+                  <Skeleton
+                    className="h-2.5 flex-1 rounded-full"
+                    style={{ maxWidth: `${52 + ((i * 13) % 34)}%`, animationDelay: `${i * 100}ms` }}
+                  />
+                </div>
+              ))}
+              {/* The wave failed. Four bars that pulse for the rest of the
+                  session say "any moment now" about a request that has already
+                  given up — the shimmer's version of a count that reads 0. */}
+              {g.failed && (
+                <span className="py-0.5 text-[12px] text-fg-3">Couldn&apos;t be listed.</span>
+              )}
               {g.options.map((o) => (
                 <label key={o.id} className="flex items-center gap-2.5 py-0.5 text-[13px] text-fg-2 cursor-pointer">
                   <input type="checkbox" checked={o.on} onChange={V.toggleFacet} data-k={g.kind} data-v={o.id} className={CHECKBOX} style={CHECKBOX_STYLE} />
                   <span className="flex-1">{o.label}</span>
-                  <span className="tabular-nums text-[11.5px] opacity-80">{o.count}</span>
+                  <Count value={o.count} failed={V.countsFailed} className="text-[11.5px] opacity-80" />
                 </label>
               ))}
             </div>
@@ -281,24 +321,63 @@ export default function Queue({ V }) {
             <span className="text-right">upd.</span>
           </div>
 
-          <div data-scroll className="flex-1 overflow-y-auto">
-            {V.loadingRows && V.skeletons.map((s) => (
-              <div key={s.id}>
+          {/* A refetch the reader asked for — a new view pill, a filter, a sort,
+              a page — keeps the rows they can see and dims them, PM's own
+              treatment (`dashboard/page.tsx:93`, `issues/page.tsx:118`). Before
+              this, clicking "Breaching" left every "All open" row on screen
+              under a Breaching pill already styled as selected, with a 16px
+              spinner in the toolbar as the only clue.
+
+              A refetch nobody asked for (socket, post-mutation) does not come
+              through here at all — `loadQueue({silent:true})` sets no flag. */}
+          <div
+            data-scroll
+            className={cn(
+              'flex-1 overflow-y-auto transition-opacity duration-200',
+              V.refreshingRows && 'opacity-60 pointer-events-none',
+            )}
+            aria-busy={V.refreshingRows || undefined}
+          >
+            {/* A failed refresh keeps the last good list and says so above it.
+                The full-size illustration used to be inserted *between the
+                column header and 25 live rows*, so the reader got an error card
+                and a working list at once. */}
+            {V.staleError && (
+              <div className="flex flex-wrap items-center gap-2.5 px-3 py-2 border-b border-[color:var(--border)] bg-[color:var(--danger-soft)] text-[color:var(--danger)] text-[12.5px]">
+                <span className="flex-1 min-w-[180px]">Couldn&apos;t refresh — showing the last list that loaded.</span>
+                <button
+                  onClick={V.refresh}
+                  className="h-btn-sm px-3 rounded-full border border-current bg-transparent text-current text-[12.5px] cursor-pointer focus-ring"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {/* The skeleton row runs on `QCOLS` and `h-row`, the same template
+                and the same height as the real row above, so nothing reflows on
+                land. The two per-row inline styles are PM's touch: subject
+                widths jitter (`DashboardSkeleton`'s `60 + (i*7)%30`) and the
+                shimmer wave rolls down the list at 100ms a step
+                (`NavItemsSkeleton`), so nine identical bars do not pulse as one
+                block. */}
+            {V.loadingRows && V.skeletons.map((s, i) => (
+              <div key={s.id} aria-hidden="true">
                 <div className={cn('hidden md:grid items-center gap-3 px-3 h-row border-b border-[color:var(--border)]', QCOLS)}>
                   <span />
-                  <Skeleton className="h-[18px] rounded-full" />
-                  <Skeleton className={COL_PRIO + ' h-[18px] rounded-full'} />
-                  <Skeleton className="h-3 w-[70%] rounded-full" />
-                  <Skeleton className={COL_CUST + ' h-3 rounded-full'} />
-                  <Skeleton className={COL_AV + ' h-6 w-6 rounded-full'} />
-                  <Skeleton className={COL_TAGS + ' h-4 rounded-full'} />
-                  <Skeleton className="h-4 rounded-full" />
-                  <Skeleton className="h-2.5 rounded-full" />
+                  <Skeleton className="h-[18px] rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+                  <Skeleton className={COL_PRIO + ' h-[18px] rounded-full'} style={{ animationDelay: `${i * 100}ms` }} />
+                  <Skeleton className="h-3 rounded-full" style={{ width: `${60 + ((i * 7) % 30)}%`, animationDelay: `${i * 100 + 50}ms` }} />
+                  <Skeleton className={COL_CUST + ' h-3 rounded-full'} style={{ animationDelay: `${i * 100 + 50}ms` }} />
+                  <Skeleton className={COL_AV + ' h-6 w-6 rounded-full'} style={{ animationDelay: `${i * 100}ms` }} />
+                  <Skeleton className={COL_TAGS + ' h-4 rounded-full'} style={{ animationDelay: `${i * 100}ms` }} />
+                  <Skeleton className="h-4 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+                  <Skeleton className="h-2.5 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
                 </div>
                 <div className="md:hidden flex flex-col gap-2 px-4 py-3 border-b border-[color:var(--border)]">
-                  <Skeleton className="h-[18px] w-24 rounded-full" />
-                  <Skeleton className="h-3 w-[70%] rounded-full" />
-                  <Skeleton className="h-3 w-[45%] rounded-full" />
+                  <Skeleton className="h-[18px] w-24 rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+                  <Skeleton className="h-3 rounded-full" style={{ width: `${60 + ((i * 7) % 30)}%`, animationDelay: `${i * 100 + 50}ms` }} />
+                  <Skeleton className="h-3 w-[45%] rounded-full" style={{ animationDelay: `${i * 100 + 100}ms` }} />
                 </div>
               </div>
             ))}
@@ -382,7 +461,13 @@ export default function Queue({ V }) {
                     </span>
 
                     <span className={COL_AV + ' items-center'}>
-                      <UserAvatar firstName={aFirst} lastName={aLast} size="sm" />
+                      {/* A ghost avatar means "nobody is on this". Drawing one
+                          for a ticket that *is* assigned, purely because the
+                          people cache had not arrived, said the opposite of
+                          what was true. */}
+                      {row.assigneeUnknown
+                        ? <Skeleton variant="circular" className="h-6 w-6" />
+                        : <UserAvatar firstName={aFirst} lastName={aLast} size="sm" />}
                     </span>
 
                     <span className={COL_TAGS + ' gap-1 items-center min-w-0'}>
@@ -428,11 +513,18 @@ export default function Queue({ V }) {
           </div>
 
           <div className="flex-none flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[color:var(--border)] bg-surface text-[12.5px] text-fg-3">
-            <span className="tabular-nums">{V.pageLabel}</span>
-            <div className="flex gap-1.5">
-              <Button variant="outline" size="sm" onClick={V.prevPage}>Back</Button>
-              <Button variant="outline" size="sm" onClick={V.nextPage}>Next</Button>
-            </div>
+            {/* "Nothing to show" is what this said before anything had been
+                asked for, directly under nine shimmering rows. It waits for the
+                answer now; the footer keeps its height either way. */}
+            {V.pageLabel
+              ? <span className="tabular-nums">{V.pageLabel}</span>
+              : <Skeleton className="h-2.5 w-28 rounded-full" />}
+            {V.pageNav && (
+              <div className="flex gap-1.5">
+                <Button variant="outline" size="sm" onClick={V.prevPage}>Back</Button>
+                <Button variant="outline" size="sm" onClick={V.nextPage}>Next</Button>
+              </div>
+            )}
           </div>
 
           {V.hasSelection && (
