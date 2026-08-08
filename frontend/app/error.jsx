@@ -34,9 +34,9 @@ export default function ErrorPage({ error, reset }) {
           back to the inbox.
         </>
       }
-      primaryAction={{ label: 'try again', onClick: reset }}
+      primaryAction={{ label: 'Try again', onClick: reset }}
       secondaryAction={{
-        label: 'back to the inbox',
+        label: 'Back to the inbox',
         variant: 'outline',
         onClick: () => {
           window.location.href = '/';

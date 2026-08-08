@@ -13,8 +13,8 @@ import { KnowledgeBaseGlyph, SlaGlyph } from './glyphs';
    outright would lose them rather than repeat them. Hence tabs, which is what
    item 42 asks for, on the `Segment` primitive CS already ships. */
 const PANES = [
-  { value: 'conversation', label: 'conversation' },
-  { value: 'details', label: 'details' },
+  { value: 'conversation', label: 'Conversation' },
+  { value: 'details', label: 'Details' },
 ];
 
 const ON_ROW_STYLE = { background: 'var(--cs-onbg)', color: 'var(--cs-onfg)', fontWeight: 'var(--cs-onw)' };
@@ -116,7 +116,7 @@ export default function Ticket({ V }) {
 
       {/* toolbar */}
       <div className="flex-none flex flex-wrap items-center gap-2.5 px-4 py-3 border-b border-[color:var(--border)] bg-surface relative z-sticky">
-        <Button variant="outline" size="icon" onClick={V.backToQueue} aria-label="back to the inbox" title="back to the inbox" className="flex-none">
+        <Button variant="outline" size="icon" onClick={V.backToQueue} aria-label="Back to the inbox" title="Back to the inbox" className="flex-none">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 6l-6 6 6 6" />
           </svg>
@@ -129,7 +129,7 @@ export default function Ticket({ V }) {
             onChange={V.onSubjDraft}
             onBlur={V.saveSubject}
             onKeyDown={V.onSubjKey}
-            aria-label="edit subject"
+            aria-label="Edit subject"
             autoFocus
             className="flex-1 min-w-0 px-2.5 py-1.5 rounded-token-sm border border-[color:var(--primary)] bg-surface text-fg text-[16px] font-medium outline-none focus-ring"
           />
@@ -137,7 +137,7 @@ export default function Ticket({ V }) {
         {V.subjNotEdit && (
           <button
             onClick={V.editSubject}
-            title="click to rename"
+            title="Click to rename"
             className="flex-1 min-w-0 text-left px-2 py-1.5 rounded-token-sm border border-transparent bg-transparent text-fg text-[16px] font-medium tracking-[-.3px] cursor-text truncate transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 hover:border-[color:var(--border)] focus-ring"
           >
             {V.tSubject}
@@ -148,7 +148,7 @@ export default function Ticket({ V }) {
         <div className="flex-none">
           <Dropdown
             align="left"
-            label="status"
+            label="Status"
             trigger={
               <span className={TRIGGER_SM}>
                 <TonePill tone={V.tStatusTone} dot className="!bg-transparent !px-0">{V.tStatus}</TonePill>
@@ -171,7 +171,7 @@ export default function Ticket({ V }) {
         <div className="flex-none">
           <Dropdown
             align="left"
-            label="priority"
+            label="Priority"
             trigger={
               <span className={TRIGGER_SM}>
                 <TonePill tone={V.tPrioTone} glyph={<span className="text-[11px]">{V.tPrioGlyph}</span>} className="!bg-transparent !px-0">
@@ -203,15 +203,15 @@ export default function Ticket({ V }) {
             <UserAvatar firstName={asgFirst} lastName={asgLast} size="sm" />
             {V.tAssigneeName}
             <i data-tone="sla-met" className="w-[5px] h-[5px] rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
-            <span className="text-[12px] text-fg-3">on it</span>
+            <span className="text-[12px] text-fg-3">On it</span>
             <Caret />
           </button>
           {V.assigneeOpen && (
             <div role="menu" className={PANEL + ' top-full mt-2 right-0 w-[262px] !p-2'}>
-              <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="find an agent…" aria-label="search agents" className="!rounded-full mb-1.5" />
+              <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="Search agents…" aria-label="Search agents" className="!rounded-full mb-1.5" />
               <Button size="sm" onClick={V.assignMe} className="w-full mb-1 justify-start" variant="outline"
                 style={{ background: 'var(--primary-soft)', color: 'var(--cs-brand-ink)' }}>
-                assign to me
+                Assign to me
               </Button>
               <div data-scroll className="max-h-[232px] overflow-y-auto">
                 {V.agentList.map((a) => {
@@ -229,7 +229,7 @@ export default function Ticket({ V }) {
                 })}
               </div>
               <button onClick={V.unassign} role="menuitem" className="w-full px-2.5 py-2 mt-1 border-none border-t border-[color:var(--border)] bg-transparent text-fg-3 text-[13px] text-left cursor-pointer hover:text-fg focus-visible:bg-surface-2 focus-ring">
-                unassign
+                Unassign
               </button>
             </div>
           )}
@@ -239,7 +239,7 @@ export default function Ticket({ V }) {
         <div className="flex-none">
           <Dropdown
             align="right"
-            label="team"
+            label="Team"
             trigger={<span className={TRIGGER_SM + ' text-fg-3'}>{V.tTeam}<Caret /></span>}
           >
             {V.teamList.map((o) => (
@@ -278,7 +278,7 @@ export default function Ticket({ V }) {
         <div className="flex-none">
           <Dropdown
             align="right"
-            label="more actions"
+            label="More actions"
             trigger={
               <span className={TRIGGER_ICON}>
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -291,18 +291,18 @@ export default function Ticket({ V }) {
                 rail's `+ add` chip opens. `Dropdown` keeps its open state to
                 itself, so one menu can no longer reach into another; the rail
                 chip is the single entry point now. */}
-            <DropdownItem onClick={V.mergeTicket}>merge into another conversation</DropdownItem>
-            <DropdownItem onClick={V.copyLink}>copy link</DropdownItem>
+            <DropdownItem onClick={V.mergeTicket}>Merge into another conversation</DropdownItem>
+            <DropdownItem onClick={V.copyLink}>Copy link</DropdownItem>
             <div className="h-px bg-[color:var(--border)] my-1" />
-            <DropdownItem onClick={V.askSpam}>mark as spam</DropdownItem>
-            <DropdownItem variant="danger" onClick={V.askDelete}>delete this conversation</DropdownItem>
+            <DropdownItem onClick={V.askSpam}>Mark as spam</DropdownItem>
+            <DropdownItem variant="danger" onClick={V.askDelete}>Delete conversation</DropdownItem>
           </Dropdown>
         </div>
 
         {/* The rail toggle is a desktop control: below `lg` the tabs decide
             which pane is on screen, so a second, invisible switch on the same
             thing would only be a way to make the details tab render nothing. */}
-        <Button variant="outline" size="icon" onClick={V.toggleRail} aria-label="show or hide the details rail" title="details rail" className="flex-none hidden lg:inline-flex">
+        <Button variant="outline" size="icon" onClick={V.toggleRail} aria-label="Show or hide the details rail" title="Details rail" className="flex-none hidden lg:inline-flex">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 5h16v14H4zM15 5v14" />
           </svg>
@@ -321,15 +321,15 @@ export default function Ticket({ V }) {
       >
         <span className="inline-flex items-center gap-[7px]">
           <SlaGlyph className="w-[15px] h-[15px] flex-none" />
-          first response {V.frLabel}
+          First response {V.frLabel}
         </span>
         <i className="w-px h-3.5 bg-current opacity-25" />
-        <span>resolution {V.resLabel}</span>
+        <span>Resolution {V.resLabel}</span>
         <i className="w-px h-3.5 bg-current opacity-25" />
         <span className="opacity-80">{V.slaPolicy} policy</span>
         {V.tPaused && (
           <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface border border-[color:var(--border)] text-fg-3">
-            paused — a pause is a feature ✿
+            Paused
           </span>
         )}
       </div>
@@ -351,8 +351,8 @@ export default function Ticket({ V }) {
               }}
             >
               <i className="w-[7px] h-[7px] rounded-full flex-none bg-[color:var(--primary)]" />
-              <span className="flex-1">a teammate added a reply while you were reading</span>
-              <Button size="sm" onClick={V.reloadTicket}>refresh</Button>
+              <span className="flex-1">A teammate added a reply while you were reading</span>
+              <Button size="sm" onClick={V.reloadTicket}>Refresh</Button>
             </div>
           )}
 
@@ -391,7 +391,7 @@ export default function Ticket({ V }) {
                           <span className="text-[13.5px] font-medium">{m.author}</span>
                           <span className="text-[11.5px] text-fg-3">{m.role}</span>
                           <span title={m.exact} className="text-[11.5px] text-fg-3 tabular-nums">{m.rel} ago</span>
-                          {m.pending && <span className="text-[11.5px] text-fg-3">sending…</span>}
+                          {m.pending && <span className="text-[11.5px] text-fg-3">Sending…</span>}
                         </div>
                         <div
                           className="p-3.5 flex flex-col gap-2.5"
@@ -403,7 +403,7 @@ export default function Ticket({ V }) {
                         >
                           {m.isNote && (
                             <div data-tone="st-pending" className="inline-flex items-center gap-[7px] text-[11.5px] font-medium" style={{ color: 'var(--tone-fg)' }}>
-                              <LockIcon />only visible to your team
+                              <LockIcon />Only visible to your team
                             </div>
                           )}
                           {m.paras.map((p) => (
@@ -438,11 +438,11 @@ export default function Ticket({ V }) {
               <KnowledgeBaseGlyph className="w-[13px] h-[13px]" />
             </span>
             <div className="flex-1 flex flex-col gap-0.5">
-              <span className="text-[12px] font-medium" style={{ color: 'var(--cs-brand-ink)' }}>this article might help</span>
-              <span className="text-[12.5px] text-fg-3">rotating an account key without locking anyone out</span>
+              <span className="text-[12px] font-medium" style={{ color: 'var(--cs-brand-ink)' }}>This article might help</span>
+              <span className="text-[12.5px] text-fg-3">Rotating an account key without locking anyone out</span>
             </div>
-            <Button variant="outline" size="sm" onClick={V.mock} data-msg="article added to your reply ✿" className="whitespace-nowrap">
-              add to reply
+            <Button variant="outline" size="sm" onClick={V.mock} data-msg="Article added to your reply" className="whitespace-nowrap">
+              Add to reply
             </Button>
           </div>
 
@@ -455,19 +455,19 @@ export default function Ticket({ V }) {
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[color:var(--border)] flex-wrap">
               <div className="flex gap-[3px] p-[3px] rounded-full bg-bg">
                 <button onClick={V.setMode} data-m="reply" data-on={String(V.isReply)} className="px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer" style={ON_ROW_STYLE}>
-                  reply to customer
+                  Reply to customer
                 </button>
                 <button onClick={V.setMode} data-m="note" data-on={String(V.isNote)} className="px-3.5 h-[26px] rounded-full border-none text-[12.5px] cursor-pointer" style={ON_ROW_STYLE}>
-                  internal note
+                  Internal note
                 </button>
               </div>
               {V.isNote && (
                 <span data-tone="st-pending" className="inline-flex items-center gap-1.5 text-[11.5px]" style={{ color: 'var(--tone-fg)' }}>
-                  <LockIcon />the customer never sees this
+                  <LockIcon />The customer never sees this
                 </span>
               )}
               <span className="flex-1" />
-              <span className="text-[11.5px] text-fg-3">press r to jump here</span>
+              <span className="text-[11.5px] text-fg-3">Press R to jump here</span>
             </div>
 
             {/* Only the three overrides that let it sit flush inside the card
@@ -485,14 +485,14 @@ export default function Ticket({ V }) {
 
             <div className="flex items-center gap-2 px-3 py-2.5 border-t border-[color:var(--border)] flex-wrap">
               <div className="flex gap-0.5">
-                <Button variant="ghost" size="icon" aria-label="bold" title="bold" className="text-[13px]">B</Button>
-                <Button variant="ghost" size="icon" aria-label="italic" title="italic" className="text-[13px] italic">i</Button>
-                <Button variant="ghost" size="icon" aria-label="bulleted list" title="list">
+                <Button variant="ghost" size="icon" aria-label="Bold" title="Bold" className="text-[13px]">B</Button>
+                <Button variant="ghost" size="icon" aria-label="Italic" title="Italic" className="text-[13px] italic">i</Button>
+                <Button variant="ghost" size="icon" aria-label="Bulleted list" title="List">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 7h11M9 12h11M9 17h11M5 7h.01M5 12h.01M5 17h.01" />
                   </svg>
                 </Button>
-                <Button variant="ghost" size="icon" aria-label="add a link" title="link">
+                <Button variant="ghost" size="icon" aria-label="Add a link" title="Link">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10 13a4 4 0 005.7 0l2.3-2.3a4 4 0 10-5.7-5.7L11 6.3" />
                     <path d="M14 11a4 4 0 00-5.7 0L6 13.3a4 4 0 105.7 5.7L13 17.7" />
@@ -505,7 +505,7 @@ export default function Ticket({ V }) {
                 <Button variant="outline" size="sm" onClick={V.openCanned} leftIcon={
                   <KnowledgeBaseGlyph className="w-[15px] h-[15px] flex-none" />
                 }>
-                  canned responses
+                  Canned responses
                 </Button>
                 {V.cannedOpen && (
                   <div
@@ -513,7 +513,7 @@ export default function Ticket({ V }) {
                     data-scroll
                     className={PANEL + ' bottom-full mb-2 left-0 w-[340px] max-h-[330px] overflow-y-auto !p-2'}
                   >
-                    <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="search responses…" aria-label="search canned responses" className="!rounded-full mb-1.5" />
+                    <Input value={V.menuQ} onChange={V.onMenuQ} placeholder="Search responses…" aria-label="Search canned responses" className="!rounded-full mb-1.5" />
                     {V.cannedFiltered.map((r) => (
                       <button key={r.id} role="menuitem" onClick={V.insertCanned} data-v={r.id} className="w-full flex flex-col gap-0.5 px-2.5 py-2.5 rounded-token-sm border-none bg-transparent text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2 focus-visible:bg-surface-2 focus-ring">
                         <span className="flex items-center gap-2 w-full">
@@ -527,13 +527,13 @@ export default function Ticket({ V }) {
                 )}
               </div>
 
-              <Button variant="outline" size="sm" leftIcon={<ClipIcon size={14} />}>attach</Button>
+              <Button variant="outline" size="sm" leftIcon={<ClipIcon size={14} />}>Attach</Button>
               <span className="flex-1" />
               {/* `V.sending` has existed since the composer was written and
                   nothing ever showed it. `loading` also disables, so a second
                   click cannot post the same reply twice. */}
-              <Button variant="outline" size="sm" onClick={V.onSendPending} loading={V.sending} className="whitespace-nowrap">send &amp; set pending</Button>
-              <Button variant="outline" size="sm" onClick={V.onSendResolved} loading={V.sending} className="whitespace-nowrap">send &amp; resolve</Button>
+              <Button variant="outline" size="sm" onClick={V.onSendPending} loading={V.sending} className="whitespace-nowrap">Send &amp; set pending</Button>
+              <Button variant="outline" size="sm" onClick={V.onSendResolved} loading={V.sending} className="whitespace-nowrap">Send &amp; resolve</Button>
               <Button size="md" onClick={V.onSend} loading={V.sending} className="whitespace-nowrap">{V.sendLabel}</Button>
             </div>
           </div>
@@ -563,7 +563,7 @@ export default function Ticket({ V }) {
             </div>
             <button
               onClick={V.copyLink}
-              title="copy email address"
+              title="Copy email address"
               className="flex items-center gap-2 px-2.5 py-[7px] rounded-token-sm border border-[color:var(--border)] bg-bg text-fg text-[12.5px] text-left cursor-pointer transition-colors duration-[var(--dur-instant)] hover:bg-surface-2"
             >
               <span className="flex-1 truncate">{V.custEmail}</span>
@@ -573,19 +573,19 @@ export default function Ticket({ V }) {
               </svg>
             </button>
             <div className="flex flex-col gap-1.5">
-              <span className={RAIL_KV}>timezone <span className="text-fg">{V.custTz}</span></span>
-              <span className={RAIL_KV}>locale <span className="text-fg">{V.custLocale}</span></span>
+              <span className={RAIL_KV}>Timezone <span className="text-fg">{V.custTz}</span></span>
+              <span className={RAIL_KV}>Locale <span className="text-fg">{V.custLocale}</span></span>
             </div>
             <Button variant="link" size="sm" onClick={V.openCustomer} data-id={V.custId} className="self-start text-[12.5px]">
-              view profile →
+              View profile →
             </Button>
           </div>
 
           <div className={RAIL_CARD + ' gap-2.5'}>
             <span className={RAIL_LABEL}>sla</span>
             {[
-              [V.frTone, 'first response', V.frLabel, V.frDue],
-              [V.resTone, 'resolution', V.resLabel, V.resDue],
+              [V.frTone, 'First response', V.frLabel, V.frDue],
+              [V.resTone, 'Resolution', V.resLabel, V.resDue],
             ].map(([tone, label, value, due]) => (
               <div
                 key={label}
@@ -597,19 +597,19 @@ export default function Ticket({ V }) {
                   <span className="text-fg-3">{label}</span>
                   <span className="tabular-nums" style={{ color: 'var(--tone-fg)' }}>{value}</span>
                 </span>
-                <span className="text-[11.5px] text-fg-3">target {due}</span>
+                <span className="text-[11.5px] text-fg-3">Target {due}</span>
               </div>
             ))}
           </div>
 
           <div className={RAIL_CARD + ' gap-2'}>
             <span className={RAIL_LABEL}>details</span>
-            <span className={RAIL_KV}>channel <span className="text-fg">{V.tChannel}</span></span>
-            <span className={RAIL_KV}>created <span className="text-fg">{V.tCreated}</span></span>
-            <span className={RAIL_KV}>requester <span className="text-fg truncate max-w-[170px]">{V.tRequester}</span></span>
-            <span className={RAIL_KV}>cc <span className="text-fg truncate max-w-[170px]">{V.tCc}</span></span>
-            <span className={RAIL_KV}>source <span className="text-fg">{V.tSource}</span></span>
-            <span className={RAIL_KV}>conversation id <span className="text-fg tabular-nums">{V.tId}</span></span>
+            <span className={RAIL_KV}>Channel <span className="text-fg">{V.tChannel}</span></span>
+            <span className={RAIL_KV}>Created <span className="text-fg">{V.tCreated}</span></span>
+            <span className={RAIL_KV}>Requester <span className="text-fg truncate max-w-[170px]">{V.tRequester}</span></span>
+            <span className={RAIL_KV}>CC <span className="text-fg truncate max-w-[170px]">{V.tCc}</span></span>
+            <span className={RAIL_KV}>Source <span className="text-fg">{V.tSource}</span></span>
+            <span className={RAIL_KV}>Conversation ID <span className="text-fg tabular-nums">{V.tId}</span></span>
           </div>
 
           <div className={RAIL_CARD + ' gap-2.5'}>
@@ -621,7 +621,7 @@ export default function Ticket({ V }) {
                   <button
                     onClick={V.removeTag}
                     data-v={g.id}
-                    aria-label="remove tag"
+                    aria-label="Remove tag"
                     className="grid place-items-center w-4 h-4 rounded-full border-none bg-transparent text-current cursor-pointer opacity-65 hover:opacity-100"
                   >
                     <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
@@ -633,10 +633,10 @@ export default function Ticket({ V }) {
               <div>
                 <Dropdown
                   align="left"
-                  label="add a tag"
+                  label="Add a tag"
                   trigger={
                     <span className="inline-flex items-center gap-1 px-3 h-[22px] rounded-full border border-dashed border-[color:var(--border)] bg-transparent text-fg-3 text-[12px] transition-colors duration-[var(--dur-instant)] hover:text-[color:var(--primary)] hover:border-[color:var(--primary)]">
-                      + add
+                      + Add
                     </span>
                   }
                 >
@@ -668,9 +668,9 @@ export default function Ticket({ V }) {
               {[4, 5].map((n) => (
                 <span key={n} className="w-6 h-6 rounded-full grid place-items-center text-[12px] bg-surface text-fg-3 border border-[color:var(--border)]">·</span>
               ))}
-              <span className="ml-1 text-[12px] text-fg-3">ines said 3 of 5</span>
+              <span className="ml-1 text-[12px] text-fg-3">Ines said 3 of 5</span>
             </div>
-            <span className="text-[12px] text-fg-3 leading-relaxed">asked once the conversation closes — never during.</span>
+            <span className="text-[12px] text-fg-3 leading-relaxed">Asked once the conversation closes, never during.</span>
           </div>
 
           <div className={RAIL_CARD + ' gap-2.5'}>

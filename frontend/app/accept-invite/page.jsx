@@ -77,7 +77,7 @@ const WarnIcon = () => (
 const MIN_LENGTH = 8;
 
 const ROLE_BLURB = {
-  admin: 'as an admin — settings, people and billing included',
+  admin: 'as an admin, with settings, people and billing included',
   lead: 'as a team lead',
   agent: 'as an agent',
 };
@@ -92,15 +92,15 @@ const ROLE_BLURB = {
  * wrong one.
  */
 const DEAD_FALLBACK =
-  'invitation links last seven days and can only be used once — this one is past that, has already been used, or was revoked.';
+  'Invitation links last seven days and can only be used once. This one is past that, has already been used, or was revoked.';
 
 /** A bare state word is a label, not something to print at somebody. */
 const STATE_SENTENCE = {
-  expired: 'this invitation has expired — they last seven days.',
-  accepted: 'this invitation has already been used. try signing in instead.',
-  used: 'this invitation has already been used. try signing in instead.',
-  revoked: 'this invitation was withdrawn. ask an admin to send a new one.',
-  workspace_inactive: "that desk isn't available right now — contact your administrator.",
+  expired: 'This invitation has expired. They last seven days.',
+  accepted: 'This invitation has already been used. Try signing in instead.',
+  used: 'This invitation has already been used. Try signing in instead.',
+  revoked: 'This invitation was withdrawn. Ask an admin to send a new one.',
+  workspace_inactive: 'That desk is not available right now. Please contact your administrator.',
 };
 
 function deadReason(source) {
@@ -160,7 +160,7 @@ export default function AcceptInvitePage() {
     const t = new URLSearchParams(window.location.search).get('token') || '';
     setToken(t);
     if (!t) {
-      setNotice('that link is missing its token — open the one in your email again.');
+      setNotice('That link is missing its token. Open the one in your email again.');
       setPhase('dead');
       return;
     }
@@ -176,11 +176,11 @@ export default function AcceptInvitePage() {
     const needsPassword = !!invite?.needsPassword;
     if (needsPassword) {
       if (!name.trim()) {
-        setNotice('what should we call you?');
+        setNotice('Please enter your name');
         return;
       }
       if (pw.length < MIN_LENGTH) {
-        setNotice(`that password needs at least ${MIN_LENGTH} characters`);
+        setNotice(`Password must be at least ${MIN_LENGTH} characters`);
         return;
       }
     }
@@ -229,7 +229,7 @@ export default function AcceptInvitePage() {
         setNotice(deadReason(e) || DEAD_FALLBACK);
         setPhase('dead');
       } else {
-        setNotice(e?.message || "that didn't go through — try again in a moment");
+        setNotice(e?.message || 'Something went wrong. Please try again.');
         setPhase(back);
       }
     }
@@ -257,10 +257,10 @@ export default function AcceptInvitePage() {
           </span>
         </div>
 
-        {phase === 'reading' && <p className="text-[14px] text-fg-2 text-center">one moment…</p>}
+        {phase === 'reading' && <p className="text-[14px] text-fg-2 text-center">Loading…</p>}
 
         {phase === 'landing' && (
-          <p className="text-[14px] text-fg-2 text-center">taking you in…</p>
+          <p className="text-[14px] text-fg-2 text-center">Taking you in…</p>
         )}
 
         {(phase === 'form' || (phase === 'joining' && invite?.needsPassword)) && (
@@ -269,8 +269,8 @@ export default function AcceptInvitePage() {
               Join {desk}.
             </h1>
             <p className="text-[14px] text-fg-2 text-center leading-relaxed mb-[26px]">
-              you&apos;ve been invited {roleLine ? roleLine + ' ' : ''}as{' '}
-              <span className="text-fg">{invite?.email}</span>. pick a password and you&apos;re in.
+              You have been invited {roleLine ? roleLine + ' ' : ''}as{' '}
+              <span className="text-fg">{invite?.email}</span>. Choose a password and you are in.
             </p>
 
             {notice && (
@@ -288,7 +288,7 @@ export default function AcceptInvitePage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={onKey}
-                placeholder="the name your team will see"
+                placeholder="The name your team will see"
                 autoComplete="name"
                 leftIcon={<PersonIcon />}
                 className="h-[44px] !rounded-[10px] text-[14px]"
@@ -301,7 +301,7 @@ export default function AcceptInvitePage() {
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
                 onKeyDown={onKey}
-                placeholder={`at least ${MIN_LENGTH} characters`}
+                placeholder={`At least ${MIN_LENGTH} characters`}
                 autoComplete="new-password"
                 leftIcon={<LockIcon />}
                 className="h-[44px] !rounded-[10px] text-[14px]"
@@ -309,7 +309,7 @@ export default function AcceptInvitePage() {
                   <button
                     type="button"
                     onClick={() => setShown((s) => !s)}
-                    aria-label={shown ? 'hide password' : 'show password'}
+                    aria-label={shown ? 'Hide password' : 'Show password'}
                     className="pointer-events-auto text-fg-3 hover:text-fg transition-colors"
                   >
                     <EyeIcon off={shown} />
@@ -324,12 +324,12 @@ export default function AcceptInvitePage() {
               disabled={phase === 'joining'}
               className="w-full h-[44px] rounded-[10px] text-[15px] mt-5"
             >
-              {phase === 'joining' ? 'setting you up…' : 'Join the desk'}
+              {phase === 'joining' ? 'Setting you up…' : 'Join the desk'}
             </Button>
 
             <div className="flex justify-center mt-4">
               <a href="/" className="text-[13px] text-fg-2 hover:text-fg transition-colors">
-                already have an account? sign in
+                Already have an account? Sign in
               </a>
             </div>
           </>
@@ -340,12 +340,12 @@ export default function AcceptInvitePage() {
             {/* PM's mascot at PM's default size — see components/brand/Blobs.tsx. */}
             <BlobHappy />
             <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">
-              You&apos;ve been added to {desk} ✿
+              You&apos;ve been added to {desk}
             </h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[36ch] m-0">
               <span className="text-fg">{invite?.email}</span> already has a plumo account, so
-              there&apos;s nothing to set up — accepting simply puts this desk on it
-              {roleLine ? `, ${roleLine}` : ''}. your password stays exactly as it is.
+              there is nothing to set up. Accepting simply puts this desk on it
+              {roleLine ? `, ${roleLine}` : ''}. Your password stays exactly as it is.
             </p>
 
             {notice && (
@@ -361,7 +361,7 @@ export default function AcceptInvitePage() {
               disabled={phase === 'joining'}
               className="w-full h-[44px] rounded-[10px] text-[15px] mt-1"
             >
-              {phase === 'joining' ? 'one moment…' : 'Accept and go in'}
+              {phase === 'joining' ? 'Working…' : 'Accept and go in'}
             </Button>
           </div>
         )}
@@ -375,7 +375,7 @@ export default function AcceptInvitePage() {
               {notice || DEAD_FALLBACK}
             </p>
             <p className="text-[13px] text-fg-3 leading-relaxed max-w-[36ch] m-0">
-              ask whoever invited you to send a fresh one — they can do it from settings › team
+              Ask whoever invited you to send a fresh one. They can do it from Settings › Team
               &amp; users.
             </p>
             <a href="/">
@@ -392,7 +392,7 @@ export default function AcceptInvitePage() {
               Couldn&apos;t reach the server.
             </h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[36ch] m-0">
-              nothing was changed and your invitation is still good. try again in a moment.
+              Nothing was changed and your invitation is still good. Please try again in a moment.
             </p>
             <Button
               variant="secondary"

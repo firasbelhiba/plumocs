@@ -28,61 +28,61 @@ export default function Account({ V }) {
         </span>
         <div className="flex flex-col">
           <h1 className="text-[26px] font-semibold tracking-tight text-fg">{V.me.name}</h1>
-          <span className="text-[13px] text-fg-2 mt-1">{V.me.role} · tier 1 · {V.me.avail}</span>
+          <span className="text-[13px] text-fg-2 mt-1">{V.me.role} · Tier 1 · {V.me.avail}</span>
         </div>
       </div>
 
       <div className={CARD}>
-        <span className={CARD_TITLE}>you</span>
+        <span className={CARD_TITLE}>You</span>
         <div className="flex flex-col gap-[7px]">
-          <span className="text-xs font-medium text-fg">availability</span>
+          <span className="text-xs font-medium text-fg">Availability</span>
           <Segment
             value={V.availOn ? 'available' : 'away'}
             onChange={V.pickAvail}
             options={[
-              { value: 'available', label: 'available' },
-              { value: 'away', label: 'away' },
+              { value: 'available', label: 'Available' },
+              { value: 'away', label: 'Away' },
             ]}
             className="self-start"
           />
           <span className="text-[12px] text-fg-3">
-            away takes you out of round-robin assignment. nothing you already hold moves.
+            Away takes you out of round-robin assignment. Nothing you already hold moves.
           </span>
         </div>
-        <Input key={V.me.name} label="display name" defaultValue={V.me.name} onBlur={V.saveName} />
+        <Input key={V.me.name} label="Display name" defaultValue={V.me.name} onBlur={V.saveName} />
       </div>
 
       <div className={CARD}>
-        <span className={CARD_TITLE}>how it looks</span>
+        <span className={CARD_TITLE}>How it looks</span>
         <div className="flex gap-5 flex-wrap">
           <div className="flex flex-col gap-[7px]">
-            <span className="text-xs font-medium text-fg">theme</span>
+            <span className="text-xs font-medium text-fg">Theme</span>
             <Button variant="outline" size="sm" onClick={V.toggleTheme}>{V.themeAction}</Button>
           </div>
           <div className="flex flex-col gap-[7px]">
-            <span className="text-xs font-medium text-fg">row density</span>
+            <span className="text-xs font-medium text-fg">Row density</span>
             <Button variant="outline" size="sm" onClick={V.cycleDensity}>{V.densityLabel}</Button>
           </div>
         </div>
       </div>
 
       <div className={CARD}>
-        <span className={CARD_TITLE}>password</span>
+        <span className={CARD_TITLE}>Password</span>
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))' }}>
-          <Input label="current" type="password" value={V.pwCur} onChange={V.onPwCur} placeholder="••••••••" />
-          <Input label="new" type="password" value={V.pwNew} onChange={V.onPwNew} placeholder="something you'll remember" />
-          <Input label="once more" type="password" value={V.pwConfirm} onChange={V.onPwConfirm} placeholder="just to be sure" />
+          <Input label="Current password" type="password" value={V.pwCur} onChange={V.onPwCur} placeholder="••••••••" />
+          <Input label="New password" type="password" value={V.pwNew} onChange={V.onPwNew} placeholder="At least 8 characters" />
+          <Input label="Confirm password" type="password" value={V.pwConfirm} onChange={V.onPwConfirm} placeholder="Confirm password" />
         </div>
-        <Button size="md" onClick={V.savePassword} className="self-start">save password</Button>
+        <Button size="md" onClick={V.savePassword} className="self-start">Save password</Button>
       </div>
 
       <div className={CARD.replace('gap-3.5', 'gap-3')}>
-        <span className={CARD_TITLE}>what we tell you about</span>
+        <span className={CARD_TITLE}>Notification preferences</span>
         {[
-          ['conversations handed to me', true],
-          ['sla getting close', true],
-          ['mentions in internal notes', true],
-          ['a quiet summary at the end of the day', false],
+          ['Conversations handed to me', true],
+          ['SLA getting close', true],
+          ['Mentions in internal notes', true],
+          ['Daily summary', false],
         ].map(([label, on]) => (
           // These write the moment they move, so they are switches, not
           // checkboxes waiting on a save button this card does not have.
@@ -91,14 +91,14 @@ export default function Account({ V }) {
             <Switch
               defaultChecked={on}
               onChange={V.mock}
-              data-msg="preference saved"
+              data-msg="Notification preference updated"
               aria-label={label}
             />
           </label>
         ))}
       </div>
 
-      <Button variant="outline" size="md" onClick={V.signOut} className="self-start">sign out</Button>
+      <Button variant="outline" size="md" onClick={V.signOut} className="self-start">Sign out</Button>
     </div>
   );
 }

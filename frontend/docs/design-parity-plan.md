@@ -1957,9 +1957,18 @@ templates want re-checking. Same shape as the `w-8` oval under item 14.
 *The owner exempted the palette and the logo. He did not exempt the writing. Confirm the
 decision before executing — see Open Question G.*
 
+**STATUS 2026-08-08:** item 43 **DONE**. Item 44 **NOT DONE** — it is Open Question H and
+unanswered; see the note under it.
+
+*Two pre-existing misses spotted while reading every string in these files, left for the item
+that owns them: `app/accept-invite/page.jsx:398` still passes `variant="secondary"` (item 18
+swept only `components/screens/`), and `Ticket.jsx:4` imports `Card` from `../common`, which
+does not export it — `components/ui/index.js` does. It binds `undefined` rather than failing,
+and the build stays green only because nothing in the file renders it (item 45).*
+
 ---
 
-#### 43. Bring the copy into PM's register — **M**
+#### 43. Bring the copy into PM's register — **M** ✅ DONE 2026-08-08
 
 **CS** hardcodes every string in JSX; all lowercase, with a flower glyph.
 **PM** keeps 232 keys in `src/i18n/locales/en/toasts.json`, all Sentence case, no glyphs.
@@ -1981,9 +1990,86 @@ The same event, both apps: PM says **"Profile updated successfully!"**; CS says
 **Risk:** none technically. This is entirely a taste decision — **do not execute before
 Open Question G is answered.**
 
+**DONE 2026-08-08. Open Question G answered by the owner — the copy voice is in scope.** All
+20 flower glyphs are gone from the tree (2 remained outside this item's list, in
+`app/accept-invite/page.jsx:343` and `app/reset-password/page.jsx:225`; one survives, in a
+`Console.jsx:971` comment quoting the string it replaced). Toasts, confirm dialogs, form
+labels, placeholders, helper text, validation messages, nav labels, page titles, menu items,
+tooltips and aria-labels are Sentence/Title case. Where PM's `toasts.json` had the same event,
+its string is used verbatim — `"Password changed successfully!"`, `"Profile updated
+successfully!"`, `"Notification preference updated"`, `"Feedback submitted successfully!"`,
+`"No results found"`, `"Network error. Please check your connection."`.
+
+**The blast radius was materially larger than "~35 strings across 7 files": ~250 strings
+across 18 files.** Three sources the item does not list carry user-facing copy:
+- **`components/screens/Settings.jsx`** (~60 strings) — every panel heading, tab label, form
+  label and empty state. Item 47 rewrites this file's *styling*; its copy is batch 9's.
+- **`app/accept-invite/page.jsx`** and **`app/reset-password/page.jsx`** (~30) — both carry a
+  glyph and the full lowercase register.
+- **`lib/api/adapter.js`** (~25) — the reports KPI labels, deltas, drill-down titles, notes
+  and axis labels all live here, not in `Reports.jsx`.
+
+**Eleven `.toLowerCase()` calls were the register applied to data rather than to copy, and all
+eleven are removed.** Six in `Console.jsx`: the ticket subject *before POSTing it* (`submitNew`),
+the customer's first name when expanding `{{name}}` into a reply (`insertCanned`), an agent's
+first name in a toast (`setAssignee`), the assignee filter's own `me · <name>` label, and two
+formatted dates (`clock()`, the holidays label). Five in `adapter.js`: weekday names on the
+reports chart axis, people's first names in the drill-down breakdown, and the API-key `created`
+date in all three of its load paths. The subject one changed stored data, not just display.
+
+**Two things deliberately left lowercase, because PM is lowercase there.** The item's premise
+("PM ... all Sentence case, no glyphs") holds for `toasts.json` — verified: 232 keys, zero
+em-dashes, zero lowercase starts, and exactly one em-dash across all 14 locale namespaces — but
+**PM's own error screens are lowercase prose**: `src/app/not-found.tsx:20` is `title="this page
+wandered off"`, `src/app/error.tsx:36` is `title="something went sideways"` with the description
+`"this isn't your fault — we're looking into it."` — an em-dash reassurance clause in PM. So the
+titles and descriptions in `app/not-found.jsx`, `app/error.jsx`, `app/global-error.jsx` and
+`components/screens/EdgeScreens.jsx` are unchanged; only their **action labels** moved, because
+PM's are `'Go back'` / `'Go home'` / `'Try again'` and CS's were lowercase. If the owner wants
+those four screens Sentence case too, that is a change *away* from PM, and it is one edit.
+
+**Not changed, deliberately: strings inside an `uppercase` container**, where the source case is
+invisible — every table header (`Queue`, `Customers`, `Reports`, `Settings`), the `EYEBROW` /
+`GROUP_LABEL` / `RAIL_LABEL` eyebrows, `StatCard`'s label, and the Settings rail's `settings`
+heading. `Customers.jsx`'s four `StatCard` labels were capitalised anyway, since `"last seen
+ago"` read wrong at any case and is now `"Last seen"`.
+
+**Also changed, since the copy is the interface:** three view names the item names
+(`'no one yet'` → `Unassigned`, `'waiting on them'` → `Pending`, `'needs attention'` →
+`Breaching`), and the filter chips for status and priority, which rendered the raw enum id
+(`on-hold`) rather than the label table's text.
+
+**Tests:** 7 assertions in `__tests__/login-errors.test.js` and
+`__tests__/settings-writes.test.js` asserted the old copy. Five were case-only `toMatch`
+patterns and are now case-insensitive — they test *which* message is chosen, not its
+capitalisation, so this stops them breaking on the next copy edit. Two asserted exact strings
+and were updated. Build green, 87/87 tests green.
+
+**Swept on verification — the first pass stopped at the reports half of `lib/api/adapter.js`
+and left the settings half.** The tell was `.toLowerCase()` on a formatted date: the pass
+removed it from `Console.jsx`'s `clock()`, the holidays label and the reports weekday axis, but
+three identical calls survived on the API-key `created` column, so that one table would have
+rendered `7 aug 2026` under a heading whose siblings all now read `7 Aug 2026`. Removed, plus
+the lowercase display strings in the same objects: `'all teams'` ×4, `'never'` ×3,
+`Console.jsx`'s canned-response `'everyone'`, and the invite form's `'no team for now'`.
+
+**The webhook status chip was the same miss one layer up.** The pass capitalised the ticket
+`STATUS` / `PRIO` label tables, which is what every other chip in the app reads from, but the
+webhook chip renders `w.status` directly — so `active` / `failing` / `disabled` stayed lowercase
+inside a pill sitting beside newly-capitalised ones. That value is also the tone discriminator
+(`w.status === 'active' ? 'sla-met' : 'sla-breach'`), so it could not simply be capitalised in
+place; `HOOK_STATUS_LABEL` now maps slug to label at the view-model boundary and the comparison
+still sees the slug. PM capitalises these (`common.json` `"active": "Active"`).
+
+**Confirmed correct, not changed:** every remaining lowercase JSX text node sits inside a
+container with `uppercase` — `THEAD`, `EYEBROW`, `GROUP_LABEL` — where source case is invisible;
+`placeholder: 'billing'` and `'billing, refund'` are sample *tag keys*, which the adjacent helper
+text documents as lowercase-only, next to a `placeholder: 'Billing'` for the display label; and
+`<Kbd>g then i</Kbd>` is a key sequence.
+
 ---
 
-#### 44. Externalise the strings to i18next — **L**
+#### 44. Externalise the strings to i18next — **L** ⏸ NOT DONE 2026-08-08
 
 **CS** has no i18n; every string is hardcoded in JSX, so CS cannot be translated and there is
 no single file where the voice can be corrected.
@@ -1993,6 +2079,17 @@ no single file where the voice can be corrected.
 **Risk:** low but tedious. Worth doing only if CS is going to ship in French like PM, or if
 item 43 is approved (a single locale file makes the voice fix reviewable in one diff instead
 of 35). **Open Question H.**
+
+**NOT DONE 2026-08-08 — Open Question H is unanswered, and the owner's batch-9 decision does
+not settle it.** What was approved was the *register*; i18n is a dependency addition
+(`i18next` + `react-i18next`) and a refactor of every screen, which is an architecture call
+rather than a design-parity one. Two findings from doing item 43 that bear on the answer:
+- **The second half of the item's own rationale is now spent.** "A single locale file makes
+  the voice fix reviewable in one diff" was an argument for doing 44 *before* 43. 43 is done,
+  so that value is gone; what remains is only the French question.
+- **The real string count is ~250 across 18 files, not 35 across 7** — including
+  `lib/api/adapter.js`, which is not a screen and would need a namespace of its own. That is a
+  larger L than the item assumes.
 
 ---
 
@@ -2313,6 +2410,15 @@ Sentence case with zero glyphs and "successfully" everywhere. The instruction ex
 palette and the logo and nothing else, which reads as "the copy should match." But this is the
 one finding where CS's difference is clearly intentional rather than drift. **Confirm before
 item 43 — it is ~35 strings and it is not reversible by taste.**
+**ANSWERED 2026-08-08 by the owner — the copy voice is in scope.** Landed with item 43.
+**One correction the answer has to survive: the question's premise is not quite right.** PM is
+Sentence case in its *toasts, placeholders, nav labels and page titles* — verified, 232 toast
+keys with zero lowercase starts and zero em-dashes — but **PM's error screens are lowercase
+with an em-dash reassurance clause** (`not-found.tsx` "this page wandered off", `error.tsx`
+"this isn't your fault — we're looking into it"). So "match PM" and "de-lowercase everything"
+are not the same instruction on those four screens. Item 43 chose *match PM*: their prose is
+unchanged, their action labels moved to PM's `'Go back'` / `'Try again'`. If the owner meant
+the stronger reading, say so — it is one edit, and it is a step away from PM.
 
 **H. Does CS need i18n?**
 PM ships en + fr across 14 namespaces. CS has none. Item 44 is only worth doing if CS will

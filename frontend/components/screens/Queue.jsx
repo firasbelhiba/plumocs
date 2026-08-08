@@ -70,18 +70,18 @@ const splitName = (n = '') => [n.split(' ')[0] ?? '', n.split(' ').slice(1).join
 
 export default function Queue({ V }) {
   const views = [
-    ['all-open', 'all open', V.vAll, V.cAll],
-    ['unassigned', 'no one yet', V.vUn, V.cUn],
-    ['my-open', 'mine', V.vMy, V.cMy],
-    ['breaching', 'needs attention', V.vBr, V.cBr],
-    ['pending', 'waiting on them', V.vPd, V.cPd],
-    ['resolved', 'recently closed', V.vRe, V.cRe],
+    ['all-open', 'All open', V.vAll, V.cAll],
+    ['unassigned', 'Unassigned', V.vUn, V.cUn],
+    ['my-open', 'Mine', V.vMy, V.cMy],
+    ['breaching', 'Breaching', V.vBr, V.cBr],
+    ['pending', 'Pending', V.vPd, V.cPd],
+    ['resolved', 'Recently closed', V.vRe, V.cRe],
     // Everything a chatbot opened, in any state. Bot-resolved conversations are
     // deliberately out of `all open` and `no one yet` — nobody should be paged
     // for work the bot finished — which made the AI's output invisible unless
     // you went hunting in `recently closed`. Seeing it and queueing it are
     // different needs.
-    ['bot-handled', 'handled by AI', V.vBot, V.cBot],
+    ['bot-handled', 'Handled by AI', V.vBot, V.cBot],
   ];
 
   return (
@@ -99,8 +99,8 @@ export default function Queue({ V }) {
             variant="outline"
             size="icon"
             onClick={V.saveView}
-            aria-label="save this filter set as a view"
-            title="save this filter set as a view"
+            aria-label="Save this filter set as a view"
+            title="Save this filter set as a view"
             className="flex-none"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -116,7 +116,7 @@ export default function Queue({ V }) {
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 6h16M7 12h10M10 18h4" />
           </svg>
-        }>filters</Button>
+        }>Filters</Button>
 
         <div className="flex-1 flex gap-1.5 flex-wrap min-w-0">
           {V.chips.map((chip, i) => (
@@ -138,15 +138,15 @@ export default function Queue({ V }) {
         <span className="flex items-center gap-1.5 text-[12px] text-fg-3 tabular-nums">
           {/* The shared spinner, not an 11px CSS ring at 1.1s: 16px SVG at 1s. */}
           {V.loading && <LoadingSpinner size="sm" />}
-          updated {V.refreshedRel}
+          Updated {V.refreshedRel}
         </span>
 
         <Button
           variant="outline"
           size="icon"
           onClick={V.refresh}
-          aria-label="refresh the list"
-          title="refresh"
+          aria-label="Refresh the list"
+          title="Refresh"
           className="flex-none"
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -156,7 +156,7 @@ export default function Queue({ V }) {
 
         <div className="w-px h-5 bg-[color:var(--border)]" />
 
-        <Button variant="outline" size="sm" onClick={V.cycleDensity} title="row density" className="flex-none" leftIcon={
+        <Button variant="outline" size="sm" onClick={V.cycleDensity} title="Row density" className="flex-none" leftIcon={
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
@@ -165,10 +165,10 @@ export default function Queue({ V }) {
         <div className="flex-none">
           <Dropdown
             align="right"
-            label="sort order"
+            label="Sort order"
             trigger={
               <span className={TRIGGER_SM}>
-                sort: <span className="text-fg">{V.sortLabel}</span>
+                Sort: <span className="text-fg">{V.sortLabel}</span>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 9l6 6 6-6" />
                 </svg>
@@ -201,7 +201,7 @@ export default function Queue({ V }) {
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]">refine</span>
-            <Button variant="link" size="sm" onClick={V.clearFilters} className="text-[12px]">clear filters</Button>
+            <Button variant="link" size="sm" onClick={V.clearFilters} className="text-[12px]">Clear filters</Button>
           </div>
 
           {V.facetGroups.map((g) => (
@@ -218,7 +218,7 @@ export default function Queue({ V }) {
           ))}
 
           <div className="flex flex-col gap-[7px]">
-            <span className={RAIL_HEAD}>assignee</span>
+            <span className={RAIL_HEAD}>Assignee</span>
             {V.assigneeOptions.map((o) => {
               const [first, last] = splitName(o.label.replace(/^me · /, ''));
               return (
@@ -231,7 +231,7 @@ export default function Queue({ V }) {
           </div>
 
           <div className="flex flex-col gap-[7px]">
-            <span className={RAIL_HEAD}>team</span>
+            <span className={RAIL_HEAD}>Team</span>
             <div className="flex gap-1.5 flex-wrap">
               {V.teamOptions.map((o) => (
                 <button key={o.id} onClick={V.setTeamFilter} data-v={o.id} data-on={String(o.on)} className={ON_PILL + ' px-3 py-[5px] text-[12.5px]'} style={ON_PILL_STYLE}>
@@ -242,7 +242,7 @@ export default function Queue({ V }) {
           </div>
 
           <div className="flex flex-col gap-[7px]">
-            <span className={RAIL_HEAD}>date range</span>
+            <span className={RAIL_HEAD}>Date range</span>
             <div className="flex gap-1.5 flex-wrap">
               {V.rangeOptions.map((o) => (
                 <button key={o.id} onClick={V.setRange} data-v={o.id} data-on={String(o.on)} className={ON_PILL + ' px-3 py-[5px] text-[12.5px]'} style={ON_PILL_STYLE}>
@@ -270,7 +270,7 @@ export default function Queue({ V }) {
               QCOLS,
             )}
           >
-            <input type="checkbox" checked={V.allSelected} onChange={V.toggleAll} aria-label="select all conversations" className={CHECKBOX} style={CHECKBOX_STYLE} />
+            <input type="checkbox" checked={V.allSelected} onChange={V.toggleAll} aria-label="Select all conversations" className={CHECKBOX} style={CHECKBOX_STYLE} />
             <span>status</span><span className={COL_PRIO}>priority</span><span>subject</span>
             <span className={COL_CUST}>customer</span><span className={COL_AV} />
             <span className={COL_TAGS}>tags</span><span>sla</span>
@@ -306,18 +306,18 @@ export default function Queue({ V }) {
             {V.hasError && (
               <EmptyState
                 illustration="error"
-                title="hmm, we couldn't load the inbox"
-                description="nothing is lost — every conversation is safe. we'll try again whenever you're ready."
-                action={{ label: 'try again', onClick: V.refresh }}
+                title="Couldn't load the inbox"
+                description="Failed to load conversations. Please try again."
+                action={{ label: 'Try again', onClick: V.refresh }}
               />
             )}
 
             {V.isEmpty && (
               <EmptyState
                 illustration="no-results"
-                title="nothing matches these filters ✿"
-                description="that's allowed to be a good thing. widen the net whenever you like. no rush."
-                action={{ label: 'clear filters', onClick: V.clearFilters }}
+                title="No results found"
+                description="Try widening your filters."
+                action={{ label: 'Clear filters', onClick: V.clearFilters }}
               />
             )}
 
@@ -350,7 +350,7 @@ export default function Queue({ V }) {
                 >
                   <span className={CARD_LINE}>
                     <span data-stop="1" onClick={V.stop} className="flex items-center">
-                      <input type="checkbox" checked={row.selected} onChange={V.toggleSel} data-id={row.id} aria-label="select conversation" className={CHECKBOX} style={CHECKBOX_STYLE} />
+                      <input type="checkbox" checked={row.selected} onChange={V.toggleSel} data-id={row.id} aria-label="Select conversation" className={CHECKBOX} style={CHECKBOX_STYLE} />
                     </span>
 
                     <TonePill tone={row.statusTone} dot size="md">{row.statusLabel}</TonePill>
@@ -407,13 +407,13 @@ export default function Queue({ V }) {
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 flex gap-[5px] p-1 rounded-full bg-surface border border-[color:var(--border)] shadow-card"
                     style={{ opacity: 'var(--q-op)', pointerEvents: 'var(--q-pe)' }}
                   >
-                    <Button variant="ghost" size="icon" onClick={V.quickAssign} data-id={row.id} title="i'll take this" aria-label="i'll take this">
+                    <Button variant="ghost" size="icon" onClick={V.quickAssign} data-id={row.id} title="Assign to me" aria-label="Assign to me">
                       <AgentGlyph className="w-[15px] h-[15px]" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={V.quickStatus} data-id={row.id} title="wait on them" aria-label="wait on them">
+                    <Button variant="ghost" size="icon" onClick={V.quickStatus} data-id={row.id} title="Set pending" aria-label="Set pending">
                       <SnoozeGlyph className="w-[15px] h-[15px]" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={V.quickOpen} data-id={row.id} title="open conversation" aria-label="open conversation">
+                    <Button variant="ghost" size="icon" onClick={V.quickOpen} data-id={row.id} title="Open conversation" aria-label="Open conversation">
                       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 5h5v5M19 5l-7 7M18 14v4a1.8 1.8 0 01-1.8 1.8H6.8A1.8 1.8 0 015 18V8.8A1.8 1.8 0 016.8 7h4" />
                       </svg>
@@ -427,8 +427,8 @@ export default function Queue({ V }) {
           <div className="flex-none flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[color:var(--border)] bg-surface text-[12.5px] text-fg-3">
             <span className="tabular-nums">{V.pageLabel}</span>
             <div className="flex gap-1.5">
-              <Button variant="outline" size="sm" onClick={V.prevPage}>back</Button>
-              <Button variant="outline" size="sm" onClick={V.nextPage}>next</Button>
+              <Button variant="outline" size="sm" onClick={V.prevPage}>Back</Button>
+              <Button variant="outline" size="sm" onClick={V.nextPage}>Next</Button>
             </div>
           </div>
 
@@ -449,15 +449,15 @@ export default function Queue({ V }) {
             >
               <span className="text-[13px] tabular-nums">{V.selCount} selected</span>
               <i className="w-px h-[18px] bg-white/20" />
-              <button onClick={V.bulkAssign} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>assign to me</button>
-              <button onClick={V.bulkPending} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>set pending</button>
-              <button onClick={V.bulkTag} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>flag for a look</button>
+              <button onClick={V.bulkAssign} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>Assign to me</button>
+              <button onClick={V.bulkPending} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>Set pending</button>
+              <button onClick={V.bulkTag} className={BULK_BTN + ' bg-white/10 hover:bg-white/20'}>Flag for review</button>
               <button
                 onClick={V.bulkClose}
                 className="h-btn-sm px-3 rounded-full border-none text-[12.5px] font-medium cursor-pointer transition-transform duration-[var(--dur-fast)] hover:scale-[1.02]"
                 style={{ background: 'var(--plumo-butter)', color: 'var(--plumo-on-butter)' }}
               >
-                close
+                Close
               </button>
               {/* The bulk bar is a dark surface, so the ghost variant's
                   foreground/hover pair is overridden here — the geometry, the
@@ -466,7 +466,7 @@ export default function Queue({ V }) {
                 variant="ghost"
                 size="icon"
                 onClick={V.clearSel}
-                aria-label="clear selection"
+                aria-label="Clear selection"
                 className="!text-white/70 hover:!bg-white/15 hover:!text-white"
               >
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

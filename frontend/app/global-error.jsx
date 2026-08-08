@@ -118,7 +118,7 @@ export default function GlobalErrorPage({ error, reset }) {
                 cursor: 'pointer',
               }}
             >
-              try again
+              Try again
             </button>
             <button
               type="button"
@@ -136,7 +136,7 @@ export default function GlobalErrorPage({ error, reset }) {
                 cursor: 'pointer',
               }}
             >
-              back to the inbox
+              Back to the inbox
             </button>
           </div>
 

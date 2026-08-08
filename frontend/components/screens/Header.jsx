@@ -48,8 +48,8 @@ const Search = ({ V, autoFocus, withRef }) => (
     onChange={V.onQ}
     onFocus={V.onQFocus}
     autoFocus={autoFocus}
-    placeholder="search conversations, people…  /"
-    aria-label="search conversations and people"
+    placeholder="Search conversations, people…  /"
+    aria-label="Search conversations and people"
     className="!rounded-full h-btn-md bg-bg"
     leftIcon={
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -79,7 +79,7 @@ const Results = ({ V, inset }) => (
         <TonePill tone={r.statusTone}>{r.statusLabel}</TonePill>
       </button>
     ))}
-    {V.resNoTickets && <div className="px-2.5 py-2 text-[13px] text-fg-3">nothing matching yet ✿</div>}
+    {V.resNoTickets && <div className="px-2.5 py-2 text-[13px] text-fg-3">No results found</div>}
 
     <div className={GROUP_LABEL + ' border-t border-[color:var(--border)] mt-1.5 !pt-2.5'}>customers</div>
     {V.resCustomers.map((c) => (
@@ -109,7 +109,7 @@ export default function Header({ V }) {
           job moved to PM's collapse handle on the rail's edge
           (`DashboardLayout.tsx:82-105`), so no width loses a control. */}
       <div className="flex items-center gap-2 md:gap-3 flex-none">
-        <IconButton label="open menu" onClick={V.openMobileNav} className="md:hidden">
+        <IconButton label="Open menu" onClick={V.openMobileNav} className="md:hidden">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -132,14 +132,14 @@ export default function Header({ V }) {
           opens a command palette; CS has no palette — that is Open Question E
           and item 32 left it alone — so this drops the same field into a row
           under the bar rather than inventing a second search mechanism. */}
-      <IconButton label="search" onClick={V.toggleMobileSearch} className="md:hidden">
+      <IconButton label="Search" onClick={V.toggleMobileSearch} className="md:hidden">
         <SearchGlyph />
       </IconButton>
 
       <Button
         onClick={V.openNewTicket}
         size="sm"
-        aria-label="new conversation"
+        aria-label="New conversation"
         className="flex-none"
         leftIcon={
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -148,11 +148,11 @@ export default function Header({ V }) {
         }
       >
         {/* PM `Header.tsx:258` — the label goes, the glyph stays. */}
-        <span className="hidden md:inline">new conversation</span>
+        <span className="hidden md:inline">New Conversation</span>
       </Button>
 
       <div className="relative flex-none">
-        <IconButton label="notifications" onClick={V.toggleNotif}>
+        <IconButton label="Notifications" onClick={V.toggleNotif}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 9a6 6 0 10-12 0c0 5-2 6-2 6h16s-2-1-2-6M13.7 20a2 2 0 01-3.4 0" />
           </svg>
@@ -164,9 +164,9 @@ export default function Header({ V }) {
         {V.notifOpen && (
           <div className={PANEL + ' right-0 w-[320px] overflow-hidden'}>
             <div className="flex items-center justify-between px-3.5 py-3 border-b border-[color:var(--border)]">
-              <span className="text-[13.5px] font-medium">what&apos;s new for you</span>
+              <span className="text-[13.5px] font-medium">Notifications</span>
               <Button variant="link" size="sm" onClick={V.readAllNotif} className="text-[12.5px]">
-                mark all read
+                Mark all as read
               </Button>
             </div>
             {V.notifs.map((n) => (
@@ -188,7 +188,7 @@ export default function Header({ V }) {
         )}
       </div>
 
-      <IconButton label="switch light or dark theme" onClick={V.toggleTheme}>
+      <IconButton label="Switch light or dark theme" onClick={V.toggleTheme}>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 13.5A8 8 0 1110.5 4a6.5 6.5 0 009.5 9.5z" />
         </svg>

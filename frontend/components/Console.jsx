@@ -48,25 +48,32 @@ const FMT_MINS = (mins) => {
   return `${Math.round(mins / 1440)}d`;
 };
 
+/**
+ * Display labels for the webhook status chip. The chip's *value* stays the
+ * lowercase slug — the tone lookup below compares against it — so only the
+ * rendered string is capitalised, the same split the ticket STATUS/PRIO maps use.
+ */
+const HOOK_STATUS_LABEL = { active: 'Active', failing: 'Failing', disabled: 'Disabled' };
+
 /** The only event names the webhooks API accepts — anything else is a 400. */
 const WEBHOOK_EVENTS = [
-  { value: 'ticket.created', label: 'a conversation is opened' },
-  { value: 'ticket.updated', label: 'a conversation changes' },
-  { value: 'ticket.assigned', label: 'a conversation is assigned' },
-  { value: 'ticket.resolved', label: 'a conversation is resolved' },
-  { value: 'message.added', label: 'a message is added' },
-  { value: 'sla.breached', label: 'an sla target is missed' },
+  { value: 'ticket.created', label: 'A conversation is opened' },
+  { value: 'ticket.updated', label: 'A conversation changes' },
+  { value: 'ticket.assigned', label: 'A conversation is assigned' },
+  { value: 'ticket.resolved', label: 'A conversation is resolved' },
+  { value: 'message.added', label: 'A message is added' },
+  { value: 'sla.breached', label: 'An SLA target is missed' },
 ];
 
 const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'low' }, { value: 'normal', label: 'normal' },
-  { value: 'high', label: 'high' }, { value: 'urgent', label: 'urgent' },
+  { value: 'low', label: 'Low' }, { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' },
 ];
 
 /** Sunday-first keys, matching the schedule json the backend walks. */
 const DAY_KEYS = [
-  ['mon', 'monday'], ['tue', 'tuesday'], ['wed', 'wednesday'], ['thu', 'thursday'],
-  ['fri', 'friday'], ['sat', 'saturday'], ['sun', 'sunday'],
+  ['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'],
+  ['fri', 'Friday'], ['sat', 'Saturday'], ['sun', 'Sunday'],
 ];
 
 export default class Console extends React.Component {
@@ -84,17 +91,18 @@ export default class Console extends React.Component {
   density() { return this.context ? this.context.density : 'comfortable'; }
 
   STATUS = {
-    new: { l: 'new', t: 'st-new' }, open: { l: 'open', t: 'st-open' },
-    pending: { l: 'pending', t: 'st-pending' }, 'on-hold': { l: 'on hold', t: 'st-hold' },
-    resolved: { l: 'resolved', t: 'st-resolved' }, closed: { l: 'closed', t: 'st-closed' },
+    new: { l: 'New', t: 'st-new' }, open: { l: 'Open', t: 'st-open' },
+    pending: { l: 'Pending', t: 'st-pending' }, 'on-hold': { l: 'On hold', t: 'st-hold' },
+    resolved: { l: 'Resolved', t: 'st-resolved' }, closed: { l: 'Closed', t: 'st-closed' },
   };
   PRIO = {
-    low: { l: 'low', t: 'pr-low', g: '·' }, normal: { l: 'normal', t: 'pr-normal', g: '·' },
-    high: { l: 'high', t: 'pr-high', g: '↑' }, urgent: { l: 'urgent', t: 'pr-urgent', g: '⚑' },
+    low: { l: 'Low', t: 'pr-low', g: '·' }, normal: { l: 'Normal', t: 'pr-normal', g: '·' },
+    high: { l: 'High', t: 'pr-high', g: '↑' }, urgent: { l: 'Urgent', t: 'pr-urgent', g: '⚑' },
   };
   CHAN = { email: '✉', api: '⌗', widget: '◲', hashcare: '✚' };
+  CHAN_LABEL = { chatbot: 'Chatbot', email: 'Email', api: 'API', widget: 'Widget', hashcare: 'HashCare' };
   TAGTONE = { billing: 'tag-billing', bug: 'tag-bug', 'how-to': 'tag-howto', account: 'tag-account', urgent: 'tag-urgent', integration: 'tag-integration' };
-  SORTS = [{ id: 'updated', label: 'last updated' }, { id: 'created', label: 'created' }, { id: 'priority', label: 'priority' }, { id: 'sla', label: 'sla due' }];
+  SORTS = [{ id: 'updated', label: 'Last updated' }, { id: 'created', label: 'Created' }, { id: 'priority', label: 'Priority' }, { id: 'sla', label: 'SLA due' }];
   DENSITIES = ['compact', 'comfortable', 'relaxed'];
   ARC = { 'sla-ok': ['72 100', '#B8CFB4'], 'sla-due': ['30 100', '#FFE8A3'], 'sla-breach': ['8 100', '#FFD4B8'], 'sla-met': ['100 100', '#B8CFB4'], 'sla-paused': ['45 100', '#E2E8F0'], neutral: ['0 100', '#E2E8F0'] };
 
@@ -150,26 +158,26 @@ export default class Console extends React.Component {
   /** Neither provider is configured on this instance — say so plainly. */
   federated = (e) => {
     const provider = e.currentTarget.dataset.provider === 'google' ? 'google' : 'sso';
-    this.toast(`${provider} sign-in isn't set up on this instance yet — use your email and password`, 'bad');
+    this.toast(`${provider} sign-in is not set up on this instance. Please use your email and password.`, 'bad');
   };
-  requestAccess = () => this.toast('ask an admin to invite you — they can add you from settings › team & users');
+  requestAccess = () => this.toast('Ask an admin to invite you from Settings › Team & users.');
   saveName = (e) => {
     const v = (e.target.value || '').trim();
     if (!v || v === this.me().name) return;
     this.api.updateName(v)
-      .then(() => { this.toast('name updated ✿'); this.setState({}); })
-      .catch(() => this.toast("that didn't save — try again in a moment", 'bad'));
+      .then(() => { this.toast('Profile updated successfully!'); this.setState({}); })
+      .catch(() => this.toast('Failed to save changes. Please try again.', 'bad'));
   };
   onPwCur = (e) => this.setState({ pwCur: e.target.value });
   onPwNew = (e) => this.setState({ pwNew: e.target.value });
   onPwConfirm = (e) => this.setState({ pwConfirm: e.target.value });
   savePassword = () => {
     const { pwCur, pwNew, pwConfirm } = this.state;
-    if (!pwNew || pwNew.length < 8) { this.toast('the new password needs at least 8 characters', 'bad'); return; }
-    if (pwNew !== pwConfirm) { this.toast("those two don't match — try once more", 'bad'); return; }
+    if (!pwNew || pwNew.length < 8) { this.toast('Password must be at least 8 characters', 'bad'); return; }
+    if (pwNew !== pwConfirm) { this.toast('New passwords do not match', 'bad'); return; }
     this.api.changePassword(pwCur, pwNew)
-      .then(() => { this.setState({ pwCur: '', pwNew: '', pwConfirm: '' }); this.toast("password changed — you're still signed in ✿"); })
-      .catch((e) => this.toast(e?.status === 401 ? "the current password isn't right" : "couldn't change it — try again in a moment", 'bad'));
+      .then(() => { this.setState({ pwCur: '', pwNew: '', pwConfirm: '' }); this.toast('Password changed successfully!'); })
+      .catch((e) => this.toast(e?.status === 401 ? 'The current password is not correct' : 'Failed to change password. Please try again.', 'bad'));
   };
   // Ask the server where to send the browser, then navigate. A 302 from fetch()
   // is followed opaquely instead of navigating the page, which is why the
@@ -183,7 +191,7 @@ export default class Console extends React.Component {
       const { authorizationUrl } = await api.pm.signinUrl();
       window.location.assign(authorizationUrl);
     } catch (e) {
-      this.setState({ pmSignInBusy: false, pmSignInError: e?.message || 'could not reach plumo' });
+      this.setState({ pmSignInBusy: false, pmSignInError: e?.message || 'Could not reach plumo' });
     }
   };
 
@@ -210,7 +218,7 @@ export default class Console extends React.Component {
           () => { this.loadQueue({ noFail: true }); this.loadCounts(); },
         );
       })
-      .catch((e) => this.setState({ booted: true, loggedIn: false, pmSignInError: e?.message || 'plumo sign-in failed' }));
+      .catch((e) => this.setState({ booted: true, loggedIn: false, pmSignInError: e?.message || 'Plumo sign-in failed' }));
     return true;
   };
 
@@ -220,7 +228,7 @@ export default class Console extends React.Component {
       const { authorizationUrl } = await api.pm.start(window.location.pathname);
       window.location.assign(authorizationUrl);
     } catch (e) {
-      this.setState({ pmBusy: false, pmNotice: e?.message || 'could not reach plumo' });
+      this.setState({ pmBusy: false, pmNotice: e?.message || 'Could not reach plumo' });
     }
   };
 
@@ -228,9 +236,9 @@ export default class Console extends React.Component {
     this.setState({ pmBusy: true, pmNotice: '' });
     try {
       await api.pm.unlink();
-      this.setState({ pm: { ...(this.state.pm || {}), linked: false }, pmBusy: false, pmNotice: 'disconnected from plumo' });
+      this.setState({ pm: { ...(this.state.pm || {}), linked: false }, pmBusy: false, pmNotice: 'Disconnected from plumo' });
     } catch (e) {
-      this.setState({ pmBusy: false, pmNotice: e?.message || 'could not disconnect' });
+      this.setState({ pmBusy: false, pmNotice: e?.message || 'Could not disconnect' });
     }
   };
 
@@ -246,7 +254,7 @@ export default class Console extends React.Component {
     if (signIn && signIn !== 'ok') {
       this.setState({
         pmSignInError:
-          signIn === 'cancelled' ? 'plumo sign-in was cancelled' : q.get('reason') || 'plumo sign-in failed',
+          signIn === 'cancelled' ? 'Plumo sign-in was cancelled' : q.get('reason') || 'Plumo sign-in failed',
       });
       q.delete('pmSignIn'); q.delete('pmLink'); q.delete('reason');
       const left = q.toString();
@@ -258,10 +266,10 @@ export default class Console extends React.Component {
     if (!outcome) return;
     const ws = q.get('workspace');
     const notice =
-      outcome === 'ok' ? (ws ? `connected to plumo — this desk is linked to ${ws}` : 'connected to plumo')
-      : outcome === 'cancelled' ? 'plumo sign-in was cancelled'
-      : outcome === 'invalid' ? 'that plumo link was incomplete'
-      : `could not connect: ${q.get('reason') || 'unknown error'}`;
+      outcome === 'ok' ? (ws ? `Connected to plumo. This desk is linked to ${ws}.` : 'Connected to plumo')
+      : outcome === 'cancelled' ? 'Plumo sign-in was cancelled'
+      : outcome === 'invalid' ? 'That plumo link was incomplete'
+      : `Could not connect: ${q.get('reason') || 'unknown error'}`;
     this.setState({ pmNotice: notice });
     q.delete('pmLink'); q.delete('workspace'); q.delete('reason');
     const rest = q.toString();
@@ -295,20 +303,20 @@ export default class Console extends React.Component {
   clearDrill = () => this.setState({ drill: null });
   openAccount = () => this.setState({ screen: 'account', menu: null });
   SETTINGS_CARDS = [
-    { v: 'team', name: 'team & users', meta: '8 people · 2 teams', blurb: 'who is here, what they can reach, and who is available right now.' },
-    { v: 'sla', name: 'sla policies', meta: '3 policies', blurb: 'response and resolution targets, by priority.' },
-    { v: 'hours', name: 'business hours', meta: 'mon–fri · europe/lisbon', blurb: 'when the clocks run, and the days they rest.' },
-    { v: 'canned', name: 'canned responses', meta: '5 saved', blurb: 'words worth keeping, so nobody writes them twice.' },
-    { v: 'tags', name: 'tags', meta: '6 tags', blurb: 'how tickets get sorted, and the colours they wear.' },
-    { v: 'hooks', name: 'webhooks', meta: '3 endpoints · 1 failing', blurb: 'where plumo tells other systems what happened.' },
-    { v: 'keys', name: 'api keys', meta: '3 keys', blurb: 'secrets, kept softly — shown once and never again.' },
-    { v: 'email', name: 'email & channels', meta: '3 connected', blurb: 'where conversations arrive, and who they look like they are from.' },
+    { v: 'team', name: 'Team & users', meta: '8 people · 2 teams', blurb: 'Who is here, what they can reach, and who is available right now.' },
+    { v: 'sla', name: 'SLA policies', meta: '3 policies', blurb: 'Response and resolution targets, by priority.' },
+    { v: 'hours', name: 'Business hours', meta: 'Mon–Fri · Europe/Lisbon', blurb: 'When the clocks run, and the days they rest.' },
+    { v: 'canned', name: 'Canned responses', meta: '5 saved', blurb: 'Words worth keeping, so nobody writes them twice.' },
+    { v: 'tags', name: 'Tags', meta: '6 tags', blurb: 'How tickets get sorted, and the colours they wear.' },
+    { v: 'hooks', name: 'Webhooks', meta: '3 endpoints · 1 failing', blurb: 'Where plumo tells other systems what happened.' },
+    { v: 'keys', name: 'API keys', meta: '3 keys', blurb: 'Secrets are shown once and never again.' },
+    { v: 'email', name: 'Email & channels', meta: '3 connected', blurb: 'Where conversations arrive, and who they look like they are from.' },
   ];
 
   searchRef = React.createRef();
   replyRef = React.createRef();
   threadRef = React.createRef();
-  mock = (e) => this.toast((e.currentTarget.dataset || {}).msg || 'noted ✿');
+  mock = (e) => this.toast((e.currentTarget.dataset || {}).msg || 'Saved');
   keyBuf = '';
 
   async componentDidMount() {
@@ -354,7 +362,7 @@ export default class Console extends React.Component {
     } catch (e) {
       this.setState({ booted: true, loggedIn: false });
       this.pingService();
-      if (e?.offline) this.toast("can't reach the server — is the backend running?", 'bad');
+      if (e?.offline) this.toast('Network error. Please check your connection.', 'bad');
     }
   }
 
@@ -473,19 +481,19 @@ export default class Console extends React.Component {
     if (h < 48) return h + 'h ' + String(m % 60).padStart(2, '0') + 'm';
     return Math.floor(h / 24) + 'd';
   }
-  clock(at) { return new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).toLowerCase(); }
+  clock(at) { return new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
   sla(t) {
     if (!t) return { label: '—', tone: 'neutral', title: '' };
-    if (t.status === 'resolved' || t.status === 'closed') return { label: 'met', tone: 'sla-met', title: 'closed within target' };
-    if (t.sla.paused) return { label: 'paused', tone: 'sla-paused', title: 'clock paused while pending' };
+    if (t.status === 'resolved' || t.status === 'closed') return { label: 'Met', tone: 'sla-met', title: 'Closed within target' };
+    if (t.sla.paused) return { label: 'Paused', tone: 'sla-paused', title: 'Clock paused while pending' };
     const fr = t.sla.firstResponse, res = t.sla.resolution;
     const first = fr.metAt == null;
     const due = first ? fr.dueAt : res.dueAt;
     // no policy attached — nothing to count down
-    if (due == null) return { label: '—', tone: 'neutral', title: 'no sla policy applies' };
+    if (due == null) return { label: '—', tone: 'neutral', title: 'No SLA policy applies' };
     const left = due - this.state.now;
     const d = this.dur(Math.abs(left));
-    const what = first ? 'first response' : 'resolution';
+    const what = first ? 'First response' : 'Resolution';
     if (left < 0) return { label: '−' + d, tone: 'sla-breach', title: what + ' overdue by ' + d };
     if (left <= 1800000) return { label: d, tone: 'sla-due', title: what + ' due in ' + d };
     return { label: d, tone: 'sla-ok', title: what + ' due ' + this.clock(due) };
@@ -555,10 +563,10 @@ export default class Console extends React.Component {
   async navTo(screen) {
     if (this.dirty() && this.state.screen === 'ticket') {
       const ok = await this.confirm({
-        title: 'leave this reply behind?',
-        message: "you've written something that hasn't been sent yet. it'll still be here if you stay.",
-        confirmLabel: 'leave anyway',
-        cancelLabel: 'keep it as is',
+        title: 'Discard this reply?',
+        message: "You have written something that has not been sent yet. It will still be here if you stay.",
+        confirmLabel: 'Discard',
+        cancelLabel: 'Keep editing',
         danger: true,
       });
       if (!ok) return;
@@ -626,10 +634,10 @@ export default class Console extends React.Component {
     this.setState({ ticket: { ...t, botEnabled: next } });
     try {
       await this.api.setBotEnabled(t.id, next);
-      this.toast(next ? 'the assistant can reply again' : 'the assistant is silenced — this one is yours');
+      this.toast(next ? 'The assistant can reply again' : 'The assistant is silenced. This conversation is yours.');
     } catch {
       this.setState((st) => (st.ticket ? { ticket: { ...st.ticket, botEnabled: !next } } : null));
-      this.toast("couldn't change that — try again in a moment", 'bad');
+      this.toast('Failed to update. Please try again.', 'bad');
     }
   };
 
@@ -652,7 +660,7 @@ export default class Console extends React.Component {
   toggleMobileSearch = () => this.setState(s => ({ mobileSearch: !s.mobileSearch }));
   setTicketPane = (pane) => this.setState({ ticketPane: pane });
   refresh = () => this.loadQueue({ noFail: true });
-  saveView = () => this.toast("view saved — it's in your tabs now ✿");
+  saveView = () => this.toast('View saved successfully!');
   toggleFacet = (e) => {
     const k = e.currentTarget.dataset.k, v = e.currentTarget.dataset.v;
     if (k === 'tag') { this.setState(s => ({ f: { ...s.f, tag: s.f.tag === v ? null : v }, page: 0 }), () => this.loadQueue({ noFail: true })); return; }
@@ -695,30 +703,30 @@ export default class Console extends React.Component {
   };
   toggleAll = () => this.setState(s => ({ sel: s.sel.length === s.rows.length ? [] : s.rows.map(r => r.id) }));
   clearSel = () => this.setState({ sel: [] });
-  quickAssign = (e) => { e.stopPropagation(); this.patch(e.currentTarget.dataset.id, { assigneeId: this.me().id }, 'assigned to you'); };
-  quickStatus = (e) => { e.stopPropagation(); this.patch(e.currentTarget.dataset.id, { status: 'pending' }, 'set to pending'); };
+  quickAssign = (e) => { e.stopPropagation(); this.patch(e.currentTarget.dataset.id, { assigneeId: this.me().id }, 'Assigned to you'); };
+  quickStatus = (e) => { e.stopPropagation(); this.patch(e.currentTarget.dataset.id, { status: 'pending' }, 'Set to pending'); };
   quickOpen = (e) => { e.stopPropagation(); this.openTicket(e.currentTarget.dataset.id); };
-  bulkAssign = () => this.bulk({ assigneeId: this.me().id }, 'assigned to you');
-  bulkPending = () => this.bulk({ status: 'pending' }, 'set to pending');
+  bulkAssign = () => this.bulk({ assigneeId: this.me().id }, 'Assigned to you');
+  bulkPending = () => this.bulk({ status: 'pending' }, 'Set to pending');
   bulkTag = () => {
     const ids = this.state.sel, rows = this.state.rows;
     this.setState(s => ({ rows: s.rows.map(r => ids.includes(r.id) && !r.tags.includes('urgent') ? { ...r, tags: [...r.tags, 'urgent'] } : r), sel: [] }));
     ids.forEach(id => { const r = rows.find(x => x.id === id); if (r) this.api.patchTicket(id, { tags: Array.from(new Set([...r.tags, 'urgent'])) }); });
-    this.toast(ids.length + ' flagged for a look ✿');
+    this.toast(ids.length + ' flagged for review');
   };
   bulkClose = async () => {
     const n = this.state.sel.length;
     const ok = await this.confirm({
-      title: 'close ' + n + ' ' + (n === 1 ? 'conversation' : 'conversations') + '?',
-      message: "the people on the other end will hear it's wrapped up. they can reopen anytime — nothing is final here.",
-      confirmLabel: 'close them',
-      cancelLabel: 'keep it as is',
+      title: 'Close ' + n + ' ' + (n === 1 ? 'conversation' : 'conversations') + '?',
+      message: "The people on the other end will be told it is wrapped up. They can reopen it at any time.",
+      confirmLabel: 'Close',
+      cancelLabel: 'Cancel',
       // No `danger` — PM reserves the red button for what cannot be undone
       // (`users/page.tsx:426` remove vs `:454` reactivate). Closing is
       // reversible, and the sentence above says so.
     });
     if (!ok) return;
-    return this.bulk({ status: 'closed' }, n + ' closed quietly — reopen anytime');
+    return this.bulk({ status: 'closed' }, n + ' closed successfully');
   };
   async bulk(patch, label) {
     const ids = this.state.sel, prev = this.state.rows;
@@ -726,8 +734,8 @@ export default class Console extends React.Component {
     try {
       if (this.state.failMode) this.api.simulateNextFailure();
       await Promise.all(ids.map(id => this.api.patchTicket(id, patch)));
-      this.toast(label + ' ✿'); this.loadCounts();
-    } catch (e) { this.setState({ rows: prev }); this.toast("that didn't stick — your work is safe, try again in a moment", 'bad'); }
+      this.toast(label); this.loadCounts();
+    } catch (e) { this.setState({ rows: prev }); this.toast('Failed to save changes. Please try again.', 'bad'); }
   }
 
   async patch(id, patch, label) {
@@ -743,11 +751,11 @@ export default class Console extends React.Component {
     try {
       if (this.state.failMode) this.api.simulateNextFailure();
       await this.api.patchTicket(id, patch);
-      if (label) this.toast(label + ' ✿');
+      if (label) this.toast(label);
       this.loadCounts();
     } catch (e) {
       this.setState({ rows: prevRows, ticket: prevT });
-      this.toast("hmm, that didn't save. your work is safe — we'll try again in a moment", 'bad');
+      this.toast('Failed to save changes. Please try again.', 'bad');
     }
   }
   /* The five setters below take a value, not an event. `Dropdown` owns its own
@@ -756,31 +764,31 @@ export default class Console extends React.Component {
      also how PM calls them (`IssueSidebar.tsx:194`). The three that still read
      `e.currentTarget.dataset` (`setAssignee`, `setAssigneeFilter`, the facet
      toggles) are the panels that stayed hand-rolled. */
-  setStatus = (v) => { this.patch(this.state.ticket.id, { status: v }, 'status is now ' + v); };
-  setPriority = (v) => { this.patch(this.state.ticket.id, { priority: v }, 'priority is now ' + v); };
+  setStatus = (v) => { this.patch(this.state.ticket.id, { status: v }, 'Status updated successfully!'); };
+  setPriority = (v) => { this.patch(this.state.ticket.id, { priority: v }, 'Priority updated successfully!'); };
   setAssignee = (e) => {
     const v = e.currentTarget.dataset.v || null;
     const a = this.agent(v);
-    this.patch(this.state.ticket.id, { assigneeId: v }, a ? "i'll pass it to " + a.name.split(' ')[0].toLowerCase() : 'back to no one');
+    this.patch(this.state.ticket.id, { assigneeId: v }, a ? 'Assigned to ' + a.name.split(' ')[0] : 'Unassigned');
   };
-  unassign = () => this.patch(this.state.ticket.id, { assigneeId: null }, 'back to no one');
-  assignMe = () => this.patch(this.state.ticket.id, { assigneeId: this.me().id }, 'assigned to you');
-  setTeam = (v) => { this.patch(this.state.ticket.id, { teamId: v }, 'handed to another team'); };
+  unassign = () => this.patch(this.state.ticket.id, { assigneeId: null }, 'Unassigned');
+  assignMe = () => this.patch(this.state.ticket.id, { assigneeId: this.me().id }, 'Assigned to you');
+  setTeam = (v) => { this.patch(this.state.ticket.id, { teamId: v }, 'Team updated successfully'); };
   addTag = (v) => {
     const t = this.state.ticket;
     if (!t || t.tags.includes(v)) return;
-    this.patch(t.id, { tags: [...t.tags, v] }, 'tagged ' + v);
+    this.patch(t.id, { tags: [...t.tags, v] }, 'Tag added');
   };
   removeTag = (e) => {
     const v = e.currentTarget.dataset.v, t = this.state.ticket;
-    this.patch(t.id, { tags: t.tags.filter(x => x !== v) }, 'removed ' + v);
+    this.patch(t.id, { tags: t.tags.filter(x => x !== v) }, 'Tag removed');
   };
   editSubject = () => this.setState(s => ({ subjEdit: true, subjDraft: s.ticket.subject }));
   onSubjDraft = (e) => this.setState({ subjDraft: e.target.value });
   saveSubject = () => {
     const v = this.state.subjDraft.trim();
     this.setState({ subjEdit: false });
-    if (v && v !== this.state.ticket.subject) this.patch(this.state.ticket.id, { subject: v }, 'subject updated');
+    if (v && v !== this.state.ticket.subject) this.patch(this.state.ticket.id, { subject: v }, 'Subject updated successfully');
   };
   onSubjKey = (e) => { if (e.key === 'Enter') this.saveSubject(); if (e.key === 'Escape') this.setState({ subjEdit: false }); };
 
@@ -790,7 +798,7 @@ export default class Console extends React.Component {
     const id = e.currentTarget.dataset.v;
     const r = this.api.cannedResponses.find(x => x.id === id);
     const t = this.state.ticket;
-    const body = r.body.replace('{{name}}', this.cust(t.customerId).name.split(' ')[0].toLowerCase());
+    const body = r.body.replace('{{name}}', this.cust(t.customerId).name.split(' ')[0]);
     this.setState(s => ({ draft: (s.draft ? s.draft + '\n\n' : '') + body, menu: null }), () => { if (this.replyRef.current) this.replyRef.current.focus(); });
   };
   async send(then) {
@@ -811,11 +819,11 @@ export default class Console extends React.Component {
           sla: { ...s.ticket.sla, firstResponse: { ...s.ticket.sla.firstResponse, metAt: internal ? s.ticket.sla.firstResponse.metAt : (s.ticket.sla.firstResponse.metAt || Date.now()) } },
         },
       }));
-      this.toast(internal ? 'note added — only your team can see it' : 'sent ✿');
-      if (then) this.patch(t.id, { status: then }, 'status is now ' + then);
+      this.toast(internal ? 'Note added. Only your team can see it.' : 'Reply sent successfully!');
+      if (then) this.patch(t.id, { status: then }, 'Status updated successfully!');
     } catch (e) {
       this.setState(s => ({ sending: false, draft: body, ticket: { ...s.ticket, thread: s.ticket.thread.filter(i => i.id !== tmp.id) } }));
-      this.toast("that didn't send. your words are still here — try again in a moment", 'bad');
+      this.toast('Failed to send. Your message is still here. Please try again.', 'bad');
     }
   }
   onSend = () => this.send(null);
@@ -857,52 +865,52 @@ export default class Console extends React.Component {
     // Field-level, not a toast: the complaint belongs under the field it is
     // about, and it has to still be there while the field is being corrected.
     if (!s.newSubject.trim()) {
-      this.setState({ newError: { field: 'subject', text: 'a line about what happened helps us route it — anything is fine' } });
+      this.setState({ newError: { field: 'subject', text: 'Please enter a subject' } });
       return;
     }
     if (!s.newCustomer) {
-      this.setState({ newError: { field: 'customer', text: "pick who this is for and we'll open it" } });
+      this.setState({ newError: { field: 'customer', text: 'Please select a customer' } });
       return;
     }
     this.setState({ newT: false, newError: null });
     try {
-      const t = await this.api.createTicket({ subject: s.newSubject.trim().toLowerCase(), customerId: s.newCustomer, priority: s.newPriority, body: s.newBody });
+      const t = await this.api.createTicket({ subject: s.newSubject.trim(), customerId: s.newCustomer, priority: s.newPriority, body: s.newBody });
       this.setState({ newSubject: '', newBody: '' });
-      this.toast('conversation #' + t.num + ' started ✿');
+      this.toast('Conversation #' + t.num + ' created successfully!');
       this.loadCounts(); this.openTicket(t.id);
-    } catch (e) { this.toast("couldn't create that one — try again in a moment", 'bad'); }
+    } catch (e) { this.toast('Failed to create the conversation. Please try again.', 'bad'); }
   };
   askDelete = async () => {
     this.setState({ menu: null });
     const ok = await this.confirm({
-      title: 'delete this conversation?',
-      message: "this one can't be undone — the whole thread goes with it. if you're unsure, closing it is gentler; closed conversations can always be reopened.",
-      confirmLabel: 'delete it',
-      cancelLabel: 'keep it as is',
+      title: 'Delete this conversation?',
+      message: "This cannot be undone. The whole thread goes with it. If you are unsure, close it instead. Closed conversations can always be reopened.",
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
       danger: true,
     });
     if (!ok) return;
     const id = this.state.ticket?.id;
     if (!id) return;
     return this.api.deleteTicket(id)
-      .then(() => { this.toast('deleted'); this.reallyNav('queue'); this.loadCounts(); })
-      .catch((e) => this.toast(e?.status === 403 ? 'deleting needs an admin' : "that didn't work — try again in a moment", 'bad'));
+      .then(() => { this.toast('Conversation deleted successfully!'); this.reallyNav('queue'); this.loadCounts(); })
+      .catch((e) => this.toast(e?.status === 403 ? 'Deleting requires an admin' : 'Failed to delete. Please try again.', 'bad'));
   };
   askSpam = async () => {
     this.setState({ menu: null });
     const ok = await this.confirm({
-      title: 'mark as spam?',
-      message: "we'll move it out of the queue and learn from it. you can pull it back from the spam view.",
-      confirmLabel: 'mark spam',
-      cancelLabel: 'keep it as is',
+      title: 'Mark as spam?',
+      message: "This will be moved out of the queue. You can pull it back from the spam view.",
+      confirmLabel: 'Mark as spam',
+      cancelLabel: 'Cancel',
       danger: true,
     });
     if (!ok) return;
-    this.toast('marked as spam');
+    this.toast('Marked as spam');
     this.reallyNav('queue');
   };
-  copyLink = () => { this.setState({ menu: null }); this.toast('link copied to your clipboard'); };
-  mergeTicket = () => { this.setState({ menu: null }); this.toast('the merge picker opens here in the real app'); };
+  copyLink = () => { this.setState({ menu: null }); this.toast('Link copied!'); };
+  mergeTicket = () => { this.setState({ menu: null }); this.toast('The merge picker opens here in the real app'); };
   onKeyName = (e) => this.setState({ keyName: e.target.value });
   setKeyKind = (e) => this.setState({ keyKind: e.currentTarget.dataset.v });
 
@@ -915,20 +923,20 @@ export default class Console extends React.Component {
    * intentions are harder to get wrong than seven checkboxes.
    */
   KEY_KINDS = {
-    chatbot: { label: 'chatbot', scopes: ['chat:write', 'chat:read'], hint: 'open conversations, post turns, hand off' },
-    readonly: { label: 'read-only', scopes: ['tickets:read', 'reports:read'], hint: 'dashboards and exports; cannot write' },
-    integration: { label: 'integration', scopes: ['tickets:read', 'tickets:write', 'customers:read', 'customers:write'], hint: 'full ticket and customer access' },
+    chatbot: { label: 'Chatbot', scopes: ['chat:write', 'chat:read'], hint: 'Open conversations, post turns, hand off' },
+    readonly: { label: 'Read-only', scopes: ['tickets:read', 'reports:read'], hint: 'Dashboards and exports; cannot write' },
+    integration: { label: 'Integration', scopes: ['tickets:read', 'tickets:write', 'customers:read', 'customers:write'], hint: 'Full ticket and customer access' },
   };
 
   genKey = async () => {
     const kind = this.KEY_KINDS[this.state.keyKind] ?? this.KEY_KINDS.chatbot;
     const name = this.state.keyName.trim();
-    if (!name) { this.toast('give the key a name so you can tell them apart later', 'bad'); return; }
+    if (!name) { this.toast('Please give the key a name', 'bad'); return; }
     try {
       const secret = await this.api.generateApiKey({ name, scopes: kind.scopes });
       this.setState({ secret, keyName: '' });
     } catch {
-      this.toast("couldn't generate a key — admin only", 'bad');
+      this.toast('Failed to generate a key. Admin only.', 'bad');
     }
   };
 
@@ -937,9 +945,9 @@ export default class Console extends React.Component {
     try {
       await this.api.revokeApiKey(id);
       this.forceUpdate();
-      this.toast('key revoked — it stops working immediately');
+      this.toast('Key revoked successfully');
     } catch {
-      this.toast("couldn't revoke that key — try again", 'bad');
+      this.toast('Failed to revoke the key. Please try again.', 'bad');
     }
   };
 
@@ -949,10 +957,10 @@ export default class Console extends React.Component {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      this.toast('copied — store it now, we cannot show it again');
+      this.toast('Copied! Store it now. It cannot be shown again.');
     } catch {
       // clipboard needs a secure context and permission; say so rather than lie
-      this.toast('select the key and copy it manually', 'bad');
+      this.toast('Please select the key and copy it manually', 'bad');
     }
   };
   hideKey = () => this.setState({ secret: null });
@@ -967,9 +975,9 @@ export default class Console extends React.Component {
    */
 
   ROLE_OPTIONS = [
-    { value: 'agent', label: 'agent · answers conversations' },
-    { value: 'lead', label: 'lead · agent, plus their team' },
-    { value: 'admin', label: 'admin · everything, settings included' },
+    { value: 'agent', label: 'Agent · answers conversations' },
+    { value: 'lead', label: 'Lead · agent, plus their team' },
+    { value: 'admin', label: 'Admin · everything, settings included' },
   ];
 
   async loadInvites() {
@@ -998,7 +1006,7 @@ export default class Console extends React.Component {
     // Say the obvious thing before the round trip; everything else is the
     // server's to judge — already a member, already invited, not an admin.
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      this.setState({ inviteError: "that address doesn't look quite right — have another look" });
+      this.setState({ inviteError: 'Please enter a valid email address' });
       return;
     }
     this.setState({ inviteBusy: true, inviteError: '' });
@@ -1007,15 +1015,15 @@ export default class Console extends React.Component {
         email, role: this.state.inviteRole, teamId: this.state.inviteTeam || undefined,
       });
       this.setState({ inviteOpen: false, inviteBusy: false, inviteEmail: '' });
-      this.toast('invitation on its way to ' + (inv?.email || email) + ' ✿');
+      this.toast('Invitation sent to ' + (inv?.email || email));
       this.loadInvites();
     } catch (e) {
       this.setState({
         inviteBusy: false,
         inviteError:
-          e?.status === 0 ? "can't reach the server — nothing was sent"
-          : e?.status === 403 ? 'inviting people is an admin thing — ask one of yours'
-          : e?.message || "that didn't send — try again in a moment",
+          e?.status === 0 ? 'Network error. Nothing was sent.'
+          : e?.status === 403 ? 'Inviting people requires an admin'
+          : e?.message || 'Failed to send the invitation. Please try again.',
       });
     }
   };
@@ -1023,19 +1031,19 @@ export default class Console extends React.Component {
   revokeInvite = async (e) => {
     const { id, email } = e.currentTarget.dataset;
     const ok = await this.confirm({
-      title: 'revoke the invitation to ' + email + '?',
-      message: "their link stops working straight away. nothing else changes, and you can invite them again whenever you like.",
-      confirmLabel: 'revoke it',
-      cancelLabel: 'keep it as is',
+      title: 'Revoke the invitation to ' + email + '?',
+      message: "Their link stops working straight away. Nothing else changes, and you can invite them again at any time.",
+      confirmLabel: 'Revoke',
+      cancelLabel: 'Cancel',
       danger: true,
     });
     if (!ok) return;
     try {
       await this.api.revokeInvitation(id);
       this.setState((s) => ({ invites: s.invites.filter((i) => i.id !== id) }));
-      this.toast('revoked — that link no longer opens anything');
+      this.toast('Invitation revoked successfully');
     } catch (err) {
-      this.toast(err?.message || "couldn't revoke that one — try again in a moment", 'bad');
+      this.toast(err?.message || 'Failed to revoke the invitation. Please try again.', 'bad');
     }
   };
 
@@ -1052,9 +1060,9 @@ export default class Console extends React.Component {
    */
 
   /** The server's own words, with kinder phrasing for the two we can predict. */
-  apiMessage(e, fallback = "that didn't save — try again in a moment") {
-    if (e?.status === 0) return "can't reach the server — nothing was saved";
-    if (e?.status === 403) return 'that one needs an admin — ask one of yours';
+  apiMessage(e, fallback = 'Failed to save changes. Please try again.') {
+    if (e?.status === 0) return 'Network error. Nothing was saved.';
+    if (e?.status === 403) return 'That action requires an admin';
     return e?.message || fallback;
   }
 
@@ -1098,7 +1106,7 @@ export default class Console extends React.Component {
     } catch (e) {
       // Say the panel is stale rather than presenting bootstrap's copy as current.
       this.setState((s) => ({
-        settingsErr: { ...s.settingsErr, [tab]: this.apiMessage(e, "couldn't load these just now") },
+        settingsErr: { ...s.settingsErr, [tab]: this.apiMessage(e, 'Failed to load data') },
       }));
     }
   };
@@ -1120,7 +1128,7 @@ export default class Console extends React.Component {
     this.forceUpdate();
   }
 
-  teamChoices(noneLabel = 'no team for now') {
+  teamChoices(noneLabel = 'No team for now') {
     return [{ value: '', label: noneLabel }].concat(
       (this.api ? this.api.teams : []).map((x) => ({ value: x.id, label: x.name })),
     );
@@ -1137,19 +1145,19 @@ export default class Console extends React.Component {
   askDeactivate = async (e) => {
     const { id, name } = e.currentTarget.dataset;
     const ok = await this.confirm({
-      title: 'deactivate ' + name + '?',
-      message: "they lose access to this desk straight away and are signed out. their replies stay on every ticket, and you can invite them back any time.",
-      confirmLabel: 'deactivate',
-      cancelLabel: 'keep it as is',
+      title: 'Deactivate ' + name + '?',
+      message: "They lose access to this desk straight away and are signed out. Their replies stay on every ticket, and you can invite them back at any time.",
+      confirmLabel: 'Deactivate',
+      cancelLabel: 'Cancel',
       danger: true,
     });
     if (!ok) return;
     try {
       await api.users.deactivate(id);
       this.syncAgent(id, null);
-      this.toast(name + ' no longer has access to this desk');
+      this.toast(name + ' deactivated successfully');
     } catch (err) {
-      this.toast(this.apiMessage(err, "couldn't deactivate them — nothing changed"), 'bad');
+      this.toast(this.apiMessage(err, 'Failed to deactivate the user'), 'bad');
     }
   };
 
@@ -1164,12 +1172,12 @@ export default class Console extends React.Component {
    */
   EDITORS = {
     user: {
-      title: (m) => 'edit ' + m.name,
-      ok: 'save',
-      note: 'role and team belong to this desk only — changing them here does not touch any other workspace they are a member of.',
+      title: (m) => 'Edit ' + m.name,
+      ok: 'Save',
+      note: 'Role and team belong to this desk only. Changing them here does not touch any other workspace they are a member of.',
       fields: () => [
-        { name: 'role', kind: 'select', label: 'role', options: this.ROLE_OPTIONS },
-        { name: 'teamId', kind: 'select', label: 'team', options: this.teamChoices() },
+        { name: 'role', kind: 'select', label: 'Role', options: this.ROLE_OPTIONS },
+        { name: 'teamId', kind: 'select', label: 'Team', options: this.teamChoices() },
       ],
       initial: (m) => ({ role: m.role, teamId: m.teamId || '' }),
       submit: async (v, m) => {
@@ -1178,28 +1186,28 @@ export default class Console extends React.Component {
         // null, not undefined: an explicit null is how the team is cleared, and
         // @IsOptional lets it through to reach the update.
         if ((v.teamId || null) !== (m.teamId || null)) patch.teamId = v.teamId || null;
-        if (!Object.keys(patch).length) return 'nothing changed';
+        if (!Object.keys(patch).length) return 'Nothing changed';
         const after = await api.users.patch(m.id, patch);
         this.syncAgent(m.id, { role: after.role, team: after.teamId });
-        return m.name + ' updated';
+        return m.name + ' updated successfully';
       },
     },
 
     'sla-new': {
-      title: () => 'new sla policy',
-      ok: 'create the policy',
-      note: 'targets are written as 30m, 4h or 2d. priority is fixed when the policy is created.',
+      title: () => 'New SLA policy',
+      ok: 'Create policy',
+      note: 'Targets are written as 30m, 4h or 2d. Priority is fixed when the policy is created.',
       fields: () => [
-        { name: 'name', kind: 'text', label: 'name', placeholder: 'weekend cover' },
-        { name: 'priority', kind: 'select', label: 'applies to priority', options: PRIORITY_OPTIONS },
-        { name: 'first', kind: 'text', label: 'first response target', placeholder: '30m' },
-        { name: 'resolution', kind: 'text', label: 'resolution target', placeholder: '6h' },
+        { name: 'name', kind: 'text', label: 'Name', placeholder: 'Weekend cover' },
+        { name: 'priority', kind: 'select', label: 'Applies to priority', options: PRIORITY_OPTIONS },
+        { name: 'first', kind: 'text', label: 'First response target', placeholder: '30m' },
+        { name: 'resolution', kind: 'text', label: 'Resolution target', placeholder: '6h' },
       ],
       initial: () => ({ name: '', priority: 'normal', first: '', resolution: '' }),
       validate: (v) =>
-        !v.name.trim() ? 'give the policy a name so you can tell them apart'
-        : MINS(v.first) == null ? 'the first response target should read like 30m, 4h or 2d'
-        : MINS(v.resolution) == null ? 'the resolution target should read like 30m, 4h or 2d'
+        !v.name.trim() ? 'Name is required'
+        : MINS(v.first) == null ? 'The first response target should read like 30m, 4h or 2d'
+        : MINS(v.resolution) == null ? 'The resolution target should read like 30m, 4h or 2d'
         : '',
       submit: async (v) => {
         await api.slaPolicies.create({
@@ -1207,26 +1215,26 @@ export default class Console extends React.Component {
           firstResponseMins: MINS(v.first), resolutionMins: MINS(v.resolution),
         });
         await this.loadSettingsTab('sla');
-        return 'policy created';
+        return 'Policy created successfully';
       },
     },
 
     'sla-edit': {
-      title: (m) => 'edit ' + m.name,
-      ok: 'save',
+      title: (m) => 'Edit ' + m.name,
+      ok: 'Save',
       // priority is absent from UpdateSlaPolicyDto, so it is absent here too
       // rather than offered as a field the server would silently ignore.
-      note: 'priority cannot be changed after a policy exists — create another one instead.',
+      note: 'Priority cannot be changed after a policy exists. Create another one instead.',
       fields: () => [
-        { name: 'name', kind: 'text', label: 'name' },
-        { name: 'first', kind: 'text', label: 'first response target', placeholder: '30m' },
-        { name: 'resolution', kind: 'text', label: 'resolution target', placeholder: '6h' },
+        { name: 'name', kind: 'text', label: 'Name' },
+        { name: 'first', kind: 'text', label: 'First response target', placeholder: '30m' },
+        { name: 'resolution', kind: 'text', label: 'Resolution target', placeholder: '6h' },
       ],
       initial: (m) => ({
         name: m.name, first: MINS_TEXT(m.firstResponseMins), resolution: MINS_TEXT(m.resolutionMins),
       }),
       validate: (v) =>
-        !v.name.trim() ? 'a policy needs a name'
+        !v.name.trim() ? 'Name is required'
         : MINS(v.first) == null ? 'the first response target should read like 30m, 4h or 2d'
         : MINS(v.resolution) == null ? 'the resolution target should read like 30m, 4h or 2d'
         : '',
@@ -1235,105 +1243,105 @@ export default class Console extends React.Component {
           name: v.name.trim(), firstResponseMins: MINS(v.first), resolutionMins: MINS(v.resolution),
         });
         await this.loadSettingsTab('sla');
-        return 'policy updated';
+        return 'Policy updated successfully';
       },
     },
 
     'canned-new': {
-      title: () => 'new canned response',
-      ok: 'save the response',
-      note: 'a response for everyone is admin-only; a lead can write one for their own team.',
+      title: () => 'New canned response',
+      ok: 'Save response',
+      note: 'A response for everyone is admin-only; a lead can write one for their own team.',
       fields: () => this.CANNED_FIELDS(),
       initial: () => ({ title: '', body: '', tags: '', teamId: '' }),
-      validate: (v) => (!v.title.trim() ? 'give it a title' : !v.body.trim() ? 'a response needs some words' : ''),
+      validate: (v) => (!v.title.trim() ? 'Title is required' : !v.body.trim() ? 'A response needs some words' : ''),
       submit: async (v) => {
         await api.cannedResponses.create(this.cannedBody(v));
         await this.loadSettingsTab('canned');
-        return 'response saved';
+        return 'Response saved successfully';
       },
     },
 
     'canned-edit': {
-      title: (m) => 'edit ' + m.title,
-      ok: 'save',
+      title: (m) => 'Edit ' + m.title,
+      ok: 'Save',
       fields: () => this.CANNED_FIELDS(),
       initial: (m) => ({
         title: m.title, body: m.body, tags: (m.tags || []).join(', '), teamId: m.teamId || '',
       }),
-      validate: (v) => (!v.title.trim() ? 'give it a title' : !v.body.trim() ? 'a response needs some words' : ''),
+      validate: (v) => (!v.title.trim() ? 'Title is required' : !v.body.trim() ? 'A response needs some words' : ''),
       submit: async (v, m) => {
         await api.cannedResponses.patch(m.id, this.cannedBody(v));
         await this.loadSettingsTab('canned');
-        return 'response updated';
+        return 'Response updated successfully';
       },
     },
 
     'tag-new': {
-      title: () => 'new tag',
-      ok: 'create the tag',
+      title: () => 'New tag',
+      ok: 'Create tag',
       fields: () => [
-        { name: 'key', kind: 'text', label: 'key', placeholder: 'billing', helper: 'lowercase letters, numbers and hyphens — this is what gets stored on a conversation, and it cannot be changed later.' },
-        { name: 'label', kind: 'text', label: 'label', placeholder: 'billing' },
-        { name: 'color', kind: 'text', label: 'colour', placeholder: '#B8CFB4', helper: 'optional.' },
+        { name: 'key', kind: 'text', label: 'Key', placeholder: 'billing', helper: 'Lowercase letters, numbers and hyphens. This is what gets stored on a conversation, and it cannot be changed later.' },
+        { name: 'label', kind: 'text', label: 'Label', placeholder: 'Billing' },
+        { name: 'color', kind: 'text', label: 'Colour', placeholder: '#B8CFB4', helper: 'Optional.' },
       ],
       initial: () => ({ key: '', label: '', color: '' }),
       validate: (v) =>
-        !/^[a-z0-9-]+$/.test(v.key.trim()) ? 'the key can only hold lowercase letters, numbers and hyphens'
-        : !v.label.trim() ? 'give the tag a label' : '',
+        !/^[a-z0-9-]+$/.test(v.key.trim()) ? 'The key can only hold lowercase letters, numbers and hyphens'
+        : !v.label.trim() ? 'Label is required' : '',
       submit: async (v) => {
         await api.tags.create({
           key: v.key.trim(), label: v.label.trim(), color: v.color.trim() || undefined,
         });
         await this.loadSettingsTab('tags');
-        return 'tag created';
+        return 'Tag created successfully';
       },
     },
 
     'tag-edit': {
-      title: (m) => 'edit ' + m.label,
-      ok: 'save',
-      note: 'the key stays as it is — conversations already carry it.',
+      title: (m) => 'Edit ' + m.label,
+      ok: 'Save',
+      note: 'The key stays as it is. Conversations already carry it.',
       fields: () => [
-        { name: 'label', kind: 'text', label: 'label' },
-        { name: 'color', kind: 'text', label: 'colour', placeholder: '#B8CFB4', helper: 'optional.' },
+        { name: 'label', kind: 'text', label: 'Label' },
+        { name: 'color', kind: 'text', label: 'Colour', placeholder: '#B8CFB4', helper: 'Optional.' },
       ],
       initial: (m) => ({ label: m.label, color: m.color || '' }),
-      validate: (v) => (!v.label.trim() ? 'give the tag a label' : ''),
+      validate: (v) => (!v.label.trim() ? 'Label is required' : ''),
       submit: async (v, m) => {
         await api.tags.patch(m.id, { label: v.label.trim(), color: v.color.trim() || undefined });
         await this.loadSettingsTab('tags');
-        return 'tag updated';
+        return 'Tag updated successfully';
       },
     },
 
     'hook-new': {
-      title: () => 'add an endpoint',
-      ok: 'add the endpoint',
-      note: "we'll POST a json body to this url whenever one of the chosen things happens.",
+      title: () => 'Add an endpoint',
+      ok: 'Add endpoint',
+      note: 'A JSON body is POSTed to this URL whenever one of the chosen events happens.',
       fields: () => [
-        { name: 'url', kind: 'text', label: 'endpoint url', placeholder: 'https://example.com/hooks/plumo' },
-        { name: 'events', kind: 'checks', label: 'tell them when', options: WEBHOOK_EVENTS },
-        { name: 'secret', kind: 'text', label: 'signing secret', helper: 'optional — we sign each delivery with it so you can verify us.' },
+        { name: 'url', kind: 'text', label: 'Endpoint URL', placeholder: 'https://example.com/hooks/plumo' },
+        { name: 'events', kind: 'checks', label: 'Notify on', options: WEBHOOK_EVENTS },
+        { name: 'secret', kind: 'text', label: 'Signing secret', helper: 'Optional. Each delivery is signed with it so you can verify us.' },
       ],
       initial: () => ({ url: '', events: [], secret: '' }),
       validate: (v) =>
-        !v.url.trim() ? 'an endpoint needs a url'
-        : !v.events.length ? 'choose at least one thing to be told about' : '',
+        !v.url.trim() ? 'Endpoint URL is required'
+        : !v.events.length ? 'Select at least one event' : '',
       submit: async (v) => {
         await api.webhooks.create({
           url: v.url.trim(), events: v.events, secret: v.secret.trim() || undefined,
         });
         await this.loadSettingsTab('hooks');
-        return 'endpoint added';
+        return 'Endpoint added successfully';
       },
     },
   };
 
   CANNED_FIELDS = () => [
-    { name: 'title', kind: 'text', label: 'title', placeholder: 'refund is on its way' },
-    { name: 'body', kind: 'textarea', label: 'the words', placeholder: 'hi {{name}} — …', helper: '{{name}} becomes the customer’s first name when it is inserted.' },
-    { name: 'tags', kind: 'text', label: 'tags', placeholder: 'billing, refund', helper: 'comma separated; optional.' },
-    { name: 'teamId', kind: 'select', label: 'team', options: this.teamChoices('everyone') },
+    { name: 'title', kind: 'text', label: 'Title', placeholder: 'Refund is on its way' },
+    { name: 'body', kind: 'textarea', label: 'Message', placeholder: 'Hi {{name}}, …', helper: '{{name}} becomes the customer’s first name when it is inserted.' },
+    { name: 'tags', kind: 'text', label: 'Tags', placeholder: 'billing, refund', helper: 'Comma separated. Optional.' },
+    { name: 'teamId', kind: 'select', label: 'Team', options: this.teamChoices('Everyone') },
   ];
 
   cannedBody(v) {
@@ -1382,7 +1390,7 @@ export default class Console extends React.Component {
     try {
       const said = await def.submit(ed.values, ed.meta);
       this.setState({ editor: null, editorBusy: false });
-      this.toast(said + ' ✿');
+      this.toast(said);
     } catch (e) {
       // Stay open and keep what they typed. Closing on failure is how a form
       // ends up looking like it saved.
@@ -1405,7 +1413,7 @@ export default class Console extends React.Component {
     return rows.find(match) ?? null;
   }
   missingRow(tab) {
-    this.toast(this.state.settingsErr[tab] || 'still fetching these — try again in a moment', 'bad');
+    this.toast(this.state.settingsErr[tab] || 'Still loading these. Please try again in a moment.', 'bad');
   }
 
   editUser = (e) => {
@@ -1453,7 +1461,7 @@ export default class Console extends React.Component {
     } catch (e) {
       // The checkbox is bound to server state, so it snaps back on its own.
       this.setState({ hoursBusy: false });
-      this.toast(this.apiMessage(e, "couldn't change the schedule"), 'bad');
+      this.toast(this.apiMessage(e, 'Failed to update the schedule'), 'bad');
       return false;
     }
   }
@@ -1472,17 +1480,17 @@ export default class Console extends React.Component {
     const weekly = { ...(row.weeklyJson || {}) };
     const sample = Object.values(weekly).find((w) => Array.isArray(w) && w.length) || [['09:00', '17:00']];
     weekly[day] = on ? [[...sample[0]]] : [];
-    this.writeHours({ weeklyJson: weekly }, on ? 'that day counts again' : 'the clocks rest that day now');
+    this.writeHours({ weeklyJson: weekly }, on ? 'That day counts again' : 'The clocks rest that day now');
   };
   onHolidayDraft = (e) => this.setState({ holidayDraft: e.target.value });
   addHoliday = async () => {
     const date = this.state.holidayDraft;
-    if (!date) { this.toast('pick a date first', 'bad'); return; }
+    if (!date) { this.toast('Please pick a date first', 'bad'); return; }
     const row = this.hoursRow();
     if (!row) { this.missingRow('hours'); return; }
     const list = Array.isArray(row.holidaysJson) ? row.holidaysJson : [];
-    if (list.includes(date)) { this.toast('that day is already a holiday', 'bad'); return; }
-    const ok = await this.writeHours({ holidaysJson: [...list, date].sort() }, 'holiday added — the clocks rest that day');
+    if (list.includes(date)) { this.toast('That day is already a holiday', 'bad'); return; }
+    const ok = await this.writeHours({ holidaysJson: [...list, date].sort() }, 'Holiday added successfully');
     if (ok) this.setState({ holidayDraft: '' });
   };
   removeHoliday = (e) => {
@@ -1490,7 +1498,7 @@ export default class Console extends React.Component {
     const row = this.hoursRow();
     if (!row) { this.missingRow('hours'); return; }
     const list = (Array.isArray(row.holidaysJson) ? row.holidaysJson : []).filter((d) => d !== date);
-    this.writeHours({ holidaysJson: list }, 'holiday removed — that day works again');
+    this.writeHours({ holidaysJson: list }, 'Holiday removed successfully');
   };
 
   /* ---- inbound address ---- */
@@ -1509,12 +1517,12 @@ export default class Console extends React.Component {
         inboundDraft: res?.inboundEmail ?? '', inboundBusy: false,
       }));
       this.toast(res?.inboundEmail
-        ? 'this desk now receives mail at ' + res.inboundEmail
-        : 'inbound mail is switched off for this desk');
+        ? 'This desk now receives mail at ' + res.inboundEmail
+        : 'Inbound mail is switched off for this desk');
     } catch (e) {
       this.setState({
         inboundBusy: false,
-        inboundError: this.apiMessage(e, "couldn't save that address"),
+        inboundError: this.apiMessage(e, 'Failed to save that address'),
       });
     }
   };
@@ -1533,15 +1541,15 @@ export default class Console extends React.Component {
     if (v === this.state.avail) return;
     this.setState({ avail: v });
     this.api.setAvailability(v)
-      .then(() => this.toast("you're " + v + ' now'))
-      .catch(() => this.setState({ avail: v === 'available' ? 'away' : 'available' }, () => this.toast("that didn't save — try again in a moment", 'bad')));
+      .then(() => this.toast('You are now ' + v))
+      .catch(() => this.setState({ avail: v === 'available' ? 'away' : 'available' }, () => this.toast('Failed to save changes. Please try again.', 'bad')));
   };
   toggleAvail = () => {
     const next = this.state.avail === 'available' ? 'away' : 'available';
     this.setState({ avail: next, menu: null });
     this.api.setAvailability(next)
-      .then(() => this.toast("you're " + next + ' now'))
-      .catch(() => this.setState({ avail: next === 'available' ? 'away' : 'available' }, () => this.toast("that didn't save — try again in a moment", 'bad')));
+      .then(() => this.toast('You are now ' + next))
+      .catch(() => this.setState({ avail: next === 'available' ? 'away' : 'available' }, () => this.toast('Failed to save changes. Please try again.', 'bad')));
   };
   signOut = () => {
     this.api.logout().catch(() => {});
@@ -1565,7 +1573,7 @@ export default class Console extends React.Component {
       // why every failure rendered the same sentence. `?? true` keeps the old
       // shape for a throw that carries nothing — that function takes either.
       this.setState({ loginError: e ?? true });
-      if (e?.offline) this.toast("can't reach the server — is the backend running?", 'bad');
+      if (e?.offline) this.toast('Network error. Please check your connection.', 'bad');
     }
   };
   onLoginEmail = (e) => this.setState({ loginEmail: e.target.value, loginError: false });
@@ -1621,7 +1629,7 @@ export default class Console extends React.Component {
       if (!row) return;
       if (e.key === 'Enter') { e.preventDefault(); this.openTicket(row.id); return; }
       if (e.key === 'e') { e.preventDefault(); this.patch(row.id, { status: row.status === 'pending' ? 'open' : 'pending' }, 'status changed'); return; }
-      if (e.key === 'a') { e.preventDefault(); this.patch(row.id, { assigneeId: this.me().id }, 'assigned to you'); return; }
+      if (e.key === 'a') { e.preventDefault(); this.patch(row.id, { assigneeId: this.me().id }, 'Assigned to you'); return; }
       if (e.key === 'x') { e.preventDefault(); this.setState(s => ({ sel: s.sel.includes(row.id) ? s.sel.filter(x => x !== row.id) : [...s.sel, row.id] })); return; }
     }
     if (S.screen === 'ticket' && S.ticket) {
@@ -1638,7 +1646,7 @@ export default class Console extends React.Component {
       name: me.name, initials: this.initials(me.name), role: me.role, av: me.av, avail: S.avail,
       first: (me.name || '').split(' ')[0] || '', last: (me.name || '').split(' ').slice(1).join(' ') || '',
       availTone: S.avail === 'available' ? 'sla-met' : 'sla-paused',
-      availAction: S.avail === 'available' ? 'set yourself away' : 'come back — set available',
+      availAction: S.avail === 'available' ? 'Set yourself away' : 'Set yourself available',
     };
     const sel = S.sel;
 
@@ -1651,12 +1659,12 @@ export default class Console extends React.Component {
         id: t.id, num: t.num, subject: t.subject, snippet: t.snippet, unread: !!t.unread, status: t.status, tags: t.tags,
         statusLabel: st.l, statusTone: st.t, prioLabel: pr.l, prioTone: pr.t, prioGlyph: pr.g,
         custName: t.customerName ?? c.name, custOrg: t.customerOrg ?? this.orgName(c.org),
-        assigneeName: a ? a.name : 'no one yet', assigneeInitials: a ? this.initials(a.name) : '?', assigneeAv: a ? a.av : 'ghost',
+        assigneeName: a ? a.name : 'Unassigned', assigneeInitials: a ? this.initials(a.name) : '?', assigneeAv: a ? a.av : 'ghost',
         tagChips: (t.tags || []).slice(0, 2).map(g => ({ label: g, tone: this.TAGTONE[g] || 'neutral' })),
         hasMoreTags: (t.tags || []).length > 2, tagMore: '+' + ((t.tags || []).length - 2),
         slaLabel: sla.label, slaTone: sla.tone, slaTitle: sla.title,
         arcDash: (this.ARC[sla.tone] || this.ARC.neutral)[0], arcColor: (this.ARC[sla.tone] || this.ARC.neutral)[1],
-        updated: this.rel(t.updatedAt), channelLabel: t.channel, channelGlyph: this.CHAN[t.channel] || '·',
+        updated: this.rel(t.updatedAt), channelLabel: this.CHAN_LABEL[t.channel] || t.channel, channelGlyph: this.CHAN[t.channel] || '·',
         selected: sel.includes(t.id), hovered: S.hover === t.id,
       };
     });
@@ -1664,26 +1672,27 @@ export default class Console extends React.Component {
     const fc = S.facets || { status: {}, priority: {}, channel: {}, tag: {} };
     const opt = (kind, id, label) => ({ id, label, count: (fc[kind] || {})[id] || 0, on: (S.f[kind] || []).includes(id) });
     const facetGroups = [
-      { kind: 'status', label: 'status', options: ['new', 'open', 'pending', 'on-hold', 'resolved', 'closed'].map(id => opt('status', id, (this.STATUS[id] || {}).l || id)) },
-      { kind: 'priority', label: 'priority', options: ['urgent', 'high', 'normal', 'low'].map(id => opt('priority', id, id)) },
+      { kind: 'status', label: 'Status', options: ['new', 'open', 'pending', 'on-hold', 'resolved', 'closed'].map(id => opt('status', id, (this.STATUS[id] || {}).l || id)) },
+      { kind: 'priority', label: 'Priority', options: ['urgent', 'high', 'normal', 'low'].map(id => opt('priority', id, (this.PRIO[id] || {}).l || id)) },
       // Must track the Channel enum in prisma/schema.prisma. `chatbot` was added
       // for third-party bot ingest and missing here meant the one channel in
       // real use could not be filtered — every count read 0. `hashcare` was a
       // fictional customer in the original demo data and is not a channel
       // anybody has.
-      { kind: 'channel', label: 'channel', options: [['chatbot', 'chatbot'], ['email', 'email'], ['api', 'api'], ['widget', 'widget']].map(p => opt('channel', p[0], p[1])) },
-      { kind: 'tag', label: 'tag', options: (A ? A.tags : []).map(t => ({ id: t.id, label: t.label, count: (fc.tag || {})[t.id] || 0, on: S.f.tag === t.id })) },
+      { kind: 'channel', label: 'Channel', options: [['chatbot', 'Chatbot'], ['email', 'Email'], ['api', 'API'], ['widget', 'Widget']].map(p => opt('channel', p[0], p[1])) },
+      { kind: 'tag', label: 'Tag', options: (A ? A.tags : []).map(t => ({ id: t.id, label: t.label, count: (fc.tag || {})[t.id] || 0, on: S.f.tag === t.id })) },
     ];
     const chips = [];
-    ['status', 'priority', 'channel'].forEach(k => (S.f[k] || []).forEach(v => chips.push({ kind: k, value: v, label: v })));
+    const CHIP_LABEL = { status: (v) => (this.STATUS[v] || {}).l || v, priority: (v) => (this.PRIO[v] || {}).l || v };
+    ['status', 'priority', 'channel'].forEach(k => (S.f[k] || []).forEach(v => chips.push({ kind: k, value: v, label: CHIP_LABEL[k] ? CHIP_LABEL[k](v) : v })));
     if (S.f.tag) chips.push({ kind: 'tag', value: S.f.tag, label: S.f.tag });
     if (S.f.team) chips.push({ kind: 'team', value: S.f.team, label: ((A ? A.teams : []).find(t => t.id === S.f.team) || {}).name || S.f.team });
-    if (S.f.assignee) chips.push({ kind: 'assignee', value: S.f.assignee, label: S.f.assignee === '@unassigned' ? 'unassigned' : ((this.agent(S.f.assignee) || {}).name || '') });
+    if (S.f.assignee) chips.push({ kind: 'assignee', value: S.f.assignee, label: S.f.assignee === '@unassigned' ? 'Unassigned' : ((this.agent(S.f.assignee) || {}).name || '') });
     if (S.f.range && S.f.range !== 'any') chips.push({ kind: 'range', value: S.f.range, label: S.f.range });
 
     const assigneeOptions = [
-      { id: me.id, label: 'me · ' + me.name.split(' ')[0].toLowerCase(), initials: this.initials(me.name), av: me.av, on: S.f.assignee === me.id },
-      { id: '@unassigned', label: 'no one yet', initials: '?', av: 'ghost', on: S.f.assignee === '@unassigned' },
+      { id: me.id, label: 'Me · ' + me.name.split(' ')[0], initials: this.initials(me.name), av: me.av, on: S.f.assignee === me.id },
+      { id: '@unassigned', label: 'Unassigned', initials: '?', av: 'ghost', on: S.f.assignee === '@unassigned' },
     ].concat((A ? A.agents : []).filter(a => a.id !== me.id).slice(0, 5).map(a => ({ id: a.id, label: a.name, initials: this.initials(a.name), av: a.av, on: S.f.assignee === a.id })));
 
     const t = S.ticket;
@@ -1719,7 +1728,7 @@ export default class Console extends React.Component {
     const custTickets = cust ? cust.tickets.map(x => ({
       id: x.id, num: x.num, subject: x.subject,
       statusLabel: (this.STATUS[x.status] || {}).l || x.status, statusTone: (this.STATUS[x.status] || {}).t || 'neutral',
-      prioLabel: x.priority, prioTone: (this.PRIO[x.priority] || {}).t || 'neutral',
+      prioLabel: (this.PRIO[x.priority] || {}).l || x.priority, prioTone: (this.PRIO[x.priority] || {}).t || 'neutral',
       created: this.clock(x.createdAt), updated: this.rel(x.updatedAt),
     })) : [];
 
@@ -1764,7 +1773,7 @@ export default class Console extends React.Component {
         : (A ? A.businessHours : []).map((d) => ({ ...d, key: '' })),
       cannedRows: Array.isArray(stg.canned)
         ? stg.canned.map((r) => ({
-            id: r.id, title: r.title, team: r.team?.name ?? 'everyone',
+            id: r.id, title: r.title, team: r.team?.name ?? 'Everyone',
             tagList: (r.tags || []).join(', '), snippet: r.body.slice(0, 110) + '…',
           }))
         : (A ? A.cannedResponses : []).map(r => ({ id: r.id, title: r.title, team: r.team, tagList: r.tags.join(', '), snippet: r.body.slice(0, 110) + '…' })),
@@ -1777,15 +1786,15 @@ export default class Console extends React.Component {
       hookRows: Array.isArray(stg.hooks)
         ? stg.hooks.map((w) => ({
             id: w.id, url: w.url, events: (w.events || []).join(', '),
-            status: !w.isActive ? 'disabled' : w.lastDelivery?.status === 'failed' ? 'failing' : 'active',
+            status: HOOK_STATUS_LABEL[!w.isActive ? 'disabled' : w.lastDelivery?.status === 'failed' ? 'failing' : 'active'],
             last: w.lastDelivery ? this.rel(Date.parse(w.lastDelivery.createdAt)) + ' ago' : '—',
             tone: w.isActive && w.lastDelivery?.status !== 'failed' ? 'sla-met' : 'sla-breach',
           }))
-        : (A ? A.webhooks : []).map(w => ({ id: w.id, url: w.url, events: w.events, status: w.status, last: w.last, tone: w.status === 'active' ? 'sla-met' : 'sla-breach' })),
+        : (A ? A.webhooks : []).map(w => ({ id: w.id, url: w.url, events: w.events, status: HOOK_STATUS_LABEL[w.status] || w.status, last: w.last, tone: w.status === 'active' ? 'sla-met' : 'sla-breach' })),
     };
     const holidays = (bh && Array.isArray(bh.holidaysJson) ? bh.holidaysJson : []).map((d) => ({
       date: d,
-      label: new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).toLowerCase(),
+      label: new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
     }));
 
     const ed = S.editor;
@@ -1803,14 +1812,14 @@ export default class Console extends React.Component {
       // whole shell against empty data.
       isBooting: !S.booted, isLogin: S.booted && !S.loggedIn, inApp: S.booted && S.loggedIn,
       loginEmail: S.loginEmail, loginPw: S.loginPw, loginError: S.loginError,
-      pwType: S.pwShown ? 'text' : 'password', pwToggleLabel: S.pwShown ? 'hide' : 'show',
+      pwType: S.pwShown ? 'text' : 'password', pwToggleLabel: S.pwShown ? 'Hide' : 'Show',
       onLoginEmail: this.onLoginEmail, onLoginPw: this.onLoginPw, togglePw: this.togglePw, signIn: this.signIn, forgot: this.forgot,
       onLoginKey: this.onLoginKey, keepSignedIn: S.keepSignedIn, toggleKeepSignedIn: this.toggleKeepSignedIn,
       federated: this.federated, requestAccess: this.requestAccess, serviceUp: S.serviceUp,
 
       me: meView, go: this.go, signOut: this.signOut,
       canAdmin: S.role !== 'agent', toggleAvail: this.toggleAvail, openSheet: this.openSheet,
-      themeAction: this.theme() === 'dark' ? 'switch to light' : 'switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
+      themeAction: this.theme() === 'dark' ? 'Switch to light' : 'Switch to dark', toggleTheme: this.toggleTheme, toggleNav: this.toggleNav,
       navOn: S.nav,
       mobileNavOpen: S.mobileNav, openMobileNav: this.openMobileNav, closeMobileNav: this.closeMobileNav,
       mobileSearchOpen: S.mobileSearch, toggleMobileSearch: this.toggleMobileSearch,
@@ -1846,7 +1855,7 @@ export default class Console extends React.Component {
       facetGroups, chips, removeChip: this.removeChip, toggleFacet: this.toggleFacet, clearFilters: this.clearFilters,
       assigneeOptions, setAssigneeFilter: this.setAssigneeFilter,
       teamOptions: (A ? A.teams : []).map(x => ({ id: x.id, label: x.name, on: S.f.team === x.id })), setTeamFilter: this.setTeamFilter,
-      rangeOptions: [['any', 'any time'], ['today', 'today'], ['7d', 'last 7 days'], ['30d', 'last 30 days']].map(p => ({ id: p[0], label: p[1], on: S.f.range === p[0] })), setRange: this.setRange,
+      rangeOptions: [['any', 'Any time'], ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']].map(p => ({ id: p[0], label: p[1], on: S.f.range === p[0] })), setRange: this.setRange,
 
       rows, loadingRows: S.load === 'loading' && rows.length === 0, hasError: S.load === 'error',
       isEmpty: S.load === 'ok' && rows.length === 0,
@@ -1856,15 +1865,15 @@ export default class Console extends React.Component {
       hasSelection: sel.length > 0, selCount: sel.length, clearSel: this.clearSel,
       quickAssign: this.quickAssign, quickStatus: this.quickStatus, quickOpen: this.quickOpen,
       bulkAssign: this.bulkAssign, bulkPending: this.bulkPending, bulkTag: this.bulkTag, bulkClose: this.bulkClose,
-      pageLabel: S.total === 0 ? 'no one waiting' : (S.page * S.pageSize + 1) + '–' + Math.min(S.total, (S.page + 1) * S.pageSize) + ' of ' + S.total,
+      pageLabel: S.total === 0 ? 'Nothing to show' : (S.page * S.pageSize + 1) + '–' + Math.min(S.total, (S.page + 1) * S.pageSize) + ' of ' + S.total,
       prevPage: this.prevPage, nextPage: this.nextPage,
 
       ticketLoading: S.ticketLoad === 'loading', ticketReady: S.ticketLoad === 'ok' && !!t,
       tNum: t ? t.num : '', tSubject: t ? t.subject : '', tStatus: t ? (this.STATUS[t.status] || {}).l : '',
-      tStatusTone: t ? (this.STATUS[t.status] || {}).t : 'neutral', tPrio: t ? t.priority : '',
+      tStatusTone: t ? (this.STATUS[t.status] || {}).t : 'neutral', tPrio: t ? ((this.PRIO[t.priority] || {}).l || t.priority) : '',
       tPrioTone: t ? (this.PRIO[t.priority] || {}).t : 'neutral', tPrioGlyph: t ? (this.PRIO[t.priority] || {}).g : '',
       tTeam: t ? (((A ? A.teams : []).find(x => x.id === t.teamId) || {}).name || '') : '',
-      tAssigneeName: ta ? ta.name : 'no one yet', tAssigneeInitials: ta ? this.initials(ta.name) : '?', tAssigneeAv: ta ? ta.av : 'ghost',
+      tAssigneeName: ta ? ta.name : 'Unassigned', tAssigneeInitials: ta ? this.initials(ta.name) : '?', tAssigneeAv: ta ? ta.av : 'ghost',
       thread, tSlaLabel: tsla.label, tSlaTone: tsla.tone, tSlaTitle: tsla.title, tPaused: !!(t && t.sla.paused),
       frLabel: t ? (t.sla.firstResponse.metAt ? 'met ' + this.rel(t.sla.firstResponse.metAt) + ' ago' : frLeft == null ? 'no target' : (frLeft < 0 ? 'overdue by ' + this.dur(-frLeft) : 'due in ' + this.dur(frLeft))) : '',
       frTone: t ? (t.sla.firstResponse.metAt ? 'sla-met' : frLeft == null ? 'neutral' : t.sla.paused ? 'sla-paused' : frLeft < 0 ? 'sla-breach' : frLeft < 1800000 ? 'sla-due' : 'sla-ok') : 'neutral',
@@ -1872,7 +1881,7 @@ export default class Console extends React.Component {
       resLabel: t ? (t.sla.resolution.metAt ? 'met ' + this.rel(t.sla.resolution.metAt) + ' ago' : resLeft == null ? 'no target' : (resLeft < 0 ? 'overdue by ' + this.dur(-resLeft) : 'due in ' + this.dur(resLeft))) : '',
       resTone: t ? (t.sla.resolution.metAt ? 'sla-met' : resLeft == null ? 'neutral' : t.sla.paused ? 'sla-paused' : resLeft < 0 ? 'sla-breach' : resLeft < 1800000 ? 'sla-due' : 'sla-ok') : 'neutral',
       resDue: t && t.sla.resolution.dueAt != null ? this.clock(t.sla.resolution.dueAt) : '—', slaPolicy: t ? t.sla.policy : '',
-      tChannel: t ? t.channel : '', tCreated: t ? this.clock(t.createdAt) : '', tRequester: t ? t.requester : '',
+      tChannel: t ? (this.CHAN_LABEL[t.channel] || t.channel) : '', tCreated: t ? this.clock(t.createdAt) : '', tRequester: t ? t.requester : '',
       tCc: t && t.cc.length ? t.cc.join(', ') : '—', tSource: t && t.sourceRef ? t.sourceRef : '—', tId: t ? t.id : '',
       tTags: t ? t.tags.map(g => ({ id: g, label: g, tone: this.TAGTONE[g] || 'neutral' })) : [],
       tagAddOptions: (A ? A.tags : []).filter(x => !t || !t.tags.includes(x.id)).map(x => ({ id: x.id, label: x.label, tone: x.tone })),
@@ -1900,11 +1909,11 @@ export default class Console extends React.Component {
 
       subjNotEdit: !S.subjEdit, threadRef: this.threadRef, mock: this.mock,
       composerKey: S.mode === 'note' ? 'note' : 'reply',
-      composerPlaceholder: S.mode === 'note' ? 'a note for your team — the customer never sees this…' : 'write something kind and useful…',
+      composerPlaceholder: S.mode === 'note' ? 'A note for your team. The customer never sees this…' : 'Write your reply…',
       cannedFiltered: (A ? A.cannedResponses : []).filter(r => !S.menuQ || (r.title + r.body).toLowerCase().includes(S.menuQ.toLowerCase())).map(r => ({ id: r.id, title: r.title, team: r.team, snippet: r.body.slice(0, 92) + '…' })),
       isReply: S.mode === 'reply', isNote: S.mode === 'note', setMode: this.setMode,
       draft: S.draft, onDraft: this.onDraft, replyRef: this.replyRef, sending: S.sending,
-      sendLabel: S.mode === 'note' ? 'add note' : 'send',
+      sendLabel: S.mode === 'note' ? 'Add note' : 'Send',
       canned: (A ? A.cannedResponses : []).map(r => ({ id: r.id, title: r.title, team: r.team, snippet: r.body.slice(0, 92) + '…' })), insertCanned: this.insertCanned,
       onSend: this.onSend, onSendPending: this.onSendPending, onSendResolved: this.onSendResolved,
 
@@ -2016,7 +2025,7 @@ export default class Console extends React.Component {
       inviteBusy: !!S.inviteBusy, inviteError: S.inviteError || '',
       submitInvite: this.submitInvite, revokeInvite: this.revokeInvite,
       inviteRoleOptions: this.ROLE_OPTIONS,
-      inviteTeamOptions: [{ value: '', label: 'no team for now' }].concat(
+      inviteTeamOptions: [{ value: '', label: 'No team for now' }].concat(
         (A ? A.teams : []).map((x) => ({ value: x.id, label: x.name })),
       ),
       inviteRows, hasInvites: inviteRows.length > 0,

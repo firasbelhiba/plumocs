@@ -89,7 +89,7 @@ function Federated({ provider, icon, children, onClick, muted }) {
  * oracle for who works here. The API agrees: auth.service returns exactly this
  * 401 for "no such user", "account deactivated" and "wrong password" alike.
  */
-const BAD_CREDENTIALS = 'incorrect email or password. no harm done — try once more.';
+const BAD_CREDENTIALS = 'Incorrect email or password. Please try again.';
 
 /**
  * What a failed sign-in should actually say.
@@ -114,20 +114,20 @@ export function loginErrorMessage(err) {
   if (typeof err === 'string') return err;
 
   // status 0 is this client's own marker for "fetch never got there".
-  if (err.status === 0) return "can't reach the server right now — try again in a moment.";
-  if (err.status === 429) return 'too many attempts. wait a moment, then try again.';
+  if (err.status === 0) return 'Network error. Please check your connection.';
+  if (err.status === 429) return 'Too many attempts. Please wait a moment and try again.';
 
   // Actionable, and the reason it gets its own line: the account is real, the
   // password was right, and somebody with admin can undo this in a click.
   if (err.code === 'WORKSPACE_MEMBERSHIP_DISABLED') {
-    return 'your access to this workspace has been turned off. an admin can switch it back on.';
+    return 'Your access to this workspace has been turned off. An admin can switch it back on.';
   }
 
   // Every other 403 from the workspace resolver — not a member, no such desk,
   // desk suspended, or several desks and none named. The server deliberately
   // collapses those into one answer so a valid login cannot be used to map which
   // desks exist here, and this line does not try to un-collapse it.
-  if (err.status === 403) return "this account can't reach this workspace. ask an admin to invite you.";
+  if (err.status === 403) return "This account can't reach this workspace. Ask an admin to invite you.";
 
   return BAD_CREDENTIALS;
 }
@@ -159,7 +159,7 @@ export default function Login({ V }) {
               Welcome back.
             </h1>
             <p className="text-[14px] text-fg-2 text-center mb-[26px]">
-              sign in to continue to your workspace.
+              Sign in to continue to your workspace.
             </p>
 
             <div className="flex flex-col gap-2.5 mb-[22px]">
@@ -168,7 +168,7 @@ export default function Login({ V }) {
               </Federated>
               {V.pmSignInAvailable && (
                 <Federated provider="plumo" icon={<ShieldIcon />} onClick={V.signInWithPm}>
-                  {V.pmSignInBusy ? 'redirecting…' : 'Continue with Plumo'}
+                  {V.pmSignInBusy ? 'Redirecting…' : 'Continue with Plumo'}
                 </Federated>
               )}
               <Federated provider="sso" icon={<ShieldIcon />} onClick={V.federated} muted>
@@ -228,7 +228,7 @@ export default function Login({ V }) {
                   <button
                     type="button"
                     onClick={V.togglePw}
-                    aria-label={V.pwType === 'password' ? 'show password' : 'hide password'}
+                    aria-label={V.pwType === 'password' ? 'Show password' : 'Hide password'}
                     className="pointer-events-auto text-fg-3 hover:text-fg transition-colors"
                   >
                     {V.pwType === 'password' ? (
@@ -281,7 +281,7 @@ export default function Login({ V }) {
               Let&apos;s get you back in.
             </h1>
             <p className="text-[14px] text-fg-2 text-center leading-relaxed mb-[26px]">
-              tell us the address you use and we&apos;ll send a link. no rush — it stays good for an hour.
+              Tell us the address you use and we&apos;ll send a link. It stays good for an hour.
             </p>
             <Input
               id="reset-email"
@@ -299,7 +299,7 @@ export default function Login({ V }) {
             </Button>
             <div className="flex justify-center mt-4">
               <Button variant="link" size="sm" onClick={V.backToSignin} className="text-[13px]">
-                back to sign in
+                Back to sign in
               </Button>
             </div>
           </>
@@ -312,16 +312,16 @@ export default function Login({ V }) {
                 green here and blue there with no forked asset. At PM's own
                 default size (80). */}
             <BlobHappy />
-            <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">It&apos;s on its way ✿</h1>
+            <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">It&apos;s on its way</h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[34ch] m-0">
-              check {V.loginEmail} whenever you&apos;re ready. if it hasn&apos;t landed in a few minutes,
-              we&apos;ll happily send another.
+              Check {V.loginEmail}. If it hasn&apos;t landed in a few minutes, we&apos;ll send
+              another.
             </p>
             <Button variant="outline" size="md" onClick={V.sendReset}>
               Send it again
             </Button>
             <Button variant="link" size="sm" onClick={V.backToSignin} className="text-[13px]">
-              back to sign in
+              Back to sign in
             </Button>
           </div>
         )}

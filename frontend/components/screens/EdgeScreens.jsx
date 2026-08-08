@@ -24,8 +24,8 @@ export function NotFound({ V }) {
         just not here.
       </p>
       <div className="flex gap-2 mt-1">
-        <Button onClick={V.go} data-s="queue" size="md">back to the inbox</Button>
-        <Button onClick={V.focusSearch} variant="outline" size="md">search for it instead</Button>
+        <Button onClick={V.go} data-s="queue" size="md">Back to the inbox</Button>
+        <Button onClick={V.focusSearch} variant="outline" size="md">Search for it instead</Button>
       </div>
     </div>
   );
@@ -45,9 +45,9 @@ export function Oops({ V }) {
         nudge it yourself.
       </p>
       <div className="flex gap-2 mt-1">
-        <Button onClick={V.go} data-s="queue" size="md">try again</Button>
-        <Button onClick={V.mock} data-msg="we've told the team — thank you ✿" variant="outline" size="md">
-          tell the team
+        <Button onClick={V.go} data-s="queue" size="md">Try again</Button>
+        <Button onClick={V.mock} data-msg="Feedback submitted successfully!" variant="outline" size="md">
+          Tell the team
         </Button>
       </div>
       <span className="font-mono text-[11.5px] text-fg-3 mt-1.5">reference 7f21-c4</span>

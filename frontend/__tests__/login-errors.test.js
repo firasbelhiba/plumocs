@@ -29,12 +29,12 @@ describe('loginErrorMessage', () => {
     const wrongPassword = loginErrorMessage(err(401, 'UNAUTHENTICATED'));
     const unknownAddress = loginErrorMessage(err(401, 'UNAUTHENTICATED'));
     expect(wrongPassword).toBe(unknownAddress);
-    expect(wrongPassword).toMatch(/incorrect email or password/);
+    expect(wrongPassword).toMatch(/incorrect email or password/i);
   });
 
   it('names the rate limit instead of blaming the password', () => {
     const msg = loginErrorMessage(err(429, 'RATE_LIMITED'));
-    expect(msg).toMatch(/too many attempts/);
+    expect(msg).toMatch(/too many attempts/i);
     expect(msg).not.toMatch(/password/);
   });
 
@@ -59,15 +59,15 @@ describe('loginErrorMessage', () => {
   });
 
   it('distinguishes an unreachable server from a rejected credential', () => {
-    expect(loginErrorMessage(err(0, 'NETWORK'))).toMatch(/can't reach the server/);
+    expect(loginErrorMessage(err(0, 'NETWORK'))).toMatch(/network error/i);
   });
 
   it('falls back to the credential line for a bare `true`', () => {
     // The historical shape, and what the console still sends for an empty form.
     // No detail means no diagnosis — never a guessed one.
-    expect(loginErrorMessage(true)).toMatch(/incorrect email or password/);
-    expect(loginErrorMessage({})).toMatch(/incorrect email or password/);
-    expect(loginErrorMessage(err(500, 'INTERNAL_ERROR'))).toMatch(/incorrect email or password/);
+    expect(loginErrorMessage(true)).toMatch(/incorrect email or password/i);
+    expect(loginErrorMessage({})).toMatch(/incorrect email or password/i);
+    expect(loginErrorMessage(err(500, 'INTERNAL_ERROR'))).toMatch(/incorrect email or password/i);
   });
 
   it('passes a ready-made string through', () => {
@@ -125,7 +125,7 @@ describe('Console.signIn — what reaches the screen', () => {
     // Nothing was attempted, so there is no error object to carry — the bare
     // `true` shape has to keep working, which is why the formatter accepts it.
     expect(c.api.login).not.toHaveBeenCalled();
-    expect(loginErrorMessage(c.state.loginError)).toMatch(/incorrect email or password/);
+    expect(loginErrorMessage(c.state.loginError)).toMatch(/incorrect email or password/i);
   });
 
   it('clears the error once the address is edited', () => {

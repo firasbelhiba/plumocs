@@ -92,11 +92,11 @@ export default function ResetPasswordPage() {
 
   const submit = async () => {
     if (pw.length < MIN_LENGTH) {
-      setNotice(`that needs at least ${MIN_LENGTH} characters`);
+      setNotice(`Password must be at least ${MIN_LENGTH} characters`);
       return;
     }
     if (pw !== confirm) {
-      setNotice("those two don't match — try once more");
+      setNotice('New passwords do not match');
       return;
     }
     setNotice('');
@@ -114,10 +114,10 @@ export default function ResetPasswordPage() {
       if (e?.status === 0) {
         setPhase('offline');
       } else if (e?.status === 401) {
-        setNotice(e?.message || 'that link is no longer valid');
+        setNotice(e?.message || 'That link is no longer valid');
         setPhase('dead');
       } else {
-        setNotice(e?.message || "that didn't save — try again in a moment");
+        setNotice(e?.message || 'Failed to save changes. Please try again.');
         setPhase('form');
       }
     }
@@ -143,7 +143,7 @@ export default function ResetPasswordPage() {
         </div>
 
         {phase === 'reading' && (
-          <p className="text-[14px] text-fg-2 text-center">one moment…</p>
+          <p className="text-[14px] text-fg-2 text-center">Loading…</p>
         )}
 
         {(phase === 'form' || phase === 'saving') && (
@@ -152,7 +152,7 @@ export default function ResetPasswordPage() {
               Choose a new password.
             </h1>
             <p className="text-[14px] text-fg-2 text-center leading-relaxed mb-[26px]">
-              pick something you haven&apos;t used elsewhere. every other session signs out when you save.
+              Choose something you have not used elsewhere. Every other session signs out when you save.
             </p>
 
             {notice && (
@@ -171,7 +171,7 @@ export default function ResetPasswordPage() {
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
                 onKeyDown={onKey}
-                placeholder={`at least ${MIN_LENGTH} characters`}
+                placeholder={`At least ${MIN_LENGTH} characters`}
                 autoComplete="new-password"
                 leftIcon={<LockIcon />}
                 className="h-[44px] !rounded-[10px] text-[14px]"
@@ -179,7 +179,7 @@ export default function ResetPasswordPage() {
                   <button
                     type="button"
                     onClick={() => setShown((s) => !s)}
-                    aria-label={shown ? 'hide password' : 'show password'}
+                    aria-label={shown ? 'Hide password' : 'Show password'}
                     className="pointer-events-auto text-fg-3 hover:text-fg transition-colors"
                   >
                     <EyeIcon off={shown} />
@@ -194,7 +194,7 @@ export default function ResetPasswordPage() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 onKeyDown={onKey}
-                placeholder="type it once more"
+                placeholder="Type it once more"
                 autoComplete="new-password"
                 leftIcon={<LockIcon />}
                 className="h-[44px] !rounded-[10px] text-[14px]"
@@ -207,12 +207,12 @@ export default function ResetPasswordPage() {
               disabled={phase === 'saving'}
               className="w-full h-[44px] rounded-[10px] text-[15px] mt-5"
             >
-              {phase === 'saving' ? 'saving…' : 'Save new password'}
+              {phase === 'saving' ? 'Saving…' : 'Save new password'}
             </Button>
 
             <div className="flex justify-center mt-4">
               <a href="/" className="text-[13px] text-fg-2 hover:text-fg transition-colors">
-                back to sign in
+                Back to sign in
               </a>
             </div>
           </>
@@ -222,10 +222,10 @@ export default function ResetPasswordPage() {
           <div className="flex flex-col items-center gap-3.5 text-center">
             {/* PM's mascot at PM's default size — see components/brand/Blobs.tsx. */}
             <BlobHappy />
-            <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">That&apos;s done ✿</h1>
+            <h1 className="text-[26px] font-semibold tracking-[-.8px] text-fg m-0">That&apos;s done</h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[34ch] m-0">
-              your new password is saved and every other session has been signed out. sign in whenever
-              you&apos;re ready.
+              Your new password is saved and every other session has been signed out. Sign in whenever
+              you are ready.
             </p>
             <a href="/">
               <Button size="md" className="rounded-token-sm">
@@ -241,7 +241,7 @@ export default function ResetPasswordPage() {
               This link won&apos;t work.
             </h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[36ch] m-0">
-              {notice || 'reset links are good for an hour and can only be used once — this one is past that, or has already been used.'}
+              {notice || 'Reset links are good for an hour and can only be used once. This one is past that, or has already been used.'}
             </p>
             <a href="/">
               <Button size="md" className="rounded-token-sm">
@@ -257,7 +257,7 @@ export default function ResetPasswordPage() {
               Couldn&apos;t reach the server.
             </h1>
             <p className="text-[14px] text-fg-2 leading-relaxed max-w-[36ch] m-0">
-              nothing was changed and your link is still good. try again in a moment.
+              Nothing was changed and your link is still good. Please try again in a moment.
             </p>
             <Button
               variant="secondary"

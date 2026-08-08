@@ -74,11 +74,11 @@ export default function Sidebar({ V, isMobile = false }) {
       {/* PM `Sidebar/Sidebar.tsx:429-443` */}
       {isMobile && (
         <div className="flex items-center justify-between p-3 border-b border-[color:var(--border)]">
-          <span className="text-sm font-semibold text-fg">menu</span>
+          <span className="text-sm font-semibold text-fg">Menu</span>
           <button
             onClick={V.closeMobileNav}
             className="p-1.5 rounded-token-sm hover:bg-surface-2 transition-colors focus-ring"
-            aria-label="close menu"
+            aria-label="Close menu"
           >
             <Icon name="state-close" size={16} className="text-fg-2" />
           </button>
@@ -92,17 +92,17 @@ export default function Sidebar({ V, isMobile = false }) {
           whole rail, and it belongs to a list CS does not have. */}
       <div className="flex-1 overflow-y-auto py-2 scrollbar-hidden">
         <div className="px-2 space-y-0.5">
-          <NavItem screen="queue" active={V.isQueue} collapsed={collapsed} onClick={V.go} label="inbox" count={V.cUn} icon={<TicketGlyph />} />
-          <NavItem screen="mine" active={V.isMine} collapsed={collapsed} onClick={V.go} label="mine" count={V.cMy} icon={<ResolveGlyph />} />
-          <NavItem screen="customers" active={V.isCustomersNav} collapsed={collapsed} onClick={V.go} label="customers" icon={<CustomerGlyph />} />
-          <NavItem screen="reports" active={V.isReports} collapsed={collapsed} onClick={V.go} label="reports" icon={<SlaGlyph />} />
+          <NavItem screen="queue" active={V.isQueue} collapsed={collapsed} onClick={V.go} label="Inbox" count={V.cUn} icon={<TicketGlyph />} />
+          <NavItem screen="mine" active={V.isMine} collapsed={collapsed} onClick={V.go} label="Mine" count={V.cMy} icon={<ResolveGlyph />} />
+          <NavItem screen="customers" active={V.isCustomersNav} collapsed={collapsed} onClick={V.go} label="Customers" icon={<CustomerGlyph />} />
+          <NavItem screen="reports" active={V.isReports} collapsed={collapsed} onClick={V.go} label="Reports" icon={<SlaGlyph />} />
           {V.canAdmin && (
             <NavItem
               screen="settings"
               active={V.isSettings}
               collapsed={collapsed}
               onClick={V.go}
-              label="settings"
+              label="Settings"
               icon={
                 <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="3.2" />
@@ -123,7 +123,7 @@ export default function Sidebar({ V, isMobile = false }) {
         <div className="[&_[role=menu]]:bottom-full [&_[role=menu]]:mb-2 [&_[role=menu]]:mt-0 [&>div>button]:w-full">
           <Dropdown
             align="left"
-            label="your account"
+            label="Your account"
             trigger={
               <span className="w-full flex items-center gap-2.5 p-[9px] rounded-token border border-[color:var(--border)] bg-surface text-left text-fg transition-colors duration-[var(--dur-instant)] hover:bg-surface-2">
                 <span className="relative flex-none">
@@ -157,7 +157,7 @@ export default function Sidebar({ V, isMobile = false }) {
                   <path d="M19 20v-1.6a3.4 3.4 0 00-3.4-3.4H8.4A3.4 3.4 0 005 18.4V20" />
                   <circle cx="12" cy="8" r="3.4" />
                 </svg>
-                <span className="flex-1">your account</span>
+                <span className="flex-1">Your Account</span>
               </span>
             </DropdownItem>
             <DropdownItem onClick={V.toggleTheme}>
@@ -171,7 +171,7 @@ export default function Sidebar({ V, isMobile = false }) {
             <DropdownItem onClick={V.openSheet}>
               <span className={MENU_ITEM}>
                 <span className="w-[15px] text-center text-fg-3">?</span>
-                <span className="flex-1">keyboard shortcuts</span>
+                <span className="flex-1">Keyboard Shortcuts</span>
               </span>
             </DropdownItem>
             <div className="h-px bg-[color:var(--border)] my-1" />
@@ -180,7 +180,7 @@ export default function Sidebar({ V, isMobile = false }) {
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-none text-fg-3">
                   <path d="M15 12H4m3-4l-3 4 3 4M13 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5" />
                 </svg>
-                <span className="flex-1">sign out</span>
+                <span className="flex-1">Sign Out</span>
               </span>
             </DropdownItem>
           </Dropdown>

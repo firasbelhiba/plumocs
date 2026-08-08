@@ -23,9 +23,9 @@ export default function NotFoundPage() {
           here.
         </>
       }
-      primaryAction={{ label: 'go back', onClick: () => router.back() }}
+      primaryAction={{ label: 'Go back', onClick: () => router.back() }}
       secondaryAction={{
-        label: 'back to the inbox',
+        label: 'Back to the inbox',
         variant: 'outline',
         onClick: () => router.push('/'),
       }}

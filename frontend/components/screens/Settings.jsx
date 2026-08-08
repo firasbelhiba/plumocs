@@ -49,15 +49,15 @@ export default function Settings({ V }) {
         )}
       >
         <span className={sx('font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--cs-brand);font-weight:500;padding:4px 10px 10px') + ' hidden md:block'}>settings</span>
-        <button onClick={V.setSettingsTab} data-v="overview" data-on={String(V.tabOverview)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>overview</button>
-        <button onClick={V.setSettingsTab} data-v="team" data-on={String(V.tabTeam)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>team &amp; users</button>
-        <button onClick={V.setSettingsTab} data-v="sla" data-on={String(V.tabSla)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>sla policies</button>
-        <button onClick={V.setSettingsTab} data-v="hours" data-on={String(V.tabHours)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>business hours</button>
-        <button onClick={V.setSettingsTab} data-v="canned" data-on={String(V.tabCanned)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>canned responses</button>
-        <button onClick={V.setSettingsTab} data-v="tags" data-on={String(V.tabTags)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>tags</button>
-        <button onClick={V.setSettingsTab} data-v="hooks" data-on={String(V.tabHooks)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>webhooks</button>
-        <button onClick={V.setSettingsTab} data-v="keys" data-on={String(V.tabKeys)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>api keys</button>
-        <button onClick={V.setSettingsTab} data-v="email" data-on={String(V.tabEmail)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>email &amp; channels</button>
+        <button onClick={V.setSettingsTab} data-v="overview" data-on={String(V.tabOverview)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Overview</button>
+        <button onClick={V.setSettingsTab} data-v="team" data-on={String(V.tabTeam)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Team &amp; users</button>
+        <button onClick={V.setSettingsTab} data-v="sla" data-on={String(V.tabSla)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>SLA policies</button>
+        <button onClick={V.setSettingsTab} data-v="hours" data-on={String(V.tabHours)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Business hours</button>
+        <button onClick={V.setSettingsTab} data-v="canned" data-on={String(V.tabCanned)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Canned responses</button>
+        <button onClick={V.setSettingsTab} data-v="tags" data-on={String(V.tabTags)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Tags</button>
+        <button onClick={V.setSettingsTab} data-v="hooks" data-on={String(V.tabHooks)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Webhooks</button>
+        <button onClick={V.setSettingsTab} data-v="keys" data-on={String(V.tabKeys)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>API keys</button>
+        <button onClick={V.setSettingsTab} data-v="email" data-on={String(V.tabEmail)} className={tabBtn()} style={{background:"var(--cs-onbg)",color:"var(--cs-onfg)",fontWeight:"var(--cs-onw)"}}>Email &amp; channels</button>
       </aside>
 
       {/* PM's settings pages cap their content at 720px and centre it (7 pages,
@@ -83,8 +83,8 @@ export default function Settings({ V }) {
         {V.tabOverview && (
           <div className={sx('display:flex;flex-direction:column;gap:16px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>settings</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>eight panels. everything here is shared by the whole instance, so changes touch every agent.</p>
+              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Settings</h2>
+              <p className={sx('font-size:13px;color:var(--cs-muted)')}>Eight panels. Everything here is shared by the whole instance, so changes touch every agent.</p>
             </div>
             <div className={sx('display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px')}>
               {V.settingsCards.map(c => (
@@ -100,11 +100,11 @@ export default function Settings({ V }) {
               <div className={sx('display:flex;flex-direction:column;gap:10px;padding:var(--cs-cardpad);border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface)')}>
                 <div className={sx('display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap')}>
                   <div className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px')}>
-                    <span className={sx('font-size:14.5px;font-weight:500')}>plumo account</span>
+                    <span className={sx('font-size:14.5px;font-weight:500')}>Plumo account</span>
                     <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.5')}>
                       {V.pmLinked
-                        ? 'this desk is connected to plumo. your account and workspace are linked.'
-                        : 'connect this desk to your plumo workspace, so the same people and projects line up across both.'}
+                        ? 'This desk is connected to plumo. Your account and workspace are linked.'
+                        : 'Connect this desk to your plumo workspace, so the same people and projects line up across both.'}
                     </span>
                   </div>
                   <button
@@ -112,7 +112,7 @@ export default function Settings({ V }) {
                     disabled={V.pmBusy}
                     className={V.pmLinked ? editBtn() : primaryBtn()}
                   >
-                    {V.pmBusy ? 'working…' : V.pmLinked ? 'disconnect' : 'connect plumo'}
+                    {V.pmBusy ? 'Working…' : V.pmLinked ? 'Disconnect' : 'Connect plumo'}
                   </button>
                 </div>
                 {V.pmNotice && (
@@ -127,10 +127,10 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px')}>
             <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
               <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>team &amp; users</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>eight people across two teams. roles decide what each of them can reach.</p>
+                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Team &amp; users</h2>
+                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Eight people across two teams. Roles decide what each of them can reach.</p>
               </div>
-              {V.canInvite && <button onClick={V.openInvite} className={primaryBtn()}>invite someone</button>}
+              {V.canInvite && <button onClick={V.openInvite} className={primaryBtn()}>Invite someone</button>}
             </div>
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
               <div className={sx('display:grid;grid-template-columns:minmax(170px,1.2fr) minmax(180px,1.4fr) 110px 100px 120px 92px;gap:12px;padding:9px 16px;border-bottom:1px solid var(--cs-border);background:var(--cs-canvas);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cs-muted)')}>
@@ -154,9 +154,9 @@ export default function Settings({ V }) {
                       sees a deactivate control on their own row — it would
                       revoke their own tokens and sign them out mid-sentence. */}
                   <span className={sx('display:flex;gap:6px;justify-content:flex-end')}>
-                    {u.canEdit && <button onClick={V.editUser} data-id={u.id} className={editBtn()}>edit</button>}
+                    {u.canEdit && <button onClick={V.editUser} data-id={u.id} className={editBtn()}>Edit</button>}
                     {u.canDeactivate && (
-                      <button onClick={V.askDeactivate} data-id={u.id} data-name={u.name} aria-label={'deactivate ' + u.name} title={'deactivate ' + u.name} className={iconBtn()}>
+                      <button onClick={V.askDeactivate} data-id={u.id} data-name={u.name} aria-label={'Deactivate ' + u.name} title={'Deactivate ' + u.name} className={iconBtn()}>
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
                       </button>
                     )}
@@ -169,23 +169,23 @@ export default function Settings({ V }) {
             {V.canInvite && (
               <div className={sx('display:flex;flex-direction:column;gap:10px')}>
                 <div className={sx('display:flex;flex-direction:column;gap:3px')}>
-                  <span className={sx('font-size:14.5px;font-weight:500')}>pending invitations</span>
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>each link works once, and only for seven days.</span>
+                  <span className={sx('font-size:14.5px;font-weight:500')}>Pending invitations</span>
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>Each link works once, and only for seven days.</span>
                 </div>
 
                 {V.invitesLoading && (
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>one moment…</span>
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>Loading…</span>
                 )}
 
                 {V.invitesFailed && (
                   <span data-tone="sla-breach" className={sx('font-size:12.5px;padding:8px 12px;border-radius:var(--cs-r-sm);background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
-                    couldn&apos;t load the invitations just now — the people above are unaffected.
+                    Failed to load the invitations. The people above are unaffected.
                   </span>
                 )}
 
                 {!V.invitesLoading && !V.invitesFailed && !V.hasInvites && (
                   <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md)')}>
-                    nobody is waiting on an invitation right now.
+                    Nobody is waiting on an invitation right now.
                   </span>
                 )}
 
@@ -203,7 +203,7 @@ export default function Settings({ V }) {
                         <span className={sx('display:flex;justify-content:flex-end')}>
                           <button onClick={V.revokeInvite} data-id={i.id} data-email={i.email}
                             className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:100px;background:transparent;color:var(--cs-muted);font-size:12px;cursor:pointer', { hover: 'background:var(--cs-hover);color:var(--cs-text)' })}>
-                            revoke
+                            Revoke
                           </button>
                         </span>
                       </div>
@@ -216,24 +216,24 @@ export default function Settings({ V }) {
             <Modal
               isOpen={V.inviteOpen}
               onClose={V.closeInvite}
-              title="invite someone"
+              title="Invite someone"
               size="md"
               footer={
                 <>
-                  <Button variant="outline" size="md" onClick={V.closeInvite}>not now</Button>
+                  <Button variant="outline" size="md" onClick={V.closeInvite}>Cancel</Button>
                   {/* PM keeps the label still and puts the progress in the
                       button's own spinner (`EditProjectMemberTagModal.tsx:154`)
                       rather than swapping the words out under the cursor. */}
                   <Button size="md" onClick={V.submitInvite} loading={V.inviteBusy}>
-                    send the invitation
+                    Send invitation
                   </Button>
                 </>
               }
             >
               <div className="flex flex-col gap-3.5">
                 <p className="text-[13px] text-fg-3">
-                  we&apos;ll email them a link that works once and expires in seven days. if they already
-                  have a plumo account, it simply adds this desk to it.
+                  They are emailed a link that works once and expires in seven days. If they already
+                  have a plumo account, this simply adds the desk to it.
                 </p>
 
                 {V.inviteError && (
@@ -243,7 +243,7 @@ export default function Settings({ V }) {
                 )}
 
                 <Input
-                  label="email"
+                  label="Email"
                   type="email"
                   required
                   value={V.inviteEmail}
@@ -255,18 +255,18 @@ export default function Settings({ V }) {
                 />
 
                 <Select
-                  label="role"
+                  label="Role"
                   value={V.inviteRole}
                   onChange={V.onInviteRole}
                   options={V.inviteRoleOptions}
                 />
 
                 <Select
-                  label="team"
+                  label="Team"
                   value={V.inviteTeam}
                   onChange={V.onInviteTeam}
                   options={V.inviteTeamOptions}
-                  helperText="you can move them later — nothing here is final."
+                  helperText="You can move them to another team later."
                 />
               </div>
             </Modal>
@@ -277,10 +277,10 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px')}>
             <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
               <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>sla policies</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>targets by priority. clocks pause outside business hours, and while you are waiting on someone.</p>
+                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>SLA policies</h2>
+                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Targets by priority. Clocks pause outside business hours, and while you are waiting on someone.</p>
               </div>
-              {V.canManageDesk && <button onClick={V.newSlaPolicy} className={primaryBtn()}>add a policy</button>}
+              {V.canManageDesk && <button onClick={V.newSlaPolicy} className={primaryBtn()}>Add a policy</button>}
             </div>
             {V.slaErr && <LoadNote>{V.slaErr}</LoadNote>}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
@@ -295,7 +295,7 @@ export default function Settings({ V }) {
                   <span className={sx('font-variant-numeric:tabular-nums')}>{p.resolution}</span>
                   <span className={sx('color:var(--cs-muted)')}>{p.hours}</span>
                   <span className={sx('text-align:right')}>
-                    {V.canManageDesk && <button onClick={V.editSlaPolicy} data-id={p.id} className={editBtn()}>edit</button>}
+                    {V.canManageDesk && <button onClick={V.editSlaPolicy} data-id={p.id} className={editBtn()}>Edit</button>}
                   </span>
                 </div>
               ))}
@@ -309,8 +309,8 @@ export default function Settings({ V }) {
         {V.tabHours && (
           <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:680px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>business hours</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>sla clocks rest when your team does.</p>
+              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Business hours</h2>
+              <p className={sx('font-size:13px;color:var(--cs-muted)')}>SLA clocks rest when your team does.</p>
             </div>
             {V.hoursErr && <LoadNote>{V.hoursErr}</LoadNote>}
 
@@ -319,7 +319,7 @@ export default function Settings({ V }) {
                 empty week with every switch greyed out and no explanation. */}
             {!V.hoursReady && !V.hoursErr && (
               <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md);line-height:1.55')}>
-                this desk has no working calendar yet, so sla clocks run 24/7. one has to be created on
+                This desk has no working calendar yet, so SLA clocks run 24/7. One has to be created on
                 the server before the days below can be switched on and off here.
               </span>
             )}
@@ -342,7 +342,7 @@ export default function Settings({ V }) {
                       disabled={!V.canManageDesk || !V.hoursReady || V.hoursBusy}
                       onChange={V.toggleHoursDay}
                       data-day={d.key}
-                      aria-label={'work on ' + d.day}
+                      aria-label={'Work on ' + d.day}
                     />
                   </label>
                 </div>
@@ -350,28 +350,28 @@ export default function Settings({ V }) {
             </div>
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:var(--cs-cardpad);display:flex;flex-direction:column;gap:10px')}>
               <div className={sx('display:flex;flex-direction:column;gap:3px')}>
-                <span className={sx('font-size:13.5px;font-weight:500')}>holidays</span>
-                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>the clocks rest on these days too, so no target ever lands on one.</span>
+                <span className={sx('font-size:13.5px;font-weight:500')}>Holidays</span>
+                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>The clocks rest on these days too, so no target ever lands on one.</span>
               </div>
               <div className={sx('display:flex;gap:6px;flex-wrap:wrap;align-items:center')}>
                 {V.holidays.map(h => (
                   <span key={h.date} className={sx('display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:100px;background:var(--cs-soft);font-size:12.5px')}>
                     {h.label}
                     {V.canManageDesk && (
-                      <button onClick={V.removeHoliday} data-date={h.date} disabled={V.hoursBusy} aria-label={'stop resting on ' + h.label} className={sx('border:none;background:transparent;color:var(--cs-muted);font-size:13px;line-height:1;cursor:pointer;padding:0')}>×</button>
+                      <button onClick={V.removeHoliday} data-date={h.date} disabled={V.hoursBusy} aria-label={'Stop resting on ' + h.label} className={sx('border:none;background:transparent;color:var(--cs-muted);font-size:13px;line-height:1;cursor:pointer;padding:0')}>×</button>
                     )}
                   </span>
                 ))}
                 {!V.hasHolidays && (
-                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>none yet — every working day counts.</span>
+                  <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>None yet. Every working day counts.</span>
                 )}
               </div>
               {V.canManageDesk && (
                 <div className={sx('display:flex;gap:8px;align-items:center;flex-wrap:wrap')}>
                   <div className={sx('width:200px')}>
-                    <Input type="date" value={V.holidayDraft} onChange={V.onHolidayDraft} aria-label="holiday date" />
+                    <Input type="date" value={V.holidayDraft} onChange={V.onHolidayDraft} aria-label="Holiday date" />
                   </div>
-                  <button onClick={V.addHoliday} disabled={!V.hoursReady || V.hoursBusy} className={editBtn()}>add a holiday</button>
+                  <button onClick={V.addHoliday} disabled={!V.hoursReady || V.hoursBusy} className={editBtn()}>Add a holiday</button>
                 </div>
               )}
             </div>
@@ -382,10 +382,10 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px')}>
             <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
               <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>canned responses</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>written once, kindly, so nobody has to find the words twice.</p>
+                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Canned responses</h2>
+                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Written once, so nobody has to find the words twice.</p>
               </div>
-              {V.canManageCanned && <button onClick={V.newCanned} className={primaryBtn()}>new response</button>}
+              {V.canManageCanned && <button onClick={V.newCanned} className={primaryBtn()}>New response</button>}
             </div>
             {V.cannedErr && <LoadNote>{V.cannedErr}</LoadNote>}
             <div className={sx('display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px')}>
@@ -399,7 +399,7 @@ export default function Settings({ V }) {
                   <span className={sx('display:flex;align-items:center;gap:8px')}>
                     <span className={sx('padding:2px 9px;border-radius:100px;background:var(--cs-soft);font-size:11.5px;color:var(--cs-muted)')}>{r.tagList}</span>
                     <span className={sx('flex:1')}></span>
-                    {V.canManageCanned && <button onClick={V.editCanned} data-id={r.id} className={editBtn()}>edit</button>}
+                    {V.canManageCanned && <button onClick={V.editCanned} data-id={r.id} className={editBtn()}>Edit</button>}
                   </span>
                 </div>
               ))}
@@ -410,8 +410,8 @@ export default function Settings({ V }) {
         {V.tabTags && (
           <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:620px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>tags</h2>
-              <p className={sx('font-size:13px;color:var(--cs-muted)')}>how conversations get sorted. a key is written onto every conversation that wears it, so it never changes.</p>
+              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Tags</h2>
+              <p className={sx('font-size:13px;color:var(--cs-muted)')}>How conversations get sorted. A key is written onto every conversation that wears it, so it never changes.</p>
             </div>
             {V.tagsErr && <LoadNote>{V.tagsErr}</LoadNote>}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
@@ -420,13 +420,13 @@ export default function Settings({ V }) {
                   <span data-tone={t.tone} className={sx('display:inline-flex;align-items:center;gap:7px;padding:3px 11px;border-radius:100px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg);width:fit-content')}><i className={sx('width:7px;height:7px;border-radius:50%;background:var(--tone-hue)')}></i>{t.label}</span>
                   <span className={sx('color:var(--cs-muted);font-variant-numeric:tabular-nums;font-size:12.5px')}>{t.count} conversations</span>
                   <span className={sx('text-align:right')}>
-                    {V.canManageDesk && <button onClick={V.editTag} data-key={t.key} className={editBtn()}>edit</button>}
+                    {V.canManageDesk && <button onClick={V.editTag} data-key={t.key} className={editBtn()}>Edit</button>}
                   </span>
                 </div>
               ))}
             </div>
             {V.canManageDesk && (
-              <button onClick={V.newTag} className={sx('align-self:flex-start;padding:9px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:13px;cursor:pointer', { hover: 'color:var(--cs-brand);border-color:var(--cs-brand)' })}>+ new tag</button>
+              <button onClick={V.newTag} className={sx('align-self:flex-start;padding:9px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:13px;cursor:pointer', { hover: 'color:var(--cs-brand);border-color:var(--cs-brand)' })}>+ New tag</button>
             )}
           </div>
         )}
@@ -435,10 +435,10 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px')}>
             <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
               <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>webhooks</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>where plumo tells other systems what happened.</p>
+                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Webhooks</h2>
+                <p className={sx('font-size:13px;color:var(--cs-muted)')}>Where plumo tells other systems what happened.</p>
               </div>
-              {V.canManageDesk && <button onClick={V.newWebhook} className={primaryBtn()}>add endpoint</button>}
+              {V.canManageDesk && <button onClick={V.newWebhook} className={primaryBtn()}>Add endpoint</button>}
             </div>
             {V.hooksErr && <LoadNote>{V.hooksErr}</LoadNote>}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
@@ -461,26 +461,26 @@ export default function Settings({ V }) {
           <div className={sx('display:flex;flex-direction:column;gap:16px')}>
             <div className={sx('display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap')}>
               <div className={sx('flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px')}>
-                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>api keys</h2>
-                <p className={sx('font-size:13px;color:var(--cs-muted)')}>secrets, kept softly — a key is shown once and never again.</p>
+                <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>API keys</h2>
+                <p className={sx('font-size:13px;color:var(--cs-muted)')}>A key is shown once and never again.</p>
               </div>
             </div>
 
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:16px;display:flex;flex-direction:column;gap:12px')}>
-              <span className={sx('font-size:13.5px;font-weight:500')}>new key</span>
+              <span className={sx('font-size:13.5px;font-weight:500')}>New key</span>
               <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end')}>
                 <div className={sx('flex:1;min-width:200px')}>
                   <Input
-                    label="name"
+                    label="Name"
                     value={V.keyName}
                     onChange={V.onKeyName}
                     placeholder="4hacks chatbot"
                   />
                 </div>
-                <button onClick={V.genKey} className={primaryBtn()}>generate key</button>
+                <button onClick={V.genKey} className={primaryBtn()}>Generate key</button>
               </div>
               <div className={sx('display:flex;flex-direction:column;gap:7px')}>
-                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>what is it for</span>
+                <span className={sx('font-size:12.5px;color:var(--cs-muted)')}>What is it for</span>
                 <div className={sx('display:flex;gap:7px;flex-wrap:wrap')}>
                   {V.keyKinds.map((k) => (
                     <button
@@ -504,11 +504,11 @@ export default function Settings({ V }) {
             {V.hasSecret && (
               <div data-tone="st-pending" className={'animate-fade-in ' + sx('display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--cs-r-md);background:color-mix(in srgb, var(--tone-hue) 12%, var(--cs-surface));border:1px solid color-mix(in srgb, var(--tone-hue) 30%, transparent);flex-wrap:wrap')}>
                 <div className={sx('flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px')}>
-                  <span className={sx("font-size:12.5px;color:var(--tone-fg);font-weight:500")}>copy this now — we won't show it again</span>
+                  <span className={sx("font-size:12.5px;color:var(--tone-fg);font-weight:500")}>Copy this now — it cannot be shown again</span>
                   <span className={sx('font-family:var(--plumo-font-mono);font-size:13px;color:var(--cs-text);word-break:break-all')}>{V.secret}</span>
                 </div>
-                <button onClick={V.copySecret} className={sx('padding:8px 14px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12.5px;cursor:pointer')}>copy</button>
-                <button onClick={V.hideKey} className={sx('padding:8px 14px;border:none;border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:12.5px;cursor:pointer')}>done</button>
+                <button onClick={V.copySecret} className={sx('padding:8px 14px;border:0.5px solid var(--cs-border);border-radius:var(--plumo-radius-pill);background:var(--cs-surface);color:var(--cs-text);font-size:12.5px;cursor:pointer')}>Copy</button>
+                <button onClick={V.hideKey} className={sx('padding:8px 14px;border:none;border-radius:var(--plumo-radius-pill);background:transparent;color:var(--cs-muted);font-size:12.5px;cursor:pointer')}>Done</button>
               </div>
             )}
             <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);overflow-x:auto')}>
@@ -521,7 +521,7 @@ export default function Settings({ V }) {
                     {k.name}
                     {k.active === false && (
                       <span data-tone="st-closed" className={sx('font-size:11px;padding:1px 7px;border-radius:100px')}
-                        style={{ background: 'color-mix(in srgb, var(--tone-hue) 16%, transparent)', color: 'var(--tone-fg)' }}>revoked</span>
+                        style={{ background: 'color-mix(in srgb, var(--tone-hue) 16%, transparent)', color: 'var(--tone-fg)' }}>Revoked</span>
                     )}
                   </span>
                   <span className={sx('color:var(--cs-muted)')}>{k.scope}</span>
@@ -531,7 +531,7 @@ export default function Settings({ V }) {
                     {k.active !== false && (
                       <button onClick={V.revokeKey} data-id={k.id}
                         className={sx('padding:4px 10px;border:0.5px solid var(--cs-border);border-radius:100px;background:transparent;color:var(--cs-muted);font-size:12px;cursor:pointer')}>
-                        revoke
+                        Revoke
                       </button>
                     )}
                   </span>
@@ -544,8 +544,8 @@ export default function Settings({ V }) {
         {V.tabEmail && (
           <div className={sx('display:flex;flex-direction:column;gap:16px;max-width:680px')}>
             <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>email &amp; channels</h2>
-              <p className={sx("font-size:13px;color:var(--cs-muted)")}>where conversations come in.</p>
+              <h2 className={sx('font-size:20px;font-weight:500;letter-spacing:-.5px')}>Email &amp; channels</h2>
+              <p className={sx("font-size:13px;color:var(--cs-muted)")}>Where conversations come in.</p>
             </div>
 
             {/* The receiving address is the only setting on this screen with
@@ -554,15 +554,15 @@ export default function Settings({ V }) {
                 showed a toast and changed nothing, so they are gone. */}
             {!V.canManageDesk ? (
               <span className={sx('font-size:12.5px;color:var(--cs-muted);padding:12px 16px;border:0.5px dashed var(--cs-border);border-radius:var(--cs-r-md)')}>
-                the receiving address is an admin setting — ask one of yours.
+                The receiving address is an admin setting.
               </span>
             ) : (
               <div className={sx('border:0.5px solid var(--cs-border);border-radius:var(--cs-r-md);background:var(--cs-surface);padding:20px;display:flex;flex-direction:column;gap:12px')}>
                 <div className={sx('display:flex;flex-direction:column;gap:4px')}>
-                  <span className={sx('font-size:14px;font-weight:500')}>inbound</span>
+                  <span className={sx('font-size:14px;font-weight:500')}>Inbound</span>
                   <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.5')}>
-                    mail sent to this address becomes a conversation on this desk. leave it empty to stop
-                    receiving mail — nothing already here is lost, new messages are simply refused.
+                    Mail sent to this address becomes a conversation on this desk. Leave it empty to stop
+                    receiving mail. Nothing already here is lost; new messages are simply refused.
                   </span>
                 </div>
 
@@ -573,7 +573,7 @@ export default function Settings({ V }) {
                 <div className={sx('display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start')}>
                   <div className={sx('flex:1;min-width:220px')}>
                     <Input
-                      label="receiving address"
+                      label="Receiving address"
                       type="email"
                       value={V.inboundDraft}
                       onChange={V.onInboundDraft}
@@ -585,19 +585,19 @@ export default function Settings({ V }) {
                   {/* 20px = the label's 16px line box + its 4px margin, so the
                       button's top edge meets the field's, not the label's. */}
                   <button onClick={V.saveInbound} disabled={V.inboundBusy} className={cn(primaryBtn(), 'mt-5')}>
-                    {V.inboundBusy ? 'saving…' : 'save'}
+                    {V.inboundBusy ? 'Saving…' : 'Save'}
                   </button>
                 </div>
 
                 <span data-tone={V.inboundOn ? 'sla-met' : 'sla-paused'} className={sx('width:fit-content;padding:3px 9px;border-radius:100px;font-size:12px;background:color-mix(in srgb, var(--tone-hue) 14%, var(--cs-surface));color:var(--tone-fg)')}>
-                  {V.inboundOn ? 'receiving mail' : 'inbound mail is off'}
+                  {V.inboundOn ? 'Receiving mail' : 'Inbound mail is off'}
                 </span>
               </div>
             )}
 
             <span className={sx('font-size:12.5px;color:var(--cs-muted);line-height:1.55')}>
-              the reply-to name, the in-app widget and the chatbot bridge have no setting behind them yet,
-              so there is nothing here to change. keys for the public api live in the api keys panel.
+              The reply-to name, the in-app widget and the chatbot bridge have no setting behind them yet,
+              so there is nothing here to change. Keys for the public API live in the API keys panel.
             </span>
           </div>
         )}
@@ -614,7 +614,7 @@ export default function Settings({ V }) {
           size="md"
           footer={
             <>
-              <Button variant="outline" size="md" onClick={V.closeEditor}>not now</Button>
+              <Button variant="outline" size="md" onClick={V.closeEditor}>Cancel</Button>
               <Button size="md" onClick={V.submitEditor} loading={V.editorBusy}>
                 {V.editorOk}
               </Button>

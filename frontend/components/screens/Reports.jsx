@@ -42,9 +42,9 @@ export default function Reports({ V }) {
     // the cap sits on it directly and the scrollbar rides the 1400px column.
     <div data-scroll className="flex-1 min-h-0 overflow-y-auto w-full max-w-[1400px] mx-auto p-4 md:p-8 flex flex-col gap-4">
       <div>
-        <h1 className="text-[26px] font-semibold tracking-tight text-fg">reports</h1>
+        <h1 className="text-[26px] font-semibold tracking-tight text-fg">Reports</h1>
         <p className="text-[13px] text-fg-2 mt-1">
-          last 7 days, across both teams. no targets to beat — just a look at how it&apos;s going.
+          Last 7 days, across both teams.
         </p>
       </div>
 
@@ -76,7 +76,7 @@ export default function Reports({ V }) {
               variant="outline"
               size="icon"
               onClick={V.clearDrill}
-              aria-label="close this breakdown"
+              aria-label="Close this breakdown"
               className="flex-none"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
@@ -106,13 +106,13 @@ export default function Reports({ V }) {
 
           <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
             <div className="flex flex-col gap-2.5">
-              <span className="text-[13px] font-medium">how it splits</span>
+              <span className="text-[13px] font-medium">How it splits</span>
               {V.drillBreakdown.map((b, i) => (
                 <BarRow key={i} label={b.label} n={b.n} pct={b.wn} />
               ))}
             </div>
             <div className="flex flex-col gap-2.5">
-              <span className="text-[13px] font-medium">conversations behind this</span>
+              <span className="text-[13px] font-medium">Conversations behind this</span>
               {V.drillTickets.map((x) => (
                 <button
                   key={x.id}
@@ -136,12 +136,12 @@ export default function Reports({ V }) {
       <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(320px,1.6fr)_minmax(240px,1fr)]">
         <div className={PANEL + ' p-4 flex flex-col gap-3.5'}>
           <div className="flex items-center gap-3.5 flex-wrap">
-            <span className="text-[13.5px] font-medium">created vs resolved</span>
+            <span className="text-[13.5px] font-medium">Created vs resolved</span>
             <span className="inline-flex items-center gap-1.5 text-[11.5px] text-fg-3">
-              <i className="w-[9px] h-[9px] rounded-[3px] bg-[color:var(--primary)]" />created
+              <i className="w-[9px] h-[9px] rounded-[3px] bg-[color:var(--primary)]" />Created
             </span>
             <span className="inline-flex items-center gap-1.5 text-[11.5px] text-fg-3">
-              <i className="w-[9px] h-[9px] rounded-[3px] bg-[color:var(--plumo-sky)]" />resolved
+              <i className="w-[9px] h-[9px] rounded-[3px] bg-[color:var(--plumo-sky)]" />Resolved
             </span>
           </div>
           <div className="flex items-end gap-3.5 h-[184px]">
@@ -158,7 +158,7 @@ export default function Reports({ V }) {
         </div>
 
         <div className={PANEL + ' p-4 flex flex-col gap-3'}>
-          <span className="text-[13.5px] font-medium">where they come from</span>
+          <span className="text-[13.5px] font-medium">Where they come from</span>
           {V.byChannel.map((c, i) => (
             <BarRow key={i} label={c.label} n={c.n} pct={c.wn} />
           ))}

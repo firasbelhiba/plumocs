@@ -32,15 +32,15 @@ export function Customers({ V }) {
     <div data-scroll className={PAGE}>
       <div className="flex items-end gap-4 flex-wrap">
         <div className="flex-1 min-w-[220px]">
-          <h1 className="text-[26px] font-semibold tracking-tight text-fg">customers</h1>
-          <p className="text-[13px] text-fg-2 mt-1">everyone who has written in, and how they&apos;re doing.</p>
+          <h1 className="text-[26px] font-semibold tracking-tight text-fg">Customers</h1>
+          <p className="text-[13px] text-fg-2 mt-1">Everyone who has written in, and how they&apos;re doing.</p>
         </div>
         <div className="w-[280px]">
           <Input
             value={V.custQ}
             onChange={V.onCustQ}
-            placeholder="find a person or organisation…"
-            aria-label="search customers"
+            placeholder="Search people or organisations…"
+            aria-label="Search customers"
             className="!rounded-full h-btn-md"
           />
         </div>
@@ -104,7 +104,7 @@ export function CustomerProfile({ V }) {
           </svg>
         }
       >
-        all customers
+        All customers
       </Button>
 
       <div className="rounded-token bg-surface border border-[color:var(--border)] p-4 flex items-start gap-4 flex-wrap">
@@ -115,15 +115,15 @@ export function CustomerProfile({ V }) {
           <span className="text-[13px] text-fg-3">{V.cPhone} · {V.cTz}</span>
         </div>
         <Button onClick={V.openNewTicket} size="md" className="whitespace-nowrap">
-          start a conversation with {V.cName}
+          Start a conversation with {V.cName}
         </Button>
       </div>
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
-        <StatCard label="conversations all time" value={V.cTotal} />
-        <StatCard label="open right now" value={V.cOpen} />
-        <StatCard label="avg. resolution" value={V.cAvg} />
-        <StatCard label="last seen ago" value={V.cLastSeen} />
+        <StatCard label="Conversations all time" value={V.cTotal} />
+        <StatCard label="Open right now" value={V.cOpen} />
+        <StatCard label="Avg. resolution" value={V.cAvg} />
+        <StatCard label="Last seen" value={V.cLastSeen} />
       </div>
 
       <div className={PANEL}>

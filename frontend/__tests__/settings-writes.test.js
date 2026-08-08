@@ -78,7 +78,7 @@ describe('deactivating somebody', () => {
 
     c.answerConfirm(false);
     await c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
-    expect(c.confirms[0]).toMatchObject({ title: 'deactivate Rui Santos?', danger: true });
+    expect(c.confirms[0]).toMatchObject({ title: 'Deactivate Rui Santos?', danger: true });
     expect(api.users.deactivate).not.toHaveBeenCalled(); // declining changes nothing
 
     c.answerConfirm(true);
@@ -86,7 +86,7 @@ describe('deactivating somebody', () => {
 
     expect(api.users.deactivate).toHaveBeenCalledWith(THEM);
     expect(c.api.agents.map((a) => a.id)).toEqual([ME]);
-    expect(c.toasts).toEqual([{ text: 'Rui Santos no longer has access to this desk', tone: 'ok' }]);
+    expect(c.toasts).toEqual([{ text: 'Rui Santos deactivated successfully', tone: 'ok' }]);
   });
 
   // the exact regression: the old handler toasted this without any request
@@ -96,7 +96,7 @@ describe('deactivating somebody', () => {
 
     await c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
 
-    expect(c.toasts).toEqual([{ text: 'that one needs an admin — ask one of yours', tone: 'bad' }]);
+    expect(c.toasts).toEqual([{ text: 'That action requires an admin', tone: 'bad' }]);
     expect(c.api.agents.map((a) => a.id)).toContain(THEM);
   });
 
@@ -107,7 +107,7 @@ describe('deactivating somebody', () => {
     await c.askDeactivate(ev({ id: THEM, name: 'Rui Santos' }));
 
     expect(c.toasts[0].tone).toBe('bad');
-    expect(c.toasts[0].text).toMatch(/nothing was saved/);
+    expect(c.toasts[0].text).toMatch(/nothing was saved/i);
   });
 
   it('offers the control to admins only, and never on your own row', () => {
@@ -181,7 +181,7 @@ describe('the record editor', () => {
       name: 'urgent', firstResponseMins: 30, resolutionMins: 2880,
     });
     expect(api.slaPolicies.list).toHaveBeenCalled();
-    expect(c.toasts).toEqual([{ text: 'policy updated ✿', tone: 'ok' }]);
+    expect(c.toasts).toEqual([{ text: 'Policy updated successfully', tone: 'ok' }]);
   });
 
   // the table row is keyed by the tag's slug; PATCH /tags/:id wants the uuid

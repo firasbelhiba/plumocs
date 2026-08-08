@@ -26,6 +26,11 @@ const TAGTONE = {
 };
 const isMarkerTag = (t) => t.startsWith('sla:');
 
+/** Display names for the Channel enum — the raw values are lowercase slugs. */
+const CHANNEL_LABEL = {
+  chatbot: 'Chatbot', email: 'Email', api: 'API', widget: 'Widget', hashcare: 'HashCare',
+};
+
 const isUuid = (v) =>
   typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
@@ -197,9 +202,9 @@ class Adapter {
     this.apiKeys = keys.map((k) => ({
       id: k.id, name: k.name, scope: (k.scopes ?? []).join(', '),
       active: k.isActive !== false,
-      team: k.team?.name ?? 'all teams',
-      created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase(),
-      last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'never',
+      team: k.team?.name ?? 'All teams',
+      created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'Never',
     }));
     return this.apiKeys;
   }
@@ -276,7 +281,7 @@ class Adapter {
     this.tags = tagsRes.map((t) => ({ id: t.key, label: t.label, tone: TAGTONE[t.key] ?? 'neutral', count: t.count ?? 0 }));
     this.cannedResponses = cannedRes.map((r) => ({
       id: r.id, title: r.title, body: r.body,
-      team: r.team?.name ?? 'all teams', tags: r.tags ?? [],
+      team: r.team?.name ?? 'All teams', tags: r.tags ?? [],
     }));
     this.#ingestCustomers(customersRes.data);
     this.notifications = notifsRes.map((n) => this.#mapNotification(n));
@@ -304,9 +309,9 @@ class Adapter {
         id: k.id,
         name: k.name,
         scope: (k.scopes ?? []).join(', '),
-        team: k.team?.name ?? 'all teams',
-        created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase(),
-        last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'never',
+        team: k.team?.name ?? 'All teams',
+        created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'Never',
       }));
     } else {
       this.webhooks = [];
@@ -664,18 +669,18 @@ class Adapter {
       api.reports.volume({ days: 14 }),
     ]);
 
-    const dayName = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short' }).toLowerCase();
+    const dayName = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short' });
 
     this.reports = {
       kpis: [
-        { id: 'k1', label: 'people waiting', value: String(summary.openTickets), delta: 'open right now' },
-        { id: 'k2', label: 'first response', value: summary.firstResponseMedian ?? '—', delta: 'median · 7 days' },
-        { id: 'k3', label: 'time to closed', value: summary.resolutionMedian ?? '—', delta: 'median · 7 days' },
-        { id: 'k4', label: 'promises kept', value: summary.slaMetPct != null ? `${summary.slaMetPct}%` : '—', delta: 'sla met · 7 days' },
-        { id: 'k5', label: 'resolved', value: String(summary.resolvedLast7Days), delta: 'last 7 days' },
+        { id: 'k1', label: 'People waiting', value: String(summary.openTickets), delta: 'Open right now' },
+        { id: 'k2', label: 'First response', value: summary.firstResponseMedian ?? '—', delta: 'Median · 7 days' },
+        { id: 'k3', label: 'Time to closed', value: summary.resolutionMedian ?? '—', delta: 'Median · 7 days' },
+        { id: 'k4', label: 'Promises kept', value: summary.slaMetPct != null ? `${summary.slaMetPct}%` : '—', delta: 'SLA met · 7 days' },
+        { id: 'k5', label: 'Resolved', value: String(summary.resolvedLast7Days), delta: 'Last 7 days' },
       ],
       volume: volume.map((v) => ({ d: dayName(v.d), created: v.created, resolved: v.resolved })),
-      byChannel: byChannel.map((c) => ({ label: c.channel === 'hashcare' ? 'HashCare' : c.channel, n: c.count })),
+      byChannel: byChannel.map((c) => ({ label: CHANNEL_LABEL[c.channel] ?? c.channel, n: c.count })),
       byAgent: byAgent.map((a) => ({ id: a.id, name: a.name, open: a.open, resolved: a.resolved, avg: a.avgResolution ?? '—' })),
     };
 
@@ -683,31 +688,31 @@ class Adapter {
     const createdSeries = volume14.map((v) => v.created);
     const resolvedSeries = volume14.map((v) => v.resolved);
     const channelBreakdown = this.reports.byChannel.map((c) => ({ label: c.label, n: c.n }));
-    const agentBreakdown = byAgent.slice(0, 4).map((a) => ({ label: a.name.split(' ')[0].toLowerCase(), n: a.resolved }));
+    const agentBreakdown = byAgent.slice(0, 4).map((a) => ({ label: a.name.split(' ')[0], n: a.resolved }));
     this.drilldowns = {
       k1: {
-        title: 'open tickets', value: String(summary.openTickets),
-        note: 'created per day over the last two weeks.', axis: 'created per day',
+        title: 'Open tickets', value: String(summary.openTickets),
+        note: 'Created per day over the last two weeks.', axis: 'Created per day',
         series: createdSeries, breakdown: channelBreakdown, view: 'all-open',
       },
       k2: {
-        title: 'first response', value: summary.firstResponseMedian ?? '—',
-        note: 'median time to the first public reply, last 7 days.', axis: 'created per day',
+        title: 'First response', value: summary.firstResponseMedian ?? '—',
+        note: 'Median time to the first public reply, last 7 days.', axis: 'Created per day',
         series: createdSeries, breakdown: channelBreakdown, view: 'breaching',
       },
       k3: {
-        title: 'resolution', value: summary.resolutionMedian ?? '—',
-        note: 'median time from open to resolved, last 7 days.', axis: 'resolved per day',
+        title: 'Resolution', value: summary.resolutionMedian ?? '—',
+        note: 'Median time from open to resolved, last 7 days.', axis: 'Resolved per day',
         series: resolvedSeries, breakdown: agentBreakdown, view: 'pending',
       },
       k4: {
-        title: 'sla met', value: summary.slaMetPct != null ? `${summary.slaMetPct}%` : '—',
-        note: 'share of resolutions inside their target, last 7 days.', axis: 'resolved per day',
+        title: 'SLA met', value: summary.slaMetPct != null ? `${summary.slaMetPct}%` : '—',
+        note: 'Share of resolutions inside their target, last 7 days.', axis: 'Resolved per day',
         series: resolvedSeries, breakdown: agentBreakdown, view: 'breaching',
       },
       k5: {
-        title: 'resolved', value: String(summary.resolvedLast7Days),
-        note: 'conversations closed out over the last two weeks.', axis: 'resolved per day',
+        title: 'Resolved', value: String(summary.resolvedLast7Days),
+        note: 'Conversations closed out over the last two weeks.', axis: 'Resolved per day',
         series: resolvedSeries, breakdown: agentBreakdown, view: 'resolved',
       },
     };
@@ -746,9 +751,9 @@ class Adapter {
     await api.apiKeys.list().then((keys) => {
       this.apiKeys = keys.map((k) => ({
         id: k.id, name: k.name, scope: (k.scopes ?? []).join(', '), active: k.isActive !== false,
-        team: k.team?.name ?? 'all teams',
-        created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase(),
-        last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'never',
+        team: k.team?.name ?? 'All teams',
+        created: new Date(k.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        last: k.lastUsedAt ? this.#rel(ms(k.lastUsedAt)) + ' ago' : 'Never',
       }));
     }).catch(() => {});
     return key.secret;
