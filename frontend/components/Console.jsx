@@ -325,16 +325,43 @@ export default class Console extends React.Component {
   };
   clearDrill = () => this.setState({ drill: null, drillLoad: 'idle' });
   openAccount = () => this.setState({ screen: 'account', menu: null });
-  SETTINGS_CARDS = [
-    { v: 'team', name: 'Team & users', meta: '8 people · 2 teams', blurb: 'Who is here, what they can reach, and who is available right now.' },
-    { v: 'sla', name: 'SLA policies', meta: '3 policies', blurb: 'Response and resolution targets, by priority.' },
-    { v: 'hours', name: 'Business hours', meta: 'Mon–Fri · Europe/Lisbon', blurb: 'When the clocks run, and the days they rest.' },
-    { v: 'canned', name: 'Canned responses', meta: '5 saved', blurb: 'Words worth keeping, so nobody writes them twice.' },
-    { v: 'tags', name: 'Tags', meta: '6 tags', blurb: 'How tickets get sorted, and the colours they wear.' },
-    { v: 'hooks', name: 'Webhooks', meta: '3 endpoints · 1 failing', blurb: 'Where plumo tells other systems what happened.' },
-    { v: 'keys', name: 'API keys', meta: '3 keys', blurb: 'Secrets are shown once and never again.' },
-    { v: 'email', name: 'Email & channels', meta: '3 connected', blurb: 'Where conversations arrive, and who they look like they are from.' },
-  ];
+  /**
+   * The settings overview, with counts read from the desk rather than invented.
+   *
+   * Every one of these metas used to be a literal — "8 people · 2 teams",
+   * "3 policies", "6 tags", "3 endpoints · 1 failing" — printed against a desk
+   * that has four people and none of those numbers. They read as data because
+   * they sit exactly where data belongs, which is what makes them worse than a
+   * blank: nobody squints at a number to decide whether to believe it.
+   *
+   * Where a list has not loaded, the meta is EMPTY rather than a guess. Webhooks,
+   * API keys and channels are not in the reference wave at all — their panels
+   * fetch on open — so the overview genuinely does not know those counts and now
+   * says nothing instead of three fictions.
+   */
+  settingsCards(A, refsReady) {
+    const n = (arr, one, many) => {
+      const c = Array.isArray(arr) ? arr.length : 0;
+      return `${c} ${c === 1 ? one : many}`;
+    };
+    // Counts only once the wave that fetches them has landed; a 0 mid-flight is
+    // the same lie in a smaller font.
+    const ref = (fn) => (refsReady ? fn() : '');
+    const hours = Array.isArray(A.businessHours) ? A.businessHours[0] : null;
+
+    return [
+      { v: 'team', name: 'Team & users', meta: ref(() => `${n(A.agents, 'person', 'people')} · ${n(A.teams, 'team', 'teams')}`), blurb: 'Who is here, what they can reach, and who is available right now.' },
+      { v: 'sla', name: 'SLA policies', meta: ref(() => n(A.slaPolicies, 'policy', 'policies')), blurb: 'Response and resolution targets, by priority.' },
+      { v: 'hours', name: 'Business hours', meta: ref(() => (hours && hours.timezone ? hours.timezone : '')), blurb: 'When the clocks run, and the days they rest.' },
+      { v: 'canned', name: 'Canned responses', meta: ref(() => n(A.cannedResponses, 'saved', 'saved')), blurb: 'Words worth keeping, so nobody writes them twice.' },
+      { v: 'tags', name: 'Tags', meta: ref(() => n(A.tags, 'tag', 'tags')), blurb: 'How tickets get sorted, and the colours they wear.' },
+      // The three below fetch on panel open, so the overview has nothing to
+      // report. Silence is the honest answer; the panel itself shows the truth.
+      { v: 'hooks', name: 'Webhooks', meta: '', blurb: 'Where plumo tells other systems what happened.' },
+      { v: 'keys', name: 'API keys', meta: '', blurb: 'Secrets are shown once and never again.' },
+      { v: 'email', name: 'Email & channels', meta: '', blurb: 'Where conversations arrive, and who they look like they are from.' },
+    ];
+  }
 
   searchRef = React.createRef();
   replyRef = React.createRef();
@@ -2327,7 +2354,7 @@ export default class Console extends React.Component {
       sendReset: this.sendReset, backToSignin: this.backToSignin,
       isAccount: S.screen === 'account', openAccount: this.openAccount,
       isNotFound: S.screen === 'notfound', isOops: S.screen === 'oops',
-      tabOverview: S.settingsTab === 'overview', settingsCards: this.SETTINGS_CARDS,
+      tabOverview: S.settingsTab === 'overview', settingsCards: this.settingsCards(A, refsReady),
       // Linking this desk to a Plumo PM workspace. `pmAvailable` is false on a
       // deployment with no PM_ISSUER configured, in which case the panel is not
       // rendered at all rather than shown broken.
@@ -2348,7 +2375,7 @@ export default class Console extends React.Component {
       settingsTab: S.settingsTab, setSettingsTab: this.setSettingsTab,
       // Leaf crumb for the settings breadcrumb. Empty on the overview tab, which
       // is the section root and so is already named by the crumb above it.
-      settingsTabLabel: (this.SETTINGS_CARDS.find(c => c.v === S.settingsTab) || {}).name || '',
+      settingsTabLabel: (this.settingsCards(A, refsReady).find(c => c.v === S.settingsTab) || {}).name || '',
       tabTeam: S.settingsTab === 'team', tabSla: S.settingsTab === 'sla', tabHours: S.settingsTab === 'hours',
       tabCanned: S.settingsTab === 'canned', tabTags: S.settingsTab === 'tags', tabHooks: S.settingsTab === 'hooks',
       tabKeys: S.settingsTab === 'keys', tabEmail: S.settingsTab === 'email',
