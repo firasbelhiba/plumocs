@@ -242,7 +242,7 @@ export default function Login({ V }) {
 
             <div className="flex items-center gap-3 my-4">
               <span className="flex-1 h-px bg-[color:var(--border)]" />
-              <span className="font-mono text-[10.5px] uppercase tracking-[1.6px] text-fg-3 whitespace-nowrap">
+              <span className="font-mono text-[11px] uppercase tracking-[0.55px] text-fg-3 whitespace-nowrap">
                 or with email
               </span>
               <span className="flex-1 h-px bg-[color:var(--border)]" />
@@ -320,9 +320,9 @@ export default function Login({ V }) {
                 />
                 Keep me signed in
               </label>
-              <Button variant="link" size="sm" onClick={V.forgot} className="text-[13px]">
+              <button type="button" onClick={V.forgot} className="bg-transparent border-0 p-0 text-[13px] font-medium text-[color:var(--primary)] hover:underline cursor-pointer focus-ring rounded">
                 Forgot password?
-              </Button>
+              </button>
             </div>
 
             {/* `loading` + `disabled` together, as PM's submit button has them
@@ -339,7 +339,7 @@ export default function Login({ V }) {
               Sign in
             </Button>
 
-            <p className="text-center text-[13px] text-fg-2 mt-4">
+            <p className="text-center text-[12px] text-fg-2 mt-4">
               New to plumo?{' '}
               <Button variant="link" size="sm" onClick={V.requestAccess} className="text-[13px] align-baseline">
                 Request access
