@@ -113,9 +113,26 @@ it will fail `tsc` and any lint pass. Fold into item 45.
 touched. This batch fixes visible defects that are shipping now, and it is a prerequisite for
 almost everything below. Push each item separately; they are independent.*
 
+**STATUS 2026-08-08:** items 1–6 all **DONE**, commit `e0f4139`. This batch shipped before
+the per-item `✅ DONE` convention that batches 2–10 use, so the markers below were added
+retroactively during the final pass; the code was verified present at the time, and again
+now. Two items resolved differently from their written instruction, both already recorded:
+
+- **Item 2, `--r-sm`** — not defined. The item's own table says "fix the call site, do not
+  define the var", and batch 4 did exactly that (`Login.jsx:183` → `rounded-token`). No
+  `var(--r-sm)` reference survives anywhere in the tree.
+- **Item 2, `--wash-lilac`** — still an inline `#A78BFA` at `Login.jsx:13`,
+  `accept-invite/page.jsx:27` and `reset-password/page.jsx:28`, not repointed at `--epic`.
+  Batch 4 declined deliberately: `--epic` is `#7c3aed` in light and only `#a78bfa` in dark,
+  so repointing turns the light-mode auth wash deep violet. See the note under item 2.
+
+The other thirteen of the fifteen variables are defined in both themes; the `@layer base { * }`
+border rule, the motion layer, the Tailwind animations/ramps and the widened content glob are
+all confirmed present in source and in the built stylesheet.
+
 ---
 
-#### 1. Add the global border-colour rule — **S**
+#### 1. Add the global border-colour rule — **S** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css` — no equivalent. **PM** `src/app/globals.css:185-188`.
 
@@ -140,7 +157,7 @@ near-white.
 
 ---
 
-#### 2. Define the 15 missing CSS variables — **S**
+#### 2. Define the 15 missing CSS variables — **S** ✅ DONE 2026-08-08 (13 of 15 — see batch status)
 
 **CS** `app/globals.css:130-208` (add to `:root` and to `[data-cs-theme="dark"]`).
 **PM** `src/app/globals.css:51-53, 69-76, 82, 89` (light) and `:136-138, 153-163` (dark).
@@ -181,7 +198,7 @@ that is a palette substitution, which is in scope.
 
 ---
 
-#### 3. Port PM's motion layer — **M**
+#### 3. Port PM's motion layer — **M** ✅ DONE 2026-08-08
 
 **CS** `app/globals.css` — none of this exists. **PM** `src/app/globals.css:317-524`.
 
@@ -222,7 +239,7 @@ do 3 and 24 in one push.
 
 ---
 
-#### 4. Restore the missing Tailwind animations and keyframes — **S**
+#### 4. Restore the missing Tailwind animations and keyframes — **S** ✅ DONE 2026-08-08
 
 **CS** `tailwind.config.ts:57-67`. **PM** `tailwind.config.ts:132-151`.
 
@@ -238,7 +255,7 @@ the built CSS.
 
 ---
 
-#### 5. Restore PM's colour scales in the Tailwind config — **S**
+#### 5. Restore PM's colour scales in the Tailwind config — **S** ✅ DONE 2026-08-08
 
 **CS** `tailwind.config.ts:13-28`. **PM** `tailwind.config.ts:30-102`.
 
@@ -259,7 +276,7 @@ components/` returns nothing today; after any future port it should resolve.
 
 ---
 
-#### 6. Widen the content glob — **S**
+#### 6. Widen the content glob — **S** ✅ DONE 2026-08-08
 
 **CS** `tailwind.config.ts:9`: `['./components/**/*.{js,jsx,ts,tsx}', './app/**/*.{js,jsx,ts,tsx}']`
 **PM** `tailwind.config.ts:4-8` covers `src/pages`, `src/components`, `src/app`.
