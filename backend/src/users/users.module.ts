@@ -212,28 +212,54 @@ export class UsersService {
     // to whichever table happens to accept it.
     const { name, avatarUrl, isActive, role, teamId, availability } = dto;
     await this.prisma.$transaction(async () => {
-      // Two ways this request can cost the desk an administrator, and they are
-      // written to different tables: a role that is no longer `admin`, and
-      // `isActive: false`, which disables the ACCOUNT globally and so takes
-      // away the admin's ability to sign in anywhere. `role: 'admin'` with
-      // `isActive: false` still counts — they would end up an admin who cannot
-      // log in, which is the lockout this guard exists to prevent.
+      // Two ways this request can cost the desk an administrator: a role that
+      // is no longer `admin`, and `isActive: false`. Both now write the same
+      // row — the membership — where `isActive` used to disable the account
+      // globally; the guard was needed either way, and is narrower and more
+      // honest now that it is reasoning about one desk rather than one person.
+      // `role: 'admin'` with `isActive: false` still counts: they would be an
+      // admin who cannot reach the desk, which is the lockout this prevents.
       //
       // Inside the transaction and ahead of the writes: checking outside it
       // would be the plain-count race the guard documents.
       if ((role !== undefined && role !== 'admin') || isActive === false) {
         await this.assertAdminRemains(id, actor);
       }
-      if (name !== undefined || avatarUrl !== undefined || isActive !== undefined) {
+      // `name` and `avatarUrl` are the person, not the posting: they are the
+      // same on every desk, so they belong on `users`.
+      if (name !== undefined || avatarUrl !== undefined) {
         await this.prisma.user.update({
           where: { id },
-          data: { ...(name !== undefined ? { name } : {}), ...(avatarUrl !== undefined ? { avatarUrl } : {}), ...(isActive !== undefined ? { isActive } : {}) },
+          data: { ...(name !== undefined ? { name } : {}), ...(avatarUrl !== undefined ? { avatarUrl } : {}) },
         });
       }
-      if (role !== undefined || teamId !== undefined || availability !== undefined) {
+      // `isActive` MOVED HERE, and that is the fix rather than a tidy-up.
+      //
+      // It used to write `users.isActive`, which is a GLOBAL ACCOUNT FLAG. So an
+      // admin of one desk could switch off somebody's ability to sign in
+      // ANYWHERE — including a desk they have no membership in and cannot see.
+      // With two live workspaces that is a cross-tenant action reachable from an
+      // ordinary settings screen, and the last-admin guard does not catch it: it
+      // protects THIS workspace from losing its administrator, not the one next
+      // door from losing theirs.
+      //
+      // `workspace_memberships.isActive` is the per-desk switch and is what
+      // DELETE /users/:id has always used. Deactivating from inside a workspace
+      // now means what it appears to mean — removed from THIS desk — and the
+      // person keeps every other one.
+      //
+      // Disabling an account outright is still a real need; it is just not this
+      // endpoint's to grant. It belongs to a platform-admin surface that can see
+      // every workspace the decision touches.
+      if (role !== undefined || teamId !== undefined || availability !== undefined || isActive !== undefined) {
         await this.prisma.workspaceMembership.update({
           where: { workspaceId_userId: { workspaceId: ws, userId: id } },
-          data: { ...(role !== undefined ? { role } : {}), ...(teamId !== undefined ? { teamId } : {}), ...(availability !== undefined ? { availability } : {}) },
+          data: {
+            ...(role !== undefined ? { role } : {}),
+            ...(teamId !== undefined ? { teamId } : {}),
+            ...(availability !== undefined ? { availability } : {}),
+            ...(isActive !== undefined ? { isActive } : {}),
+          },
         });
       }
     });

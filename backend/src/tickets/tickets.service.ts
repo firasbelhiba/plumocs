@@ -603,8 +603,19 @@ export class TicketsService {
         }
       } else if (actor.role === 'agent') {
         throw new ForbiddenException('Agents cannot move tickets between teams');
-      } else if (actor.role === 'lead' && dto.teamId && dto.teamId !== actor.teamId) {
-        // a lead's reach is their own team on BOTH sides of the move
+      } else if (actor.role === 'lead' && dto.teamId !== actor.teamId) {
+        // A lead's reach is their own team on BOTH sides of the move — and that
+        // includes NULL, which is why the `dto.teamId &&` that used to sit here
+        // is gone. It made the condition falsy for an unroute, so the guard
+        // collapsed and the one move a lead should least be able to make went
+        // through unchecked: `teamId: null` disconnects the ticket from every
+        // team, and team scoping then hides it from every agent and every other
+        // lead. It does not vanish — an admin still sees it — but the people
+        // whose queue it was cannot find it, and nobody is told.
+        //
+        // The api_key branch above already read it this way (`dto.teamId !==
+        // actor.teamId`, null included, with a comment saying so); the human
+        // branch simply never matched it.
         throw new ForbiddenException('Leads can only move tickets into their own team');
       }
       data.team = dto.teamId ? { connect: { id: dto.teamId } } : { disconnect: true };
