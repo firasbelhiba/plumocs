@@ -32,6 +32,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useRef(`dropdown-menu-${Math.random().toString(36).substr(2, 9)}`).current;
 
   useEffect(() => {
@@ -45,22 +46,44 @@ export const Dropdown: React.FC<DropdownProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle keyboard navigation
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      setIsOpen(false);
-    } else if (event.key === 'Enter' || event.key === ' ') {
+  /**
+   * Escape closes, from anywhere inside — trigger or item.
+   *
+   * It used to be bound to the trigger button, and the menu is a *sibling* of
+   * that button rather than a child of it, so a keydown raised on an item never
+   * reached the handler: Escape worked while focus still sat on the trigger and
+   * did nothing once the reader had tabbed into the list. Every hand-rolled
+   * panel this component replaces was dismissible with Escape from anywhere,
+   * because the console dismissed them from one window listener — so binding it
+   * on the wrapper is what keeps a conversion faithful instead of quietly
+   * narrowing it.
+   *
+   * Focus goes back to the trigger afterwards. The menu unmounts on close, and
+   * without this the focused element goes with it: the reader is dropped onto
+   * <body> and has to tab back through the page to where they were.
+   */
+  const handleWrapperKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Escape' || !isOpen) return;
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  // Enter and Space stay on the trigger: `preventDefault` here is what stops
+  // the browser also synthesising a click and toggling the menu twice.
+  const handleTriggerKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       setIsOpen(!isOpen);
     }
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef} onKeyDown={handleWrapperKeyDown}>
       <button
         type="button"
+        ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleTriggerKeyDown}
         aria-expanded={isOpen}
         aria-haspopup="menu"
         aria-controls={isOpen ? menuId : undefined}
@@ -102,7 +125,26 @@ export const DropdownItem: React.FC<{
    * probably wants to be a checkbox rather than a menu item.
    */
   keepOpen?: boolean;
-}> = ({ children, onClick, variant = 'default', keepOpen = false }) => {
+  /**
+   * Marks this row as the value currently in force, for the menus that pick
+   * one-of-N rather than fire an action.
+   *
+   * Every hand-rolled picker this component replaced tinted its current row —
+   * status, priority, team and the queue's sort order all rendered
+   * `data-on={String(o.on)}` against the `--cs-onbg/onfg/onw` token trio. The
+   * conversion dropped the tint and kept the flag: `statusOptions`,
+   * `prioOptions`, `teamList` and `sortOptions` still compute `.on` every
+   * render and nothing read it, so all four menus opened with no indication of
+   * where you already were. This is that indication, back in the primitive so
+   * the next picker gets it for free.
+   *
+   * Passing it at all is the claim that this row is one option among
+   * alternatives, which is what `menuitemradio` means — so the state reaches a
+   * screen reader too, where `data-on` never did. Leave it undefined for an
+   * action row and the item stays a plain `menuitem`.
+   */
+  selected?: boolean;
+}> = ({ children, onClick, variant = 'default', keepOpen = false, selected }) => {
   const ctx = useContext(DropdownCtx);
   const handle = () => {
     onClick?.();
@@ -110,13 +152,24 @@ export const DropdownItem: React.FC<{
     // consumer whose onClick reads event state would lose it.
     if (!keepOpen) ctx?.close();
   };
+  const isOption = selected !== undefined;
   return (
     <button
-      role="menuitem"
+      role={isOption ? 'menuitemradio' : 'menuitem'}
+      aria-checked={isOption ? selected : undefined}
       onClick={handle}
       className={cn(
         'block w-full text-left px-4 py-2 text-sm hover:bg-surface-2 transition-colors focus:outline-none focus-visible:bg-surface-2',
-        variant === 'danger' ? 'text-[color:var(--danger)]' : 'text-fg-2',
+        // One branch rather than a layer over the base: `twMerge` would have to
+        // pick a winner between `text-fg-2` and an arbitrary-value text colour
+        // to get here, and it does not reliably read a custom scale name as a
+        // colour. Same recipe as `Ticket.jsx`'s `ON_ROW`, which is what the
+        // assignee picker still uses for its own current row.
+        selected
+          ? 'bg-[color:var(--primary-soft)] text-[color:var(--primary)] font-medium'
+          : variant === 'danger'
+            ? 'text-[color:var(--danger)]'
+            : 'text-fg-2',
       )}
     >
       {children}

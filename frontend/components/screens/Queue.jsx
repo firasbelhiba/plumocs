@@ -199,7 +199,7 @@ export default function Queue({ V }) {
             }
           >
             {V.sortOptions.map((o) => (
-              <DropdownItem key={o.id} onClick={() => V.setSort(o.id)}>
+              <DropdownItem key={o.id} selected={o.on} onClick={() => V.setSort(o.id)}>
                 {o.label}
               </DropdownItem>
             ))}

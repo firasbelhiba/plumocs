@@ -339,7 +339,20 @@ export default class Console extends React.Component {
    * fetch on open — so the overview genuinely does not know those counts and now
    * says nothing instead of three fictions.
    */
-  settingsCards(A, refsReady) {
+  settingsCards(api, refsReady) {
+    /**
+     * `renderVals` passes `this.api`, and `this.api` is assigned in
+     * `componentDidMount` — which runs *after* the first render. So on first
+     * paint this was called with `undefined` and the `A.businessHours` read
+     * below threw, every time, on every route: the console never reached its
+     * own sign-in screen, only the 500 boundary. It is not a Settings bug; the
+     * app did not boot at all.
+     *
+     * Everything else here is already gated behind `refsReady`, which cannot be
+     * true before `this.api` exists, so an empty object changes nothing once
+     * the adapter has landed.
+     */
+    const A = api || {};
     const n = (arr, one, many) => {
       const c = Array.isArray(arr) ? arr.length : 0;
       return `${c} ${c === 1 ? one : many}`;
@@ -384,6 +397,7 @@ export default class Console extends React.Component {
     this.loadPmStatus();
     if (!signedInWithPm) this.loadPmSignInAvailability();
     window.addEventListener('keydown', this.onKey, true);
+    document.addEventListener('mousedown', this.onDocMouseDown);
     this.timer = setInterval(() => this.setState({ now: Date.now() }), 1000);
 
     this.api = adapter;
@@ -507,6 +521,7 @@ export default class Console extends React.Component {
   }
   componentWillUnmount() {
     window.removeEventListener('keydown', this.onKey, true);
+    document.removeEventListener('mousedown', this.onDocMouseDown);
     clearInterval(this.timer); clearTimeout(this.countsTimer);
     if (this.unsubscribeRealtime) this.unsubscribeRealtime();
   }
@@ -1051,6 +1066,30 @@ export default class Console extends React.Component {
   openCanned = this.menuTo('canned');
   toggleNotif = this.menuTo('notif');
   closeMenu = () => this.setState({ menu: null });
+
+  /**
+   * Click-outside for the panels that stayed hand-rolled.
+   *
+   * `closeMenu` has been here since the first commit and nothing has ever
+   * called it: the assignee picker, the canned-response picker and the
+   * notification panel could be dismissed by Escape or by hitting their own
+   * trigger a second time, and by nothing else. Clicking anywhere else left
+   * them standing over the screen. The menus that moved to `Dropdown` got a
+   * click-outside with the move; these three cannot move — each has a search
+   * field or a header row of its own — so they get one here.
+   *
+   * `mousedown` rather than `click`, so it agrees with `Dropdown` about when a
+   * menu is dismissed, and keyed off the wrapper that holds *both* the trigger
+   * and its panel: a check that only knew the panel would close on the
+   * trigger's own mousedown and let the trigger's click reopen it a moment
+   * later, which reads as a menu that ignores every second press.
+   */
+  onDocMouseDown = (e) => {
+    if (!this.state.menu) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('[data-menu-root]')) return;
+    this.closeMenu();
+  };
   onMenuQ = (e) => this.setState({ menuQ: e.target.value });
   readAllNotif = () => {
     this.setState(s => ({ notifs: s.notifs.map(n => ({ ...n, unread: false })) }));
@@ -1897,8 +1936,14 @@ export default class Console extends React.Component {
     }
     if (S.screen === 'ticket' && S.ticket) {
       if (e.key === 'r') { e.preventDefault(); if (this.replyRef.current) this.replyRef.current.focus(); return; }
-      if (e.key === 'e') { e.preventDefault(); this.setState({ menu: 'status' }); return; }
-      if (e.key === 'a') { e.preventDefault(); this.setState({ menu: 'assignee' }); return; }
+      /* `e` used to set `menu: 'status'` here. The status picker moved to
+         `Dropdown`, which keeps `isOpen` to itself, so nothing has read that
+         value since — the key was swallowed by `preventDefault` and then did
+         nothing at all. Opening it from here again would mean giving `Dropdown`
+         a controlled-open prop for one caller, so the honest fix is to stop
+         claiming the key: `e` on a ticket now falls through, and the shortcut
+         sheet only ever advertised it for the inbox, where it still works. */
+      if (e.key === 'a') { e.preventDefault(); this.setState({ menu: 'assignee', menuQ: '' }); return; }
     }
   };
 

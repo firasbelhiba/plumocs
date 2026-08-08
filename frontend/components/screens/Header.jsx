@@ -9,13 +9,20 @@ const RESULT_ROW =
 
 const GROUP_LABEL = 'px-2.5 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-[2px] text-[color:var(--primary)]';
 
-/* Neither panel below is a menu of items, so neither becomes a `Dropdown`:
-   one is a search result list with its own input, the other has a header and
-   its own "mark all read" action. What they do take from the primitive is its
-   chrome — `mt-2` (8px, not 8 and 9), `z-dropdown` rather than `z-popover`,
-   `shadow-card` rather than `shadow-modal`, and `animate-dropdown` in place of
-   the retired `data-anim="in"` overshoot. Same recipe as `Ticket.jsx`'s two
-   hand-rolled panels. */
+/* Neither panel below is a menu of items, so neither becomes a `Dropdown` —
+   and unlike `Ticket.jsx`'s two, the reason is not the missing query field.
+
+   Nothing in the notification panel can be picked: the rows are read-only
+   divs, and its one action lives in a header beside the title. `role="menu"`
+   over that would be a promise of menuitems that are not there. The search
+   list is a `role="listbox"` opened by typing rather than by pressing a
+   trigger, which is the one thing `Dropdown` cannot express at all — its
+   `isOpen` is private and there is no way in from the outside.
+
+   What they do take from the primitive is its chrome — `mt-2` (8px, not 8 and
+   9), `z-dropdown` rather than `z-popover`, `shadow-card` rather than
+   `shadow-modal`, and `animate-dropdown` in place of the retired
+   `data-anim="in"` overshoot. */
 const PANEL =
   'absolute top-full mt-2 z-dropdown rounded-token bg-surface border border-[color:var(--border)] shadow-card animate-dropdown';
 
@@ -183,7 +190,7 @@ export default function Header({ V }) {
         <span className="hidden md:inline">New Conversation</span>
       </Button>
 
-      <div className="relative flex-none">
+      <div data-menu-root className="relative flex-none">
         <IconButton label="Notifications" onClick={V.toggleNotif}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 9a6 6 0 10-12 0c0 5-2 6-2 6h16s-2-1-2-6M13.7 20a2 2 0 01-3.4 0" />

@@ -27,10 +27,22 @@ const ON_ROW = 'bg-[color:var(--primary-soft)] text-[color:var(--primary)] font-
 const TRIGGER_SM = buttonVariants({ variant: 'outline', size: 'sm' });
 const TRIGGER_ICON = buttonVariants({ variant: 'outline', size: 'icon' });
 
-/* The two searchable panels below stay hand-rolled — PM hand-rolls its
-   searchable popovers too (`AssigneePopover`) because the shared primitive has
-   no room for a query field. What they no longer keep is their own chrome: the
-   offset, shadow, z-layer, padding and entry animation are `Dropdown`'s. */
+/* The two searchable panels below stay hand-rolled, and it is worth writing
+   down why now that `Dropdown` closes on pick and the old excuse is gone.
+
+   A query field cannot go inside `role="menu"` — a menu's children have to be
+   menuitems, groups or separators — so hosting one means either breaking the
+   role or splitting the panel into a non-menu shell around a menu, plus props
+   for width, max-height and (for canned responses, which sits at the foot of
+   the composer) opening upward. That is four additions to a shared primitive
+   for two callers. PM reached the same conclusion from the other side: its
+   searchable pickers are `UserSelect` and a 431-line hand-rolled
+   `AssigneePopover`, never `Dropdown`.
+
+   What they no longer keep is their own chrome: the offset, shadow, z-layer,
+   padding and entry animation are `Dropdown`'s. Dismissal is the console's —
+   see `onDocMouseDown`, which is the one thing they were missing that
+   `Dropdown` had all along. */
 const PANEL =
   'absolute z-dropdown w-max p-1 rounded-token bg-surface border border-[color:var(--border)] shadow-card animate-dropdown';
 const MENU_ROW =
@@ -342,7 +354,7 @@ export default function Ticket({ V }) {
             }
           >
             {V.statusOptions.map((o) => (
-              <DropdownItem key={o.id} onClick={() => V.setStatus(o.id)}>
+              <DropdownItem key={o.id} selected={o.on} onClick={() => V.setStatus(o.id)}>
                 <span className="flex items-center gap-2.5">
                   <i data-tone={o.tone} className="w-2 h-2 rounded-full flex-none" style={{ background: 'var(--tone-hue)' }} />
                   {o.label}
@@ -367,7 +379,7 @@ export default function Ticket({ V }) {
             }
           >
             {V.prioOptions.map((o) => (
-              <DropdownItem key={o.id} onClick={() => V.setPriority(o.id)}>
+              <DropdownItem key={o.id} selected={o.on} onClick={() => V.setPriority(o.id)}>
                 <span className="flex items-center gap-2.5">
                   <span data-tone={o.tone} className="w-4 text-center text-[11px]" style={{ color: 'var(--tone-fg)' }}>{o.glyph}</span>
                   {o.label}
@@ -378,7 +390,10 @@ export default function Ticket({ V }) {
         </div>
 
         {/* assignee */}
-        <div className="relative flex-none">
+        {/* `data-menu-root` is how the console's click-outside finds the pair.
+            It goes on the wrapper, not the panel, so a press on the trigger is
+            inside it and does not close-then-reopen. */}
+        <div data-menu-root className="relative flex-none">
           <button
             onClick={V.openAssigneeMenu}
             aria-haspopup="menu"
@@ -455,7 +470,7 @@ export default function Ticket({ V }) {
             trigger={<span className={TRIGGER_SM + ' text-fg-3'}>{V.tTeam}<Caret /></span>}
           >
             {V.teamList.map((o) => (
-              <DropdownItem key={o.id} onClick={() => V.setTeam(o.id)}>
+              <DropdownItem key={o.id} selected={o.on} onClick={() => V.setTeam(o.id)}>
                 {o.label}
               </DropdownItem>
             ))}
@@ -705,7 +720,7 @@ export default function Ticket({ V }) {
               </div>
               <i className="w-px h-5 bg-[color:var(--border)]" />
 
-              <div className="relative">
+              <div data-menu-root className="relative">
                 <Button variant="outline" size="sm" onClick={V.openCanned} leftIcon={
                   <KnowledgeBaseGlyph className="w-[15px] h-[15px] flex-none" />
                 }>
